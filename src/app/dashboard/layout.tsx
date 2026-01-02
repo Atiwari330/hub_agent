@@ -1,6 +1,7 @@
 import { createServerSupabaseClient } from '@/lib/supabase/client';
 import { Sidebar } from '@/components/dashboard/sidebar';
 import { getCurrentQuarter, getQuarterProgress } from '@/lib/utils/quarter';
+import { SYNC_CONFIG } from '@/lib/hubspot/sync-config';
 
 export default async function DashboardLayout({
   children,
@@ -9,13 +10,8 @@ export default async function DashboardLayout({
 }) {
   const supabase = await createServerSupabaseClient();
 
-  // Target AEs to show in sidebar
-  const TARGET_AE_EMAILS = [
-    'aboyd@opusbehavioral.com',
-    'cgarraffa@opusbehavioral.com',
-    'jrice@opusbehavioral.com',
-    'atiwari@opusbehavioral.com',
-  ];
+  // Target AEs to show in sidebar (from centralized sync config)
+  const TARGET_AE_EMAILS = SYNC_CONFIG.TARGET_AE_EMAILS;
 
   // Fetch owners and last sync in parallel
   const [ownersResult, lastSyncResult] = await Promise.all([

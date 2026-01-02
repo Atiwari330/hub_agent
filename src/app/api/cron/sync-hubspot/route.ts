@@ -1,7 +1,16 @@
 import { NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/client';
-import { listAllOwners } from '@/lib/hubspot/owners';
-import { getAllDeals } from '@/lib/hubspot/deals';
+import { getTargetOwners } from '@/lib/hubspot/owners';
+import { getFilteredDealsForSync } from '@/lib/hubspot/deals';
+import { TRACKED_STAGES } from '@/lib/hubspot/stage-mappings';
+import { SYNC_CONFIG } from '@/lib/hubspot/sync-config';
+
+// Convert empty strings to null for timestamp fields
+// HubSpot returns "" for empty dates, but PostgreSQL needs null
+const toTimestamp = (value: string | undefined | null): string | null => {
+  if (!value || value === '') return null;
+  return value;
+};
 
 // Verify cron secret for security
 function verifyCronSecret(request: Request): boolean {
@@ -25,6 +34,8 @@ export async function GET(request: Request) {
   const workflowId = crypto.randomUUID();
 
   try {
+    const startTime = Date.now();
+
     // Log workflow start
     await supabase.from('workflow_runs').insert({
       id: workflowId,
@@ -32,23 +43,30 @@ export async function GET(request: Request) {
       status: 'running',
     });
 
-    // Sync owners
-    console.log('Syncing owners from HubSpot...');
-    const owners = await listAllOwners();
+    // Step 1: Sync target AE owners only (4 parallel API calls)
+    console.log(`Syncing ${SYNC_CONFIG.TARGET_AE_EMAILS.length} target AE owners from HubSpot...`);
+    const owners = await getTargetOwners();
 
-    for (const owner of owners) {
-      await supabase.from('owners').upsert({
-        hubspot_owner_id: owner.id,
-        email: owner.email,
-        first_name: owner.firstName,
-        last_name: owner.lastName,
-        synced_at: new Date().toISOString(),
-      }, {
-        onConflict: 'hubspot_owner_id',
-      });
+    // Batch upsert owners (single DB call instead of loop)
+    const ownerData = owners.map((owner) => ({
+      hubspot_owner_id: owner.id,
+      email: owner.email,
+      first_name: owner.firstName,
+      last_name: owner.lastName,
+      synced_at: new Date().toISOString(),
+    }));
+
+    const { error: ownerError } = await supabase
+      .from('owners')
+      .upsert(ownerData, { onConflict: 'hubspot_owner_id' });
+
+    if (ownerError) {
+      console.error('Owner batch upsert error:', ownerError);
     }
 
-    // Get owner mapping for deals
+    console.log(`Synced ${owners.length} owners`);
+
+    // Step 2: Get owner mapping for deals
     const { data: ownerRecords } = await supabase
       .from('owners')
       .select('id, hubspot_owner_id');
@@ -57,36 +75,60 @@ export async function GET(request: Request) {
       ownerRecords?.map((o) => [o.hubspot_owner_id, o.id]) || []
     );
 
-    // Sync deals
-    console.log('Syncing deals from HubSpot...');
-    const deals = await getAllDeals();
+    // Step 3: Fetch filtered deals (only target AEs, Sales Pipeline, 2025+)
+    const ownerIds = owners.map((o) => o.id);
+    console.log(`Syncing deals for ${ownerIds.length} AEs (Sales Pipeline, 2025+)...`);
 
-    for (const deal of deals) {
-      await supabase.from('deals').upsert({
-        hubspot_deal_id: deal.id,
-        deal_name: deal.properties.dealname,
-        amount: deal.properties.amount ? parseFloat(deal.properties.amount) : null,
-        close_date: deal.properties.closedate,
-        pipeline: deal.properties.pipeline,
-        deal_stage: deal.properties.dealstage,
-        description: deal.properties.description,
-        owner_id: deal.properties.hubspot_owner_id
-          ? ownerMap.get(deal.properties.hubspot_owner_id)
-          : null,
-        hubspot_owner_id: deal.properties.hubspot_owner_id,
-        // New properties
-        hubspot_created_at: deal.properties.createdate,
-        lead_source: deal.properties.lead_source,
-        last_activity_date: deal.properties.notes_last_updated,
-        next_activity_date: deal.properties.notes_next_activity_date,
-        next_step: deal.properties.hs_next_step,
-        products: deal.properties.product_s,
-        deal_substage: deal.properties.proposal_stage,
-        synced_at: new Date().toISOString(),
-      }, {
-        onConflict: 'hubspot_deal_id',
-      });
+    const deals = await getFilteredDealsForSync(ownerIds);
+    console.log(`Found ${deals.length} deals matching criteria`);
+
+    // Step 4: Batch upsert deals (chunked for large datasets)
+    // Use toTimestamp() to convert empty strings to null for all date fields
+    const dealData = deals.map((deal) => ({
+      hubspot_deal_id: deal.id,
+      deal_name: deal.properties.dealname,
+      amount: deal.properties.amount ? parseFloat(deal.properties.amount) : null,
+      close_date: toTimestamp(deal.properties.closedate),
+      pipeline: deal.properties.pipeline,
+      deal_stage: deal.properties.dealstage,
+      description: deal.properties.description,
+      owner_id: deal.properties.hubspot_owner_id
+        ? ownerMap.get(deal.properties.hubspot_owner_id) ?? null
+        : null,
+      hubspot_owner_id: deal.properties.hubspot_owner_id,
+      hubspot_created_at: toTimestamp(deal.properties.createdate),
+      lead_source: deal.properties.lead_source,
+      last_activity_date: toTimestamp(deal.properties.notes_last_updated),
+      next_activity_date: toTimestamp(deal.properties.notes_next_activity_date),
+      next_step: deal.properties.hs_next_step,
+      products: deal.properties.product_s,
+      deal_substage: deal.properties.proposal_stage,
+      sql_entered_at: toTimestamp(deal.properties[TRACKED_STAGES.SQL.property]),
+      demo_scheduled_entered_at: toTimestamp(deal.properties[TRACKED_STAGES.DEMO_SCHEDULED.property]),
+      demo_completed_entered_at: toTimestamp(deal.properties[TRACKED_STAGES.DEMO_COMPLETED.property]),
+      closed_won_entered_at: toTimestamp(deal.properties[TRACKED_STAGES.CLOSED_WON.property]),
+      synced_at: new Date().toISOString(),
+    }));
+
+    // Chunk deals into batches for upsert
+    let dealSuccess = 0;
+    let dealErrors = 0;
+
+    for (let i = 0; i < dealData.length; i += SYNC_CONFIG.DB_BATCH_SIZE) {
+      const chunk = dealData.slice(i, i + SYNC_CONFIG.DB_BATCH_SIZE);
+      const { error: dealError } = await supabase
+        .from('deals')
+        .upsert(chunk, { onConflict: 'hubspot_deal_id' });
+
+      if (dealError) {
+        console.error(`Deal batch upsert error (chunk ${i / SYNC_CONFIG.DB_BATCH_SIZE + 1}):`, dealError);
+        dealErrors += chunk.length;
+      } else {
+        dealSuccess += chunk.length;
+      }
     }
+
+    const duration = Date.now() - startTime;
 
     // Log success
     await supabase.from('workflow_runs').update({
@@ -94,16 +136,25 @@ export async function GET(request: Request) {
       completed_at: new Date().toISOString(),
       result: {
         ownersSync: owners.length,
-        dealsSync: deals.length,
+        dealsSync: dealSuccess,
+        dealErrors,
+        durationMs: duration,
+        filters: {
+          targetAEs: SYNC_CONFIG.TARGET_AE_EMAILS,
+          pipeline: SYNC_CONFIG.TARGET_PIPELINE_ID,
+          minDate: SYNC_CONFIG.MIN_DATE,
+        },
       },
     }).eq('id', workflowId);
 
-    console.log(`Sync complete: ${owners.length} owners, ${deals.length} deals`);
+    console.log(`Sync complete in ${duration}ms: ${owners.length} owners, ${dealSuccess} deals`);
 
     return NextResponse.json({
       success: true,
       ownersSynced: owners.length,
-      dealsSynced: deals.length,
+      dealsSynced: dealSuccess,
+      dealErrors,
+      durationMs: duration,
     });
   } catch (error) {
     console.error('Sync failed:', error);

@@ -1,5 +1,6 @@
 import { getHubSpotClient } from './client';
 import type { HubSpotOwner } from '@/types/hubspot';
+import { SYNC_CONFIG } from './sync-config';
 
 export async function listAllOwners(): Promise<HubSpotOwner[]> {
   const client = getHubSpotClient();
@@ -77,4 +78,19 @@ export async function getOwnerById(ownerId: string): Promise<HubSpotOwner | null
   } catch {
     return null;
   }
+}
+
+/**
+ * Fetch only the target AE owners configured for sync
+ * Uses parallel requests for efficiency (4 API calls instead of paginating all)
+ */
+export async function getTargetOwners(): Promise<HubSpotOwner[]> {
+  const ownerPromises = SYNC_CONFIG.TARGET_AE_EMAILS.map((email) =>
+    getOwnerByEmail(email)
+  );
+
+  const results = await Promise.all(ownerPromises);
+
+  // Filter out any null results (emails not found in HubSpot)
+  return results.filter((owner): owner is HubSpotOwner => owner !== null);
 }

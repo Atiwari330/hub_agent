@@ -1,6 +1,8 @@
 import { getHubSpotClient } from './client';
 import type { HubSpotDeal } from '@/types/hubspot';
 import { FilterOperatorEnum } from '@hubspot/api-client/lib/codegen/crm/deals';
+import { getStageEntryProperties, TRACKED_STAGES } from './stage-mappings';
+import { SYNC_CONFIG } from './sync-config';
 
 const DEAL_PROPERTIES = [
   'dealname',
@@ -19,6 +21,8 @@ const DEAL_PROPERTIES = [
   'hs_next_step',
   'product_s',
   'proposal_stage',
+  // Stage entry timestamps for weekly pipeline tracking
+  ...getStageEntryProperties(),
 ];
 
 export async function getDealsByOwnerId(ownerId: string): Promise<HubSpotDeal[]> {
@@ -63,6 +67,11 @@ export async function getDealsByOwnerId(ownerId: string): Promise<HubSpotDeal[]>
           hs_next_step: deal.properties.hs_next_step,
           product_s: deal.properties.product_s,
           proposal_stage: deal.properties.proposal_stage,
+          // Stage entry timestamps
+          [TRACKED_STAGES.SQL.property]: deal.properties[TRACKED_STAGES.SQL.property],
+          [TRACKED_STAGES.DEMO_SCHEDULED.property]: deal.properties[TRACKED_STAGES.DEMO_SCHEDULED.property],
+          [TRACKED_STAGES.DEMO_COMPLETED.property]: deal.properties[TRACKED_STAGES.DEMO_COMPLETED.property],
+          [TRACKED_STAGES.CLOSED_WON.property]: deal.properties[TRACKED_STAGES.CLOSED_WON.property],
         },
         createdAt: deal.createdAt?.toISOString(),
         updatedAt: deal.updatedAt?.toISOString(),
@@ -103,6 +112,11 @@ export async function getDealById(dealId: string): Promise<HubSpotDeal | null> {
         hs_next_step: deal.properties.hs_next_step,
         product_s: deal.properties.product_s,
         proposal_stage: deal.properties.proposal_stage,
+        // Stage entry timestamps
+        [TRACKED_STAGES.SQL.property]: deal.properties[TRACKED_STAGES.SQL.property],
+        [TRACKED_STAGES.DEMO_SCHEDULED.property]: deal.properties[TRACKED_STAGES.DEMO_SCHEDULED.property],
+        [TRACKED_STAGES.DEMO_COMPLETED.property]: deal.properties[TRACKED_STAGES.DEMO_COMPLETED.property],
+        [TRACKED_STAGES.CLOSED_WON.property]: deal.properties[TRACKED_STAGES.CLOSED_WON.property],
       },
       createdAt: deal.createdAt?.toISOString(),
       updatedAt: deal.updatedAt?.toISOString(),
@@ -144,6 +158,11 @@ export async function getAllDeals(): Promise<HubSpotDeal[]> {
           hs_next_step: deal.properties.hs_next_step,
           product_s: deal.properties.product_s,
           proposal_stage: deal.properties.proposal_stage,
+          // Stage entry timestamps
+          [TRACKED_STAGES.SQL.property]: deal.properties[TRACKED_STAGES.SQL.property],
+          [TRACKED_STAGES.DEMO_SCHEDULED.property]: deal.properties[TRACKED_STAGES.DEMO_SCHEDULED.property],
+          [TRACKED_STAGES.DEMO_COMPLETED.property]: deal.properties[TRACKED_STAGES.DEMO_COMPLETED.property],
+          [TRACKED_STAGES.CLOSED_WON.property]: deal.properties[TRACKED_STAGES.CLOSED_WON.property],
         },
         createdAt: deal.createdAt?.toISOString(),
         updatedAt: deal.updatedAt?.toISOString(),
@@ -155,4 +174,117 @@ export async function getAllDeals(): Promise<HubSpotDeal[]> {
   } while (after);
 
   return deals;
+}
+
+/**
+ * Fetch deals for sync job with filters:
+ * - Only specified owner IDs
+ * - Only Sales Pipeline
+ * - Only deals with createdate >= MIN_DATE OR closedate >= MIN_DATE
+ */
+export async function getFilteredDealsForSync(
+  ownerIds: string[]
+): Promise<HubSpotDeal[]> {
+  const client = getHubSpotClient();
+  const allDeals: HubSpotDeal[] = [];
+
+  // Process each owner to stay within HubSpot filter limits
+  for (const ownerId of ownerIds) {
+    let after: string | undefined;
+
+    do {
+      const response = await client.crm.deals.searchApi.doSearch({
+        // Filter groups are OR-ed together
+        filterGroups: [
+          // Group 1: Owner + Pipeline + createdate >= MIN_DATE
+          {
+            filters: [
+              {
+                propertyName: 'hubspot_owner_id',
+                operator: FilterOperatorEnum.Eq,
+                value: ownerId,
+              },
+              {
+                propertyName: 'pipeline',
+                operator: FilterOperatorEnum.Eq,
+                value: SYNC_CONFIG.TARGET_PIPELINE_ID,
+              },
+              {
+                propertyName: 'createdate',
+                operator: FilterOperatorEnum.Gte,
+                value: SYNC_CONFIG.MIN_DATE,
+              },
+            ],
+          },
+          // Group 2: Owner + Pipeline + closedate >= MIN_DATE
+          {
+            filters: [
+              {
+                propertyName: 'hubspot_owner_id',
+                operator: FilterOperatorEnum.Eq,
+                value: ownerId,
+              },
+              {
+                propertyName: 'pipeline',
+                operator: FilterOperatorEnum.Eq,
+                value: SYNC_CONFIG.TARGET_PIPELINE_ID,
+              },
+              {
+                propertyName: 'closedate',
+                operator: FilterOperatorEnum.Gte,
+                value: SYNC_CONFIG.MIN_DATE,
+              },
+            ],
+          },
+        ],
+        properties: DEAL_PROPERTIES,
+        limit: 100,
+        after: after ? after : undefined,
+      });
+
+      for (const deal of response.results) {
+        allDeals.push({
+          id: deal.id,
+          properties: {
+            dealname: deal.properties.dealname || '',
+            amount: deal.properties.amount,
+            closedate: deal.properties.closedate,
+            pipeline: deal.properties.pipeline,
+            dealstage: deal.properties.dealstage,
+            hubspot_owner_id: deal.properties.hubspot_owner_id,
+            createdate: deal.properties.createdate,
+            hs_lastmodifieddate: deal.properties.hs_lastmodifieddate,
+            description: deal.properties.description,
+            notes_last_updated: deal.properties.notes_last_updated,
+            lead_source: deal.properties.lead_source,
+            notes_next_activity_date: deal.properties.notes_next_activity_date,
+            hs_next_step: deal.properties.hs_next_step,
+            product_s: deal.properties.product_s,
+            proposal_stage: deal.properties.proposal_stage,
+            [TRACKED_STAGES.SQL.property]:
+              deal.properties[TRACKED_STAGES.SQL.property],
+            [TRACKED_STAGES.DEMO_SCHEDULED.property]:
+              deal.properties[TRACKED_STAGES.DEMO_SCHEDULED.property],
+            [TRACKED_STAGES.DEMO_COMPLETED.property]:
+              deal.properties[TRACKED_STAGES.DEMO_COMPLETED.property],
+            [TRACKED_STAGES.CLOSED_WON.property]:
+              deal.properties[TRACKED_STAGES.CLOSED_WON.property],
+          },
+          createdAt: deal.createdAt?.toISOString(),
+          updatedAt: deal.updatedAt?.toISOString(),
+          archived: deal.archived,
+        });
+      }
+
+      after = response.paging?.next?.after;
+    } while (after);
+  }
+
+  // Deduplicate deals (a deal might match both date conditions)
+  const uniqueDeals = new Map<string, HubSpotDeal>();
+  for (const deal of allDeals) {
+    uniqueDeals.set(deal.id, deal);
+  }
+
+  return Array.from(uniqueDeals.values());
 }

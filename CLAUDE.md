@@ -180,6 +180,40 @@ HubSpot property mappings (see `src/lib/hubspot/deals.ts`):
 | `56ac523` | Added CLAUDE.md for Claude Code guidance |
 | `6947d4a` | Initial AE detail view dashboard with HubSpot integration |
 
+## Weekly Pipeline Tracking (Leading Indicators)
+
+The dashboard now tracks when deals entered key pipeline stages to identify leading indicators for meeting quarterly goals.
+
+### Tracked Stages (Sales Pipeline)
+| Stage | HubSpot Stage ID | DB Column |
+|-------|------------------|-----------|
+| SQL | `17915773` | `sql_entered_at` |
+| Demo Scheduled | `baedc188-ba76-4a41-8723-5bb99fe7c5bf` | `demo_scheduled_entered_at` |
+| Demo Completed | `963167283` | `demo_completed_entered_at` |
+| Closed Won | `97b2bcc6-fb34-4b56-8e6e-c349c88ef3d5` | `closed_won_entered_at` |
+
+### Stage Mappings File
+`src/lib/hubspot/stage-mappings.ts` contains the stage ID to property mappings.
+
+### API Endpoint
+`GET /api/ae/[ownerId]/weekly-pipeline` - Returns weekly deal counts per stage for the quarter.
+
+Query params:
+- `year` - Fiscal year (default: current year)
+- `quarter` - Fiscal quarter 1-4 (default: current quarter)
+
+### Dashboard Components
+- `WeeklyPipelineChart` - Bar chart showing deals entering each stage by week
+- `TargetProgress` - Banner showing target vs actual with on/off track indicator
+
+### Database Migration
+```sql
+-- File: supabase/migrations/003_stage_timestamps.sql
+-- Adds columns: sql_entered_at, demo_scheduled_entered_at,
+--               demo_completed_entered_at, closed_won_entered_at
+-- Creates table: ae_targets (with $100k default per AE)
+```
+
 ## Diagnostic Scripts
 
 Located in `src/scripts/`:
@@ -188,3 +222,5 @@ Located in `src/scripts/`:
 - `test-new-properties.ts` - Test fetching new properties
 - `test-new-properties-recent.ts` - Test on recent deals
 - `verify-hubspot-close-dates.ts` - Verify 2026 close dates
+- `list-pipeline-stages.ts` - List all HubSpot pipeline stages with IDs
+- `test-stage-timestamps.ts` - Test fetching stage entry timestamps

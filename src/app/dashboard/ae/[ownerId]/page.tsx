@@ -2,6 +2,8 @@ import { notFound } from 'next/navigation';
 import { AEHeader } from '@/components/dashboard/ae-header';
 import { MetricsCards } from '@/components/dashboard/metrics-cards';
 import { ActivityStatsBar } from '@/components/dashboard/activity-stats-bar';
+import { TargetProgress } from '@/components/dashboard/target-progress';
+import { WeeklyPipelineChart } from '@/components/dashboard/weekly-pipeline-chart';
 import { DealsTable } from '@/components/dashboard/deals-table';
 
 interface PageProps {
@@ -60,9 +62,14 @@ export default async function AEDetailPage({ params }: PageProps) {
       />
 
       {/* Quarter Info */}
-      <div className="text-sm text-gray-500 mb-6">
+      <div className="text-sm text-gray-500 mb-4">
         {metricsData.quarter.label} &bull; Day {metricsData.quarterProgress.daysElapsed} of{' '}
         {metricsData.quarterProgress.totalDays} ({metricsData.quarterProgress.percentComplete}% complete)
+      </div>
+
+      {/* Target Progress Banner */}
+      <div className="mb-6">
+        <TargetProgress ownerId={ownerId} />
       </div>
 
       {/* Metrics Cards */}
@@ -82,6 +89,11 @@ export default async function AEDetailPage({ params }: PageProps) {
         closedWonCount={metricsData.activityStats.closedWonCount}
         closedLostCount={metricsData.activityStats.closedLostCount}
       />
+
+      {/* Weekly Pipeline Chart */}
+      <div className="mt-6">
+        <WeeklyPipelineChart ownerId={ownerId} />
+      </div>
 
       {/* Deals Table */}
       <div className="mt-6">

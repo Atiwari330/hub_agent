@@ -27,6 +27,19 @@ export const DealRecordSchema = z.object({
   synced_at: z.string(),
   created_at: z.string(),
   updated_at: z.string(),
+  // Additional properties from 002_add_deal_properties.sql
+  hubspot_created_at: z.string().nullable().optional(),
+  lead_source: z.string().nullable().optional(),
+  last_activity_date: z.string().nullable().optional(),
+  next_activity_date: z.string().nullable().optional(),
+  next_step: z.string().nullable().optional(),
+  products: z.string().nullable().optional(),
+  deal_substage: z.string().nullable().optional(),
+  // Stage entry timestamps from 003_stage_timestamps.sql
+  sql_entered_at: z.string().nullable().optional(),
+  demo_scheduled_entered_at: z.string().nullable().optional(),
+  demo_completed_entered_at: z.string().nullable().optional(),
+  closed_won_entered_at: z.string().nullable().optional(),
 });
 
 export type DealRecord = z.infer<typeof DealRecordSchema>;
@@ -80,3 +93,15 @@ export const QuotaRecordSchema = z.object({
 });
 
 export type QuotaRecord = z.infer<typeof QuotaRecordSchema>;
+
+export const AeTargetRecordSchema = z.object({
+  id: z.string().uuid(),
+  owner_id: z.string().uuid(),
+  fiscal_year: z.number().int(),
+  fiscal_quarter: z.number().int().min(1).max(4),
+  target_amount: z.number(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+export type AeTargetRecord = z.infer<typeof AeTargetRecordSchema>;
