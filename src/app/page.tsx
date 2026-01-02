@@ -1,103 +1,182 @@
-import Image from "next/image";
+import { AgentChat } from '@/components/agent-chat';
+import { createServerSupabaseClient } from '@/lib/supabase/client';
 
-export default function Home() {
+interface WorkflowRun {
+  id: string;
+  workflow_name: string;
+  status: string;
+  started_at: string;
+  completed_at: string | null;
+}
+
+async function getDashboardStats() {
+  try {
+    const supabase = await createServerSupabaseClient();
+
+    const [ownersResult, dealsResult, workflowsResult] = await Promise.all([
+      supabase.from('owners').select('*', { count: 'exact', head: true }),
+      supabase.from('deals').select('*', { count: 'exact', head: true }),
+      supabase
+        .from('workflow_runs')
+        .select('*')
+        .order('started_at', { ascending: false })
+        .limit(5),
+    ]);
+
+    return {
+      ownerCount: ownersResult.count || 0,
+      dealCount: dealsResult.count || 0,
+      recentWorkflows: (workflowsResult.data || []) as WorkflowRun[],
+    };
+  } catch (error) {
+    console.error('Failed to fetch dashboard stats:', error);
+    return {
+      ownerCount: 0,
+      dealCount: 0,
+      recentWorkflows: [] as WorkflowRun[],
+    };
+  }
+}
+
+export default async function DashboardPage() {
+  const stats = await getDashboardStats();
+
   return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+    <main className="min-h-screen bg-gray-50">
+      <div className="container mx-auto px-4 py-8 max-w-5xl">
+        {/* Header */}
+        <header className="mb-8">
+          <h1 className="text-3xl font-bold text-gray-900">RevOps Agent</h1>
+          <p className="text-gray-600 mt-1">
+            AI-powered Revenue Operations Assistant for HubSpot CRM
+          </p>
+        </header>
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+          <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+            <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wider">
+              Account Executives
+            </h3>
+            <p className="text-3xl font-bold text-gray-900 mt-2">
+              {stats.ownerCount}
+            </p>
+            <p className="text-sm text-gray-500 mt-1">Synced from HubSpot</p>
+          </div>
+
+          <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+            <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wider">
+              Active Deals
+            </h3>
+            <p className="text-3xl font-bold text-gray-900 mt-2">
+              {stats.dealCount}
+            </p>
+            <p className="text-sm text-gray-500 mt-1">In pipeline</p>
+          </div>
+
+          <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+            <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wider">
+              Last Sync
+            </h3>
+            <p className="text-xl font-bold text-gray-900 mt-2">
+              {stats.recentWorkflows[0]?.completed_at
+                ? new Date(stats.recentWorkflows[0].completed_at).toLocaleDateString()
+                : 'Never'}
+            </p>
+            <p className="text-sm text-gray-500 mt-1">
+              {stats.recentWorkflows[0]?.status || 'No runs yet'}
+            </p>
+          </div>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+
+        {/* Agent Chat */}
+        <section className="mb-8">
+          <h2 className="text-xl font-semibold text-gray-900 mb-4">
+            Ask the Agent
+          </h2>
+          <AgentChat />
+        </section>
+
+        {/* Recent Workflow Runs */}
+        {stats.recentWorkflows.length > 0 && (
+          <section>
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">
+              Recent Workflow Runs
+            </h2>
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Workflow
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Status
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Started
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {stats.recentWorkflows.map((run) => (
+                    <tr key={run.id}>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        {run.workflow_name}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span
+                          className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                            run.status === 'completed'
+                              ? 'bg-green-100 text-green-800'
+                              : run.status === 'failed'
+                              ? 'bg-red-100 text-red-800'
+                              : run.status === 'running'
+                              ? 'bg-yellow-100 text-yellow-800'
+                              : 'bg-gray-100 text-gray-800'
+                          }`}
+                        >
+                          {run.status}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {new Date(run.started_at).toLocaleString()}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
+
+        {/* Setup Instructions (show if no data) */}
+        {stats.ownerCount === 0 && stats.dealCount === 0 && (
+          <section className="bg-blue-50 border border-blue-200 rounded-lg p-6">
+            <h2 className="text-lg font-semibold text-blue-900 mb-2">
+              Getting Started
+            </h2>
+            <p className="text-blue-800 mb-4">
+              To start using the RevOps Agent, you need to:
+            </p>
+            <ol className="list-decimal list-inside text-blue-800 space-y-2">
+              <li>
+                Add your credentials to <code className="bg-blue-100 px-1 rounded">.env.local</code>
+              </li>
+              <li>
+                Run the Supabase migration in{' '}
+                <code className="bg-blue-100 px-1 rounded">supabase/migrations/001_initial_schema.sql</code>
+              </li>
+              <li>
+                Trigger a sync by visiting{' '}
+                <a href="/api/cron/sync-hubspot" className="underline">
+                  /api/cron/sync-hubspot
+                </a>
+              </li>
+            </ol>
+          </section>
+        )}
+      </div>
+    </main>
   );
 }

@@ -6,22 +6,37 @@
     "dev": "next dev --turbopack",
     "build": "next build --turbopack",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:hubspot": "tsx src/scripts/test-hubspot.ts",
+    "test:owners": "tsx src/scripts/test-owners.ts",
+    "test:deals": "tsx src/scripts/test-deals.ts",
+    "test:agent": "tsx src/scripts/test-agent.ts",
+    "ask": "tsx src/scripts/test-agent.ts",
+    "test:all": "npm run test:hubspot && npm run test:owners && npm run test:deals"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.2",
+    "@ai-sdk/react": "^3.0.5",
+    "@hubspot/api-client": "^13.4.0",
+    "@supabase/ssr": "^0.8.0",
+    "@supabase/supabase-js": "^2.89.0",
+    "ai": "^6.0.5",
+    "next": "15.5.9",
     "react": "19.1.0",
     "react-dom": "19.1.0",
-    "next": "15.5.9"
+    "zod": "^4.2.1"
   },
   "devDependencies": {
-    "typescript": "^5",
-    "@types/node": "^20",
+    "@eslint/eslintrc": "^3",
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20.19.27",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "@tailwindcss/postcss": "^4",
-    "tailwindcss": "^4",
+    "dotenv": "^17.2.3",
     "eslint": "^9",
     "eslint-config-next": "15.5.9",
-    "@eslint/eslintrc": "^3"
+    "tailwindcss": "^4",
+    "tsx": "^4.21.0",
+    "typescript": "^5"
   }
 }
