@@ -20,7 +20,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const searchParams = request.nextUrl.searchParams;
     const sortBy = (searchParams.get('sortBy') || 'amount') as SortColumn;
     const sortOrder = searchParams.get('sortOrder') === 'asc' ? true : false;
-    const limit = Math.min(parseInt(searchParams.get('limit') || '50'), 100);
+    const limit = Math.min(parseInt(searchParams.get('limit') || '50'), 1000);
     const offset = parseInt(searchParams.get('offset') || '0');
     const stageFilter = searchParams.get('stage');
 

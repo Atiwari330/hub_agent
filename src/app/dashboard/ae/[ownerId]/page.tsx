@@ -22,7 +22,7 @@ async function fetchMetrics(ownerId: string, baseUrl: string) {
 }
 
 async function fetchDeals(ownerId: string, baseUrl: string) {
-  const res = await fetch(`${baseUrl}/api/ae/${ownerId}/deals?sortBy=amount&sortOrder=desc`, {
+  const res = await fetch(`${baseUrl}/api/ae/${ownerId}/deals?sortBy=amount&sortOrder=desc&limit=500`, {
     cache: 'no-store',
   });
 
@@ -85,7 +85,6 @@ export default async function AEDetailPage({ params }: PageProps) {
 
       {/* Deals Table */}
       <div className="mt-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Deals</h2>
         <DealsTable deals={dealsData.deals} />
       </div>
     </div>

@@ -20,6 +20,7 @@ interface DealsTableProps {
 
 type SortColumn = 'dealName' | 'amount' | 'closeDate' | 'stage';
 type SortOrder = 'asc' | 'desc';
+type DealFilter = 'active' | 'closed_won' | 'closed_lost' | 'all';
 
 // Stage color mapping
 function getStageColor(stage: string | null): string {
@@ -85,6 +86,7 @@ function formatDate(dateString: string | null): string {
 export function DealsTable({ deals }: DealsTableProps) {
   const [sortColumn, setSortColumn] = useState<SortColumn>('amount');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
+  const [filter, setFilter] = useState<DealFilter>('active');
 
   const handleSort = (column: SortColumn) => {
     if (sortColumn === column) {
@@ -95,8 +97,27 @@ export function DealsTable({ deals }: DealsTableProps) {
     }
   };
 
+  const filteredDeals = useMemo(() => {
+    return deals.filter((deal) => {
+      const stageLower = (deal.stageName || deal.stage || '').toLowerCase();
+      const isClosedWon = stageLower.includes('closed won') || stageLower.includes('closedwon');
+      const isClosedLost = stageLower.includes('closed lost') || stageLower.includes('closedlost');
+
+      switch (filter) {
+        case 'active':
+          return !isClosedWon && !isClosedLost;
+        case 'closed_won':
+          return isClosedWon;
+        case 'closed_lost':
+          return isClosedLost;
+        case 'all':
+          return true;
+      }
+    });
+  }, [deals, filter]);
+
   const sortedDeals = useMemo(() => {
-    return [...deals].sort((a, b) => {
+    return [...filteredDeals].sort((a, b) => {
       let comparison = 0;
 
       switch (sortColumn) {
@@ -118,18 +139,47 @@ export function DealsTable({ deals }: DealsTableProps) {
 
       return sortOrder === 'asc' ? comparison : -comparison;
     });
-  }, [deals, sortColumn, sortOrder]);
+  }, [filteredDeals, sortColumn, sortOrder]);
 
-  if (deals.length === 0) {
-    return (
-      <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
-        <p className="text-gray-500">No deals found for this account executive.</p>
-      </div>
-    );
-  }
+  const getEmptyMessage = () => {
+    if (deals.length === 0) {
+      return 'No deals found for this account executive.';
+    }
+    switch (filter) {
+      case 'active':
+        return 'No active deals in pipeline.';
+      case 'closed_won':
+        return 'No closed won deals.';
+      case 'closed_lost':
+        return 'No closed lost deals.';
+      case 'all':
+        return 'No deals found for this account executive.';
+    }
+  };
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+    <div>
+      {/* Header with filter */}
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-lg font-semibold text-gray-900">Deals</h2>
+        <select
+          value={filter}
+          onChange={(e) => setFilter(e.target.value as DealFilter)}
+          className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+        >
+          <option value="active">Active Pipeline</option>
+          <option value="closed_won">Closed Won</option>
+          <option value="closed_lost">Closed Lost</option>
+          <option value="all">All Deals</option>
+        </select>
+      </div>
+
+      {filteredDeals.length === 0 ? (
+        <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
+          <p className="text-gray-500">{getEmptyMessage()}</p>
+        </div>
+      ) : (
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
       <div className="overflow-x-auto">
         <table className="w-full">
           <thead>
@@ -197,6 +247,8 @@ export function DealsTable({ deals }: DealsTableProps) {
           </tbody>
         </table>
       </div>
+        </div>
+      )}
     </div>
   );
 }
