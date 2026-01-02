@@ -35,7 +35,7 @@ async function testRecentDeals() {
     ],
     properties: NEW_PROPERTIES,
     limit: 10,
-    sorts: [{ propertyName: 'createdate', direction: 'DESCENDING' }],
+    sorts: ['createdate'],
   });
 
   console.log('=== TESTING NEW PROPERTIES ON RECENT DEALS ===\n');

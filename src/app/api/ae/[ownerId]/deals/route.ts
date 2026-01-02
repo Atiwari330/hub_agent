@@ -95,6 +95,14 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       description: deal.description,
       createdAt: deal.created_at,
       updatedAt: deal.updated_at,
+      // New properties
+      hubspotCreatedAt: deal.hubspot_created_at,
+      leadSource: deal.lead_source,
+      lastActivityDate: deal.last_activity_date,
+      nextActivityDate: deal.next_activity_date,
+      nextStep: deal.next_step,
+      products: deal.products,
+      dealSubstage: deal.deal_substage,
     }));
 
     // Calculate total value

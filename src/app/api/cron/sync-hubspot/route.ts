@@ -74,6 +74,14 @@ export async function GET(request: Request) {
           ? ownerMap.get(deal.properties.hubspot_owner_id)
           : null,
         hubspot_owner_id: deal.properties.hubspot_owner_id,
+        // New properties
+        hubspot_created_at: deal.properties.createdate,
+        lead_source: deal.properties.lead_source,
+        last_activity_date: deal.properties.notes_last_updated,
+        next_activity_date: deal.properties.notes_next_activity_date,
+        next_step: deal.properties.hs_next_step,
+        products: deal.properties.product_s,
+        deal_substage: deal.properties.proposal_stage,
         synced_at: new Date().toISOString(),
       }, {
         onConflict: 'hubspot_deal_id',

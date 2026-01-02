@@ -32,8 +32,8 @@ async function verify() {
       console.log('  Database close_date:', deal.close_date);
       console.log('  HubSpot is_closed:', hubspotDeal.properties.hs_is_closed);
       console.log('');
-    } catch (err: any) {
-      console.log('Error:', deal.hubspot_deal_id, err.message);
+    } catch (err) {
+      console.log('Error:', deal.hubspot_deal_id, err instanceof Error ? err.message : 'Unknown error');
     }
   }
 }

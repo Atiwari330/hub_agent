@@ -38,8 +38,8 @@ async function diagnoseCloseDates() {
       console.log('  Database close_date:', dbDeal.close_date);
       console.log('  Match:', hubspotDeal.properties.closedate?.substring(0,10) === dbDeal.close_date);
       console.log('');
-    } catch (err: any) {
-      console.log('Error fetching deal', dbDeal.hubspot_deal_id, err.message);
+    } catch (err) {
+      console.log('Error fetching deal', dbDeal.hubspot_deal_id, err instanceof Error ? err.message : 'Unknown error');
     }
   }
 }

@@ -28,6 +28,12 @@ export const HubSpotDealSchema = z.object({
     hs_lastmodifieddate: z.string().nullable().optional(),
     notes_last_updated: z.string().nullable().optional(),
     description: z.string().nullable().optional(),
+    // New properties for dashboard display
+    lead_source: z.string().nullable().optional(),
+    notes_next_activity_date: z.string().nullable().optional(),
+    hs_next_step: z.string().nullable().optional(),
+    product_s: z.string().nullable().optional(),
+    proposal_stage: z.string().nullable().optional(),
   }),
   createdAt: z.string().optional(),
   updatedAt: z.string().optional(),

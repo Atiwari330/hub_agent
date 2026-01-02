@@ -12,6 +12,14 @@ interface Deal {
   stage: string | null;
   stageName: string | null;
   pipeline: string | null;
+  // New properties
+  hubspotCreatedAt: string | null;
+  leadSource: string | null;
+  lastActivityDate: string | null;
+  nextActivityDate: string | null;
+  nextStep: string | null;
+  products: string | null;
+  dealSubstage: string | null;
 }
 
 interface DealsTableProps {
@@ -184,11 +192,11 @@ export function DealsTable({ deals }: DealsTableProps) {
         <table className="w-full">
           <thead>
             <tr className="bg-slate-50 border-b border-gray-200">
-              <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">
+              <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">
                 Deal Name
               </th>
               <th
-                className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100 select-none"
+                className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100 select-none whitespace-nowrap"
                 onClick={() => handleSort('amount')}
               >
                 <div className="flex items-center gap-1">
@@ -197,7 +205,7 @@ export function DealsTable({ deals }: DealsTableProps) {
                 </div>
               </th>
               <th
-                className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100 select-none"
+                className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100 select-none whitespace-nowrap"
                 onClick={() => handleSort('closeDate')}
               >
                 <div className="flex items-center gap-1">
@@ -206,13 +214,35 @@ export function DealsTable({ deals }: DealsTableProps) {
                 </div>
               </th>
               <th
-                className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100 select-none"
+                className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100 select-none whitespace-nowrap"
                 onClick={() => handleSort('stage')}
               >
                 <div className="flex items-center gap-1">
                   <span>Stage</span>
                   <SortIcon active={sortColumn === 'stage'} order={sortOrder} />
                 </div>
+              </th>
+              {/* New columns */}
+              <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                Create Date
+              </th>
+              <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                Lead Source
+              </th>
+              <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                Last Activity
+              </th>
+              <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                Next Activity
+              </th>
+              <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                Next Step
+              </th>
+              <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                Products
+              </th>
+              <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                Substage
               </th>
             </tr>
           </thead>
@@ -229,18 +259,46 @@ export function DealsTable({ deals }: DealsTableProps) {
                     {deal.dealName}
                   </a>
                 </td>
-                <td className="px-4 py-3 text-sm text-gray-900">
+                <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
                   {deal.amount !== null ? formatCurrency(deal.amount) : '-'}
                 </td>
-                <td className="px-4 py-3 text-sm text-gray-600">
+                <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
                   {formatDate(deal.closeDate)}
                 </td>
                 <td className="px-4 py-3">
                   <span
-                    className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getStageColor(deal.stage)}`}
+                    className={`inline-flex px-2 py-1 text-xs font-medium rounded-full whitespace-nowrap ${getStageColor(deal.stage)}`}
                   >
                     {deal.stageName || deal.stage || 'Unknown'}
                   </span>
+                </td>
+                {/* New columns */}
+                <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
+                  {formatDate(deal.hubspotCreatedAt)}
+                </td>
+                <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
+                  {deal.leadSource || '-'}
+                </td>
+                <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
+                  {formatDate(deal.lastActivityDate)}
+                </td>
+                <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
+                  {formatDate(deal.nextActivityDate)}
+                </td>
+                <td className="px-4 py-3 text-sm text-gray-600 max-w-xs truncate" title={deal.nextStep || ''}>
+                  {deal.nextStep || '-'}
+                </td>
+                <td className="px-4 py-3 text-sm text-gray-600 max-w-xs truncate" title={deal.products || ''}>
+                  {deal.products || '-'}
+                </td>
+                <td className="px-4 py-3">
+                  {deal.dealSubstage ? (
+                    <span className="inline-flex px-2 py-1 text-xs font-medium rounded-full bg-sky-100 text-sky-800 whitespace-nowrap">
+                      {deal.dealSubstage}
+                    </span>
+                  ) : (
+                    <span className="text-sm text-gray-400">-</span>
+                  )}
                 </td>
               </tr>
             ))}

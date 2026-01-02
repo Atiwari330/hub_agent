@@ -16,8 +16,9 @@ async function findProperties() {
   console.log('=== ALL DEAL PROPERTIES ===\n');
   
   // Group by relevance
-  const relevant: any[] = [];
-  const all: any[] = [];
+  interface PropInfo { name: string; label: string; type: string; description?: string }
+  const relevant: PropInfo[] = [];
+  const all: PropInfo[] = [];
   
   for (const prop of response.results) {
     const nameLower = prop.name.toLowerCase();
