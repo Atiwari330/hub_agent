@@ -122,3 +122,69 @@ const TARGET_AE_EMAILS = [
   'atiwari@opusbehavioral.com',
 ];
 ```
+
+## Data Sync Architecture
+
+**Important:** The dashboard displays CACHED data from Supabase, NOT real-time HubSpot data.
+
+Data flow:
+```
+HubSpot CRM → [Sync job at 2 AM daily] → Supabase DB → Dashboard UI
+```
+
+- Sync job: `/api/cron/sync-hubspot` pulls all owners and deals from HubSpot
+- Dashboard queries Supabase for fast performance
+- Data staleness: Up to 24 hours (configurable in `vercel.json`)
+- Manual sync: Call `GET /api/cron/sync-hubspot` to trigger immediate sync
+
+## Deal Properties (Dashboard Columns)
+
+The deals table displays these properties (in order):
+1. Deal Name
+2. Amount
+3. Close Date
+4. Stage
+5. Create Date (`hubspot_created_at`)
+6. Lead Source (`lead_source`)
+7. Last Activity (`last_activity_date`)
+8. Next Activity (`next_activity_date`)
+9. Next Step (`next_step`)
+10. Products (`products`)
+11. Substage (`deal_substage`)
+
+HubSpot property mappings (see `src/lib/hubspot/deals.ts`):
+- `createdate` → `hubspot_created_at`
+- `lead_source` → `lead_source`
+- `notes_last_updated` → `last_activity_date`
+- `notes_next_activity_date` → `next_activity_date`
+- `hs_next_step` → `next_step`
+- `product_s` → `products`
+- `proposal_stage` → `deal_substage`
+
+## Pending Database Migration
+
+**IMPORTANT FOR FUTURE AGENTS:** If the dashboard shows errors for new deal properties, run migration:
+```sql
+-- File: supabase/migrations/002_add_deal_properties.sql
+-- Adds columns: hubspot_created_at, lead_source, last_activity_date,
+--               next_activity_date, next_step, products, deal_substage
+```
+
+## Recent Development History
+
+| Commit | Description |
+|--------|-------------|
+| `a289e18` | Added 7 new deal properties to dashboard (Create Date, Lead Source, Last Activity, Next Activity, Next Step, Products, Substage) |
+| `d1c9223` | Added diagnostic scripts for HubSpot property investigation |
+| `7679523` | Added deal status filter with active pipeline default |
+| `56ac523` | Added CLAUDE.md for Claude Code guidance |
+| `6947d4a` | Initial AE detail view dashboard with HubSpot integration |
+
+## Diagnostic Scripts
+
+Located in `src/scripts/`:
+- `check-close-dates.ts` - Compare HubSpot vs DB close dates
+- `find-hubspot-properties.ts` - List all HubSpot deal properties
+- `test-new-properties.ts` - Test fetching new properties
+- `test-new-properties-recent.ts` - Test on recent deals
+- `verify-hubspot-close-dates.ts` - Verify 2026 close dates
