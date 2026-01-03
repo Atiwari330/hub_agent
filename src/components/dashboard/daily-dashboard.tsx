@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { formatCurrency } from '@/lib/utils/currency';
 import { AEStatusBar, type AEStatus } from './ae-status-bar';
 import { ExceptionCard, type ExceptionDeal, type ExceptionType } from './exception-card';
+import { AIInsightsButton } from './ai-insights-button';
 
 interface ExceptionCounts {
   overdueNextSteps: number;
@@ -122,12 +123,26 @@ export function DailyDashboard() {
 
   const { summary, hasCriticalAlert, criticalAlertMessage, aeStatuses, exceptionDeals } = data;
 
+  // Prepare data for AI insights
+  const insightsData = {
+    totalActiveDeals: summary.totalActiveDeals,
+    totalExceptions: summary.totalExceptions,
+    counts: summary.counts,
+    hasCriticalAlert,
+    criticalAlertMessage,
+    aeStatuses,
+    exceptionDeals: exceptionDeals.slice(0, 10), // Limit for context
+  };
+
   return (
     <div className="p-8 bg-gray-50 min-h-full">
       {/* Header */}
-      <div className="mb-6">
-        <h2 className="text-xl font-semibold text-gray-900">Today's Fires</h2>
-        <p className="text-sm text-gray-500">{formatDateHeader()}</p>
+      <div className="mb-6 flex items-start justify-between">
+        <div>
+          <h2 className="text-xl font-semibold text-gray-900">Today's Fires</h2>
+          <p className="text-sm text-gray-500">{formatDateHeader()}</p>
+        </div>
+        <AIInsightsButton dashboardType="daily" dashboardData={insightsData} />
       </div>
 
       {/* Critical Alert Banner */}

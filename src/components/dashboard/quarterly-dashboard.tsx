@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { formatCurrency, formatPercent } from '@/lib/utils/currency';
 import Link from 'next/link';
+import { AIInsightsButton } from './ai-insights-button';
 
 interface QuarterInfo {
   year: number;
@@ -149,6 +150,16 @@ export function QuarterlyDashboard() {
 
   const { quarter, progress, target, pace, forecast, pipeline, aeContributions, stageBreakdown, riskFactors } = data;
 
+  // Prepare data for AI insights
+  const insightsData = {
+    target,
+    pace,
+    forecast,
+    pipeline,
+    aeContributions,
+    riskFactors,
+  };
+
   return (
     <div className="p-8 bg-gray-50 min-h-full space-y-6">
       {/* Header */}
@@ -159,8 +170,11 @@ export function QuarterlyDashboard() {
             {quarter.label} &bull; Day {progress.daysElapsed} of {progress.totalDays}
           </p>
         </div>
-        <div className={`px-3 py-1 rounded-full text-sm font-medium ${pace.onTrack ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
-          {pace.onTrack ? 'On Pace' : 'Needs Attention'}
+        <div className="flex items-center gap-3">
+          <AIInsightsButton dashboardType="quarterly" dashboardData={insightsData} />
+          <div className={`px-3 py-1 rounded-full text-sm font-medium ${pace.onTrack ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
+            {pace.onTrack ? 'On Pace' : 'Needs Attention'}
+          </div>
         </div>
       </div>
 

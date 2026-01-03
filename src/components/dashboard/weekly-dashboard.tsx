@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { formatCurrency, formatPercent } from '@/lib/utils/currency';
 import Link from 'next/link';
+import { AIInsightsButton } from './ai-insights-button';
 
 interface WeekMetrics {
   sqlCount: number;
@@ -181,12 +182,25 @@ export function WeeklyDashboard() {
   const { thisWeek, lastWeek, deltas, aeComparisons, stageVelocity, leadSourcePerformance, sentimentSummary } = data;
   const totalSentiment = sentimentSummary.positive + sentimentSummary.neutral + sentimentSummary.negative;
 
+  // Prepare data for AI insights
+  const insightsData = {
+    thisWeek,
+    lastWeek,
+    deltas,
+    aeComparisons,
+    stageVelocity,
+    sentimentSummary,
+  };
+
   return (
     <div className="p-8 bg-gray-50 min-h-full space-y-6">
       {/* Header */}
-      <div>
-        <h2 className="text-xl font-semibold text-gray-900">Weekly Tactical Review</h2>
-        <p className="text-sm text-gray-500">{thisWeek.label} vs {lastWeek.label}</p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h2 className="text-xl font-semibold text-gray-900">Weekly Tactical Review</h2>
+          <p className="text-sm text-gray-500">{thisWeek.label} vs {lastWeek.label}</p>
+        </div>
+        <AIInsightsButton dashboardType="weekly" dashboardData={insightsData} />
       </div>
 
       {/* Pipeline Movement - Week over Week */}
