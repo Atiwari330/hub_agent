@@ -67,12 +67,21 @@ function getOwnerInitials(owner: Owner): string {
   return owner.email.slice(0, 2).toUpperCase();
 }
 
+function DashboardIcon() {
+  return (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
+    </svg>
+  );
+}
+
 export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress }: SidebarProps) {
   const pathname = usePathname();
   const [aeListOpen, setAeListOpen] = useState(true);
 
   // Extract current owner ID from pathname
   const currentOwnerId = pathname?.match(/\/dashboard\/ae\/([^/]+)/)?.[1];
+  const isOnMissionControl = pathname === '/dashboard';
 
   return (
     <aside className="fixed left-0 top-0 h-screen w-64 bg-slate-900 text-slate-100 flex flex-col">
@@ -84,6 +93,25 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress }: Sid
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto py-4">
+        {/* Mission Control Link */}
+        <div className="mb-2">
+          <Link
+            href="/dashboard"
+            className={`flex items-center gap-3 px-4 py-2.5 text-sm font-medium transition-colors ${
+              isOnMissionControl
+                ? 'bg-indigo-600 text-white'
+                : 'text-slate-300 hover:bg-slate-800'
+            }`}
+          >
+            <DashboardIcon />
+            <span>Mission Control</span>
+          </Link>
+        </div>
+
+        <div className="px-4 py-2">
+          <div className="border-t border-slate-700"></div>
+        </div>
+
         {/* Account Executives Section */}
         <div>
           <button
