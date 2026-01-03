@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/client';
 import { getStageNameMap } from '@/lib/hubspot/pipelines';
+import { calculateDealRisk } from '@/lib/utils/deal-risk';
 
 interface RouteParams {
   params: Promise<{ ownerId: string }>;
@@ -82,28 +83,49 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       stageNames = new Map();
     }
 
-    // Enrich deals with stage names
-    const enrichedDeals = (deals || []).map((deal) => ({
-      id: deal.id,
-      hubspotDealId: deal.hubspot_deal_id,
-      dealName: deal.deal_name,
-      amount: deal.amount,
-      closeDate: deal.close_date,
-      stage: deal.deal_stage,
-      stageName: deal.deal_stage ? stageNames.get(deal.deal_stage) || deal.deal_stage : null,
-      pipeline: deal.pipeline,
-      description: deal.description,
-      createdAt: deal.created_at,
-      updatedAt: deal.updated_at,
-      // New properties
-      hubspotCreatedAt: deal.hubspot_created_at,
-      leadSource: deal.lead_source,
-      lastActivityDate: deal.last_activity_date,
-      nextActivityDate: deal.next_activity_date,
-      nextStep: deal.next_step,
-      products: deal.products,
-      dealSubstage: deal.deal_substage,
-    }));
+    // Enrich deals with stage names and risk assessment
+    const enrichedDeals = (deals || []).map((deal) => {
+      const stageName = deal.deal_stage
+        ? stageNames.get(deal.deal_stage) || deal.deal_stage
+        : null;
+
+      // Calculate risk assessment
+      const risk = calculateDealRisk({
+        stageName,
+        closeDate: deal.close_date,
+        lastActivityDate: deal.last_activity_date,
+        nextActivityDate: deal.next_activity_date,
+        nextStep: deal.next_step,
+        sqlEnteredAt: deal.sql_entered_at,
+        demoScheduledEnteredAt: deal.demo_scheduled_entered_at,
+        demoCompletedEnteredAt: deal.demo_completed_entered_at,
+        hubspotCreatedAt: deal.hubspot_created_at,
+      });
+
+      return {
+        id: deal.id,
+        hubspotDealId: deal.hubspot_deal_id,
+        dealName: deal.deal_name,
+        amount: deal.amount,
+        closeDate: deal.close_date,
+        stage: deal.deal_stage,
+        stageName,
+        pipeline: deal.pipeline,
+        description: deal.description,
+        createdAt: deal.created_at,
+        updatedAt: deal.updated_at,
+        // Activity properties
+        hubspotCreatedAt: deal.hubspot_created_at,
+        leadSource: deal.lead_source,
+        lastActivityDate: deal.last_activity_date,
+        nextActivityDate: deal.next_activity_date,
+        nextStep: deal.next_step,
+        products: deal.products,
+        dealSubstage: deal.deal_substage,
+        // Risk assessment
+        risk,
+      };
+    });
 
     // Calculate total value
     const totalValue = enrichedDeals.reduce((sum, deal) => sum + (deal.amount || 0), 0);

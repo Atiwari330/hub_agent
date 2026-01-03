@@ -45,6 +45,21 @@ function formatDate(date: Date): string {
   return date.toISOString().split('T')[0];
 }
 
+// Closed-won stage detection patterns (same as metrics endpoint)
+const CLOSED_WON_PATTERNS = ['closedwon', 'closed won', 'closed-won'];
+
+function isClosedWonStage(stage: string | null): boolean {
+  if (!stage) return false;
+  const stageLower = stage.toLowerCase();
+  return CLOSED_WON_PATTERNS.some((p) => stageLower.includes(p));
+}
+
+function isDateInQuarter(dateStr: string | null, quarterStart: Date, quarterEnd: Date): boolean {
+  if (!dateStr) return false;
+  const date = new Date(dateStr);
+  return date >= quarterStart && date <= quarterEnd;
+}
+
 // GET - Get weekly pipeline data for an AE
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
@@ -82,6 +97,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         id,
         deal_name,
         amount,
+        deal_stage,
+        close_date,
         sql_entered_at,
         demo_scheduled_entered_at,
         demo_completed_entered_at,
@@ -189,13 +206,20 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     const targetAmount = target?.target_amount || quota?.quota_amount || 100000;
 
-    // Calculate totals
+    // Calculate totals from weekly data (for chart display)
     const weeks = Array.from(weeklyData.values());
-    const totalClosedWonAmount = weeks.reduce((sum, w) => sum + w.closedWonAmount, 0);
     const totalSql = weeks.reduce((sum, w) => sum + w.sql, 0);
     const totalDemoScheduled = weeks.reduce((sum, w) => sum + w.demoScheduled, 0);
     const totalDemoCompleted = weeks.reduce((sum, w) => sum + w.demoCompleted, 0);
     const totalClosedWon = weeks.reduce((sum, w) => sum + w.closedWon, 0);
+    const totalClosedWonAmountFromTimestamps = weeks.reduce((sum, w) => sum + w.closedWonAmount, 0);
+
+    // Calculate closed-won amount using stage + close_date (same logic as metrics endpoint)
+    // This ensures consistency with the Quota Progress card
+    const closedWonDeals = (deals || []).filter(
+      (deal) => isClosedWonStage(deal.deal_stage) && isDateInQuarter(deal.close_date, quarterInfo.startDate, quarterInfo.endDate)
+    );
+    const totalClosedWonAmount = closedWonDeals.reduce((sum, deal) => sum + (deal.amount || 0), 0);
 
     return NextResponse.json({
       owner: {

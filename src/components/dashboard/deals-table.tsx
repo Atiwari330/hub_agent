@@ -3,6 +3,18 @@
 import { useState, useMemo } from 'react';
 import { formatCurrency } from '@/lib/utils/currency';
 
+interface RiskFactor {
+  type: string;
+  message: string;
+}
+
+interface DealRisk {
+  level: 'healthy' | 'at_risk' | 'stale';
+  factors: RiskFactor[];
+  daysInStage: number | null;
+  daysSinceActivity: number | null;
+}
+
 interface Deal {
   id: string;
   hubspotDealId: string;
@@ -12,7 +24,7 @@ interface Deal {
   stage: string | null;
   stageName: string | null;
   pipeline: string | null;
-  // New properties
+  // Activity properties
   hubspotCreatedAt: string | null;
   leadSource: string | null;
   lastActivityDate: string | null;
@@ -20,6 +32,8 @@ interface Deal {
   nextStep: string | null;
   products: string | null;
   dealSubstage: string | null;
+  // Risk assessment
+  risk: DealRisk;
 }
 
 interface DealsTableProps {
@@ -89,6 +103,55 @@ function formatDate(dateString: string | null): string {
     day: 'numeric',
     year: 'numeric',
   });
+}
+
+// Risk badge colors and labels
+const RISK_CONFIG = {
+  healthy: {
+    bg: 'bg-emerald-100',
+    text: 'text-emerald-800',
+    label: 'Healthy',
+  },
+  at_risk: {
+    bg: 'bg-amber-100',
+    text: 'text-amber-800',
+    label: 'At Risk',
+  },
+  stale: {
+    bg: 'bg-red-100',
+    text: 'text-red-800',
+    label: 'Stale',
+  },
+} as const;
+
+function RiskBadge({ risk }: { risk: DealRisk }) {
+  const config = RISK_CONFIG[risk.level];
+  const hasFactors = risk.factors.length > 0;
+
+  return (
+    <div className="relative group">
+      <span
+        className={`inline-flex px-2 py-1 text-xs font-medium rounded-full whitespace-nowrap ${config.bg} ${config.text}`}
+      >
+        {config.label}
+      </span>
+      {hasFactors && (
+        <div className="absolute left-0 top-full mt-1 hidden group-hover:block z-20 w-64 p-3 bg-slate-800 text-white text-xs rounded-lg shadow-lg">
+          <div className="font-semibold mb-2">
+            {config.label}: {risk.factors.length} issue{risk.factors.length > 1 ? 's' : ''}
+          </div>
+          <ul className="space-y-1">
+            {risk.factors.map((factor, idx) => (
+              <li key={idx} className="flex items-start gap-2">
+                <span className="text-slate-400">•</span>
+                <span>{factor.message}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function DealsTable({ deals }: DealsTableProps) {
@@ -222,7 +285,10 @@ export function DealsTable({ deals }: DealsTableProps) {
                   <SortIcon active={sortColumn === 'stage'} order={sortOrder} />
                 </div>
               </th>
-              {/* New columns */}
+              <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                Risk
+              </th>
+              {/* Activity columns */}
               <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">
                 Create Date
               </th>
@@ -272,7 +338,10 @@ export function DealsTable({ deals }: DealsTableProps) {
                     {deal.stageName || deal.stage || 'Unknown'}
                   </span>
                 </td>
-                {/* New columns */}
+                <td className="px-4 py-3">
+                  <RiskBadge risk={deal.risk} />
+                </td>
+                {/* Activity columns */}
                 <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
                   {formatDate(deal.hubspotCreatedAt)}
                 </td>
