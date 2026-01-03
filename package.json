@@ -12,6 +12,7 @@
     "test:deals": "tsx src/scripts/test-deals.ts",
     "test:agent": "tsx src/scripts/test-agent.ts",
     "ask": "tsx src/scripts/test-agent.ts",
+    "test:next-step": "tsx src/scripts/test-next-step-analysis.ts",
     "test:all": "npm run test:hubspot && npm run test:owners && npm run test:deals"
   },
   "dependencies": {

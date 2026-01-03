@@ -15,7 +15,8 @@ export type RiskFactorType =
   | 'stage_age'
   | 'activity_drought'
   | 'no_next_step'
-  | 'overdue';
+  | 'overdue'
+  | 'overdue_next_step';
 
 export interface RiskFactor {
   type: RiskFactorType;
@@ -136,6 +137,9 @@ export interface DealRiskInput {
   demoScheduledEnteredAt: string | null;
   demoCompletedEnteredAt: string | null;
   hubspotCreatedAt: string | null;
+  // Next step analysis (from LLM extraction)
+  nextStepDueDate?: string | null;
+  nextStepStatus?: string | null;
 }
 
 /**
@@ -235,6 +239,22 @@ export function calculateDealRisk(deal: DealRiskInput): DealRiskAssessment {
       factors.push({
         type: 'overdue',
         message: `Close date passed ${daysOverdue} days ago`,
+      });
+    }
+  }
+
+  // Check for overdue next step (from LLM analysis)
+  if (
+    deal.nextStepDueDate &&
+    deal.nextStepStatus &&
+    (deal.nextStepStatus === 'date_found' || deal.nextStepStatus === 'date_inferred')
+  ) {
+    const dueDate = new Date(deal.nextStepDueDate);
+    if (dueDate < now) {
+      const daysOverdue = daysBetween(dueDate, now);
+      factors.push({
+        type: 'overdue_next_step',
+        message: `Next step overdue by ${daysOverdue} day${daysOverdue !== 1 ? 's' : ''}`,
       });
     }
   }

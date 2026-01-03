@@ -100,6 +100,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         demoScheduledEnteredAt: deal.demo_scheduled_entered_at,
         demoCompletedEnteredAt: deal.demo_completed_entered_at,
         hubspotCreatedAt: deal.hubspot_created_at,
+        // Next step analysis (from LLM extraction)
+        nextStepDueDate: deal.next_step_due_date,
+        nextStepStatus: deal.next_step_status,
       });
 
       return {
@@ -122,6 +125,17 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         nextStep: deal.next_step,
         products: deal.products,
         dealSubstage: deal.deal_substage,
+        // Next step analysis (from LLM extraction)
+        nextStepAnalysis: deal.next_step_analyzed_at
+          ? {
+              status: deal.next_step_status,
+              dueDate: deal.next_step_due_date,
+              confidence: deal.next_step_confidence,
+              displayMessage: deal.next_step_display_message,
+              actionType: deal.next_step_action_type,
+              analyzedAt: deal.next_step_analyzed_at,
+            }
+          : null,
         // Risk assessment
         risk,
       };

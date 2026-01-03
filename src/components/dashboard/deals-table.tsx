@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { formatCurrency } from '@/lib/utils/currency';
 
 interface RiskFactor {
@@ -13,6 +13,15 @@ interface DealRisk {
   factors: RiskFactor[];
   daysInStage: number | null;
   daysSinceActivity: number | null;
+}
+
+interface NextStepAnalysis {
+  status: 'date_found' | 'date_inferred' | 'no_date' | 'date_unclear' | 'awaiting_external' | 'empty' | 'unparseable';
+  dueDate: string | null;
+  confidence: number | null;
+  displayMessage: string | null;
+  actionType: string | null;
+  analyzedAt: string | null;
 }
 
 interface Deal {
@@ -32,12 +41,15 @@ interface Deal {
   nextStep: string | null;
   products: string | null;
   dealSubstage: string | null;
+  // Next step analysis
+  nextStepAnalysis: NextStepAnalysis | null;
   // Risk assessment
   risk: DealRisk;
 }
 
 interface DealsTableProps {
   deals: Deal[];
+  ownerId: string;
 }
 
 type SortColumn = 'dealName' | 'amount' | 'closeDate' | 'stage';
@@ -154,10 +166,138 @@ function RiskBadge({ risk }: { risk: DealRisk }) {
   );
 }
 
-export function DealsTable({ deals }: DealsTableProps) {
+// Next Step Status configuration
+const NEXT_STEP_STATUS_CONFIG = {
+  date_found: { icon: '📅', bg: 'bg-emerald-100', text: 'text-emerald-800' },
+  date_inferred: { icon: '📅', bg: 'bg-emerald-50', text: 'text-emerald-700' },
+  no_date: { icon: '—', bg: 'bg-gray-100', text: 'text-gray-600' },
+  date_unclear: { icon: '❓', bg: 'bg-amber-100', text: 'text-amber-700' },
+  awaiting_external: { icon: '⏳', bg: 'bg-blue-100', text: 'text-blue-700' },
+  empty: { icon: '∅', bg: 'bg-gray-100', text: 'text-gray-500' },
+  unparseable: { icon: '✗', bg: 'bg-gray-100', text: 'text-gray-500' },
+} as const;
+
+function NextStepStatusBadge({ analysis, dueDate }: { analysis: NextStepAnalysis | null; dueDate?: string | null }) {
+  if (!analysis) {
+    return (
+      <span className="inline-flex px-2 py-1 text-xs text-gray-400 whitespace-nowrap">
+        Not analyzed
+      </span>
+    );
+  }
+
+  const config = NEXT_STEP_STATUS_CONFIG[analysis.status] || NEXT_STEP_STATUS_CONFIG.unparseable;
+
+  // Check if due date is overdue
+  let isOverdue = false;
+  let isDueToday = false;
+  if (analysis.dueDate && (analysis.status === 'date_found' || analysis.status === 'date_inferred')) {
+    const due = new Date(analysis.dueDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    due.setHours(0, 0, 0, 0);
+    isOverdue = due < today;
+    isDueToday = due.getTime() === today.getTime();
+  }
+
+  // Override colors for overdue/due today
+  let badgeBg: string = config.bg;
+  let badgeText: string = config.text;
+  let statusIcon: string = config.icon;
+
+  if (isOverdue) {
+    badgeBg = 'bg-red-100';
+    badgeText = 'text-red-800';
+    statusIcon = '⚠️';
+  } else if (isDueToday) {
+    badgeBg = 'bg-amber-100';
+    badgeText = 'text-amber-800';
+    statusIcon = '🔔';
+  }
+
+  return (
+    <div className="relative group">
+      <span
+        className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full whitespace-nowrap ${badgeBg} ${badgeText}`}
+      >
+        <span>{statusIcon}</span>
+        <span className="max-w-24 truncate">{analysis.displayMessage || analysis.status}</span>
+      </span>
+      {analysis.analyzedAt && (
+        <div className="absolute left-0 top-full mt-1 hidden group-hover:block z-20 w-56 p-3 bg-slate-800 text-white text-xs rounded-lg shadow-lg">
+          <div className="space-y-1">
+            <div><span className="text-slate-400">Status:</span> {analysis.status}</div>
+            {analysis.dueDate && <div><span className="text-slate-400">Due:</span> {formatDate(analysis.dueDate)}</div>}
+            {analysis.actionType && <div><span className="text-slate-400">Action:</span> {analysis.actionType}</div>}
+            {analysis.confidence !== null && (
+              <div><span className="text-slate-400">Confidence:</span> {Math.round(analysis.confidence * 100)}%</div>
+            )}
+            <div className="text-slate-500 mt-2 pt-2 border-t border-slate-600">
+              Analyzed: {formatDate(analysis.analyzedAt)}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AnalyzeButton({
+  dealId,
+  ownerId,
+  isAnalyzing,
+  onAnalyze
+}: {
+  dealId: string;
+  ownerId: string;
+  isAnalyzing: boolean;
+  onAnalyze: (dealId: string, ownerId: string) => void;
+}) {
+  return (
+    <button
+      onClick={() => onAnalyze(dealId, ownerId)}
+      disabled={isAnalyzing}
+      className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-md transition-colors ${
+        isAnalyzing
+          ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+          : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
+      }`}
+      title="Analyze next step with AI"
+    >
+      {isAnalyzing ? (
+        <>
+          <svg className="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          <span>...</span>
+        </>
+      ) : (
+        <>
+          <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
+          <span>Analyze</span>
+        </>
+      )}
+    </button>
+  );
+}
+
+export function DealsTable({ deals: initialDeals, ownerId }: DealsTableProps) {
   const [sortColumn, setSortColumn] = useState<SortColumn>('amount');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [filter, setFilter] = useState<DealFilter>('active');
+  const [analyzingDeals, setAnalyzingDeals] = useState<Set<string>>(new Set());
+  const [dealAnalyses, setDealAnalyses] = useState<Record<string, NextStepAnalysis>>({});
+
+  // Merge initial data with any updated analyses
+  const deals = useMemo(() => {
+    return initialDeals.map(deal => ({
+      ...deal,
+      nextStepAnalysis: dealAnalyses[deal.id] || deal.nextStepAnalysis,
+    }));
+  }, [initialDeals, dealAnalyses]);
 
   const handleSort = (column: SortColumn) => {
     if (sortColumn === column) {
@@ -167,6 +307,34 @@ export function DealsTable({ deals }: DealsTableProps) {
       setSortOrder('desc');
     }
   };
+
+  const handleAnalyze = useCallback(async (dealId: string, ownerIdParam: string) => {
+    setAnalyzingDeals(prev => new Set(prev).add(dealId));
+
+    try {
+      const response = await fetch(`/api/ae/${ownerIdParam}/deals/${dealId}/analyze-next-step`, {
+        method: 'POST',
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        setDealAnalyses(prev => ({
+          ...prev,
+          [dealId]: result.analysis,
+        }));
+      } else {
+        console.error('Failed to analyze deal:', await response.text());
+      }
+    } catch (error) {
+      console.error('Error analyzing deal:', error);
+    } finally {
+      setAnalyzingDeals(prev => {
+        const next = new Set(prev);
+        next.delete(dealId);
+        return next;
+      });
+    }
+  }, []);
 
   const filteredDeals = useMemo(() => {
     return deals.filter((deal) => {
@@ -305,10 +473,16 @@ export function DealsTable({ deals }: DealsTableProps) {
                 Next Step
               </th>
               <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                Step Status
+              </th>
+              <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">
                 Products
               </th>
               <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">
                 Substage
+              </th>
+              <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                Actions
               </th>
             </tr>
           </thead>
@@ -357,6 +531,9 @@ export function DealsTable({ deals }: DealsTableProps) {
                 <td className="px-4 py-3 text-sm text-gray-600 max-w-xs truncate" title={deal.nextStep || ''}>
                   {deal.nextStep || '-'}
                 </td>
+                <td className="px-4 py-3">
+                  <NextStepStatusBadge analysis={deal.nextStepAnalysis} />
+                </td>
                 <td className="px-4 py-3 text-sm text-gray-600 max-w-xs truncate" title={deal.products || ''}>
                   {deal.products || '-'}
                 </td>
@@ -368,6 +545,14 @@ export function DealsTable({ deals }: DealsTableProps) {
                   ) : (
                     <span className="text-sm text-gray-400">-</span>
                   )}
+                </td>
+                <td className="px-4 py-3">
+                  <AnalyzeButton
+                    dealId={deal.id}
+                    ownerId={ownerId}
+                    isAnalyzing={analyzingDeals.has(deal.id)}
+                    onAnalyze={handleAnalyze}
+                  />
                 </td>
               </tr>
             ))}

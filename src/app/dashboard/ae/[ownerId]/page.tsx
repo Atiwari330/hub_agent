@@ -97,7 +97,7 @@ export default async function AEDetailPage({ params }: PageProps) {
 
       {/* Deals Table */}
       <div className="mt-6">
-        <DealsTable deals={dealsData.deals} />
+        <DealsTable deals={dealsData.deals} ownerId={ownerId} />
       </div>
     </div>
   );
