@@ -1,6 +1,8 @@
 'use client';
 
+import { useState } from 'react';
 import { formatCurrency } from '@/lib/utils/currency';
+import type { ExceptionContextResponse } from '@/types/exception-context';
 
 export type ExceptionType =
   | 'overdue_next_step'
@@ -73,8 +75,48 @@ function formatDate(dateString: string | null): string {
 }
 
 export function ExceptionCard({ deal, hubspotPortalId = '6187034' }: ExceptionCardProps) {
+  const [context, setContext] = useState<ExceptionContextResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
   const exception = EXCEPTION_LABELS[deal.exceptionType];
   const hubspotUrl = `https://app.hubspot.com/contacts/${hubspotPortalId}/deal/${deal.hubspotDealId}`;
+
+  async function loadContext() {
+    if (context || loading) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(
+        `/api/deals/${deal.id}/exception-context?type=${deal.exceptionType}`
+      );
+      if (res.ok) {
+        setContext(await res.json());
+      } else {
+        setError('Failed to generate analysis');
+      }
+    } catch (err) {
+      console.error('Failed to load context:', err);
+      setError('Failed to generate analysis');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function handleToggle() {
+    if (!expanded) {
+      loadContext();
+    }
+    setExpanded(!expanded);
+  }
+
+  const urgencyColors = {
+    critical: 'bg-red-50 text-red-900 border-red-200',
+    high: 'bg-amber-50 text-amber-900 border-amber-200',
+    medium: 'bg-blue-50 text-blue-900 border-blue-200',
+    low: 'bg-slate-50 text-slate-900 border-slate-200',
+  };
 
   return (
     <div className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
@@ -106,6 +148,52 @@ export function ExceptionCard({ deal, hubspotPortalId = '6187034' }: ExceptionCa
           </div>
 
           <p className="mt-1 text-xs text-gray-600">{deal.exceptionDetail}</p>
+
+          {/* AI Analysis Toggle */}
+          <button
+            onClick={handleToggle}
+            className="mt-2 text-xs text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1"
+          >
+            <svg
+              className={`w-3 h-3 transition-transform ${expanded ? 'rotate-90' : ''}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+            {expanded ? 'Hide AI Analysis' : 'Show AI Analysis'}
+          </button>
+
+          {/* Expandable AI Context */}
+          {expanded && (
+            <div className="mt-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
+              {loading ? (
+                <div className="animate-pulse space-y-2">
+                  <div className="h-4 bg-slate-200 rounded w-3/4"></div>
+                  <div className="h-3 bg-slate-200 rounded w-full"></div>
+                  <div className="h-3 bg-slate-200 rounded w-5/6"></div>
+                </div>
+              ) : error ? (
+                <p className="text-sm text-red-600">{error}</p>
+              ) : context ? (
+                <>
+                  <p className="text-sm font-medium text-slate-900">{context.diagnosis}</p>
+                  <p className="text-xs text-slate-600 mt-2">{context.recentActivity}</p>
+                  <div className={`mt-3 p-2 rounded border text-sm ${urgencyColors[context.urgency]}`}>
+                    <strong>Action:</strong> {context.recommendedAction}
+                  </div>
+                  {context.cached && (
+                    <p className="text-xs text-slate-400 mt-2">
+                      Generated {new Date(context.generatedAt).toLocaleString()}
+                    </p>
+                  )}
+                </>
+              ) : (
+                <p className="text-sm text-slate-500">Unable to generate analysis</p>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Owner */}

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/client';
 import { getTargetOwners } from '@/lib/hubspot/owners';
 import { getFilteredDealsForSync } from '@/lib/hubspot/deals';
+import { getNotesByDealIdWithAuthor } from '@/lib/hubspot/engagements';
 import { TRACKED_STAGES } from '@/lib/hubspot/stage-mappings';
 import { SYNC_CONFIG } from '@/lib/hubspot/sync-config';
 
@@ -128,6 +129,54 @@ export async function GET(request: Request) {
       }
     }
 
+    // Step 5: Sync notes for exception-eligible deals
+    // Only sync notes for deals that might become exceptions (saves API calls)
+    const today = new Date().toISOString().split('T')[0];
+    const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString();
+
+    const { data: exceptionDeals } = await supabase
+      .from('deals')
+      .select('id, hubspot_deal_id')
+      .or(`next_step_due_date.lt.${today},close_date.lt.${today},last_activity_date.lt.${tenDaysAgo}`);
+
+    console.log(`Syncing notes for ${exceptionDeals?.length || 0} exception-eligible deals...`);
+
+    // Build owner name map once for all note lookups
+    const ownerNameMap = new Map<string, string>();
+    for (const owner of owners) {
+      const name = [owner.firstName, owner.lastName].filter(Boolean).join(' ') || owner.email;
+      ownerNameMap.set(owner.id, name);
+    }
+
+    let notesSynced = 0;
+    for (const deal of exceptionDeals || []) {
+      try {
+        const notes = await getNotesByDealIdWithAuthor(deal.hubspot_deal_id, ownerNameMap);
+
+        // Only keep last 5 notes per deal
+        const recentNotes = notes.slice(0, 5);
+
+        for (const note of recentNotes) {
+          const { error: noteError } = await supabase.from('deal_notes').upsert({
+            hubspot_note_id: note.id,
+            deal_id: deal.id,
+            note_body: note.properties.hs_note_body,
+            note_timestamp: note.properties.hs_timestamp,
+            author_name: note.authorName,
+            synced_at: new Date().toISOString(),
+          }, { onConflict: 'hubspot_note_id' });
+
+          if (!noteError) {
+            notesSynced++;
+          }
+        }
+      } catch (error) {
+        console.warn(`Failed to sync notes for deal ${deal.hubspot_deal_id}:`, error);
+      }
+    }
+
+    console.log(`Synced ${notesSynced} notes for ${exceptionDeals?.length || 0} exception-eligible deals`);
+
     const duration = Date.now() - startTime;
 
     // Log success
@@ -138,6 +187,8 @@ export async function GET(request: Request) {
         ownersSync: owners.length,
         dealsSync: dealSuccess,
         dealErrors,
+        notesSynced,
+        exceptionDealsProcessed: exceptionDeals?.length || 0,
         durationMs: duration,
         filters: {
           targetAEs: SYNC_CONFIG.TARGET_AE_EMAILS,
@@ -147,13 +198,15 @@ export async function GET(request: Request) {
       },
     }).eq('id', workflowId);
 
-    console.log(`Sync complete in ${duration}ms: ${owners.length} owners, ${dealSuccess} deals`);
+    console.log(`Sync complete in ${duration}ms: ${owners.length} owners, ${dealSuccess} deals, ${notesSynced} notes`);
 
     return NextResponse.json({
       success: true,
       ownersSynced: owners.length,
       dealsSynced: dealSuccess,
       dealErrors,
+      notesSynced,
+      exceptionDealsProcessed: exceptionDeals?.length || 0,
       durationMs: duration,
     });
   } catch (error) {
