@@ -130,14 +130,21 @@ export async function GET(request: Request) {
     }
 
     // Step 5: Sync notes for exception-eligible deals
-    // Only sync notes for deals that might become exceptions (saves API calls)
+    // Only sync for target AE owners, exclude closed deals, limit scope
     const today = new Date().toISOString().split('T')[0];
-    const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString();
+    const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+    // Get target owner IDs from the owner map we already built
+    const targetOwnerIds = Array.from(ownerMap.values());
 
     const { data: exceptionDeals } = await supabase
       .from('deals')
       .select('id, hubspot_deal_id')
-      .or(`next_step_due_date.lt.${today},close_date.lt.${today},last_activity_date.lt.${tenDaysAgo}`);
+      .in('owner_id', targetOwnerIds)                    // Only target AEs
+      .is('closed_won_entered_at', null)                 // Exclude closed won
+      .or(`next_step_due_date.lt.${today},close_date.lt.${today},last_activity_date.lt.${tenDaysAgo}`)
+      .order('amount', { ascending: false, nullsFirst: false })
+      .limit(100);                                        // Safety limit
 
     console.log(`Syncing notes for ${exceptionDeals?.length || 0} exception-eligible deals...`);
 
