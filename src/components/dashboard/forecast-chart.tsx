@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import { formatCurrency } from '@/lib/utils/currency';
 
+type ForecastStage = 'arr' | 'sql' | 'demo' | 'proposal';
+
 interface WeekData {
   weekNumber: number;
   weekStart: string;
@@ -17,6 +19,9 @@ interface WeekData {
 }
 
 interface ForecastData {
+  stage: ForecastStage;
+  stageLabel: string;
+  unit: 'currency' | 'count';
   owner: {
     id: string;
     firstName: string;
@@ -31,6 +36,13 @@ interface ForecastData {
     endDate: string;
   };
   quota: number;
+  targets: {
+    dealsNeeded: number;
+    proposalsNeeded: number;
+    demosNeeded: number;
+    sqlsNeeded: number;
+  };
+  targetForStage?: number;
   weeks: WeekData[];
   summary: {
     currentWeek: number;
@@ -39,7 +51,7 @@ interface ForecastData {
     variance: number;
     percentOfForecast: number;
     status: 'ahead' | 'on_track' | 'behind' | 'at_risk';
-    totalDeals: number;
+    totalCount: number;
   };
 }
 
@@ -47,34 +59,30 @@ interface ForecastChartProps {
   ownerId: string;
 }
 
-// Generate quarter options (current + 3 previous)
+// Stage options for dropdown
+const STAGE_OPTIONS: { value: ForecastStage; label: string }[] = [
+  { value: 'arr', label: 'Closed Won ARR' },
+  { value: 'sql', label: 'SQLs' },
+  { value: 'demo', label: 'Demos Completed' },
+  { value: 'proposal', label: 'Proposals' },
+];
+
+// Generate quarter options (current quarter only for now)
 function getQuarterOptions(): Array<{ year: number; quarter: number; label: string }> {
   const now = new Date();
   const currentYear = now.getFullYear();
   const currentQuarter = Math.floor(now.getMonth() / 3) + 1;
 
-  const options: Array<{ year: number; quarter: number; label: string }> = [];
-  let year = currentYear;
-  let quarter = currentQuarter;
-
-  for (let i = 0; i < 4; i++) {
-    options.push({ year, quarter, label: `Q${quarter} ${year}` });
-    quarter--;
-    if (quarter < 1) {
-      quarter = 4;
-      year--;
-    }
-  }
-
-  return options;
+  // Only show current quarter (as user requested)
+  return [{ year: currentYear, quarter: currentQuarter, label: `Q${currentQuarter} ${currentYear}` }];
 }
 
 // Status colors
 const STATUS_COLORS = {
-  ahead: { bg: 'bg-emerald-500', text: 'text-emerald-600', light: 'bg-emerald-50' },
-  on_track: { bg: 'bg-blue-500', text: 'text-blue-600', light: 'bg-blue-50' },
-  behind: { bg: 'bg-amber-500', text: 'text-amber-600', light: 'bg-amber-50' },
-  at_risk: { bg: 'bg-red-500', text: 'text-red-600', light: 'bg-red-50' },
+  ahead: { bg: 'bg-emerald-500', text: 'text-emerald-600', light: 'bg-emerald-100' },
+  on_track: { bg: 'bg-blue-500', text: 'text-blue-600', light: 'bg-blue-100' },
+  behind: { bg: 'bg-amber-500', text: 'text-amber-600', light: 'bg-amber-100' },
+  at_risk: { bg: 'bg-red-500', text: 'text-red-600', light: 'bg-red-100' },
 };
 
 const STATUS_LABELS = {
@@ -84,10 +92,19 @@ const STATUS_LABELS = {
   at_risk: 'At Risk',
 };
 
+// Format value based on unit type
+function formatValue(value: number, unit: 'currency' | 'count'): string {
+  if (unit === 'currency') {
+    return formatCurrency(value);
+  }
+  return value.toString();
+}
+
 export function ForecastChart({ ownerId }: ForecastChartProps) {
   const [data, setData] = useState<ForecastData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedStage, setSelectedStage] = useState<ForecastStage>('arr');
 
   // Quarter selection state
   const quarterOptions = getQuarterOptions();
@@ -98,7 +115,7 @@ export function ForecastChart({ ownerId }: ForecastChartProps) {
       try {
         setLoading(true);
         const response = await fetch(
-          `/api/ae/${ownerId}/forecast?year=${selectedQuarter.year}&quarter=${selectedQuarter.quarter}`
+          `/api/ae/${ownerId}/forecast?year=${selectedQuarter.year}&quarter=${selectedQuarter.quarter}&stage=${selectedStage}`
         );
         if (!response.ok) {
           throw new Error('Failed to fetch forecast data');
@@ -113,7 +130,7 @@ export function ForecastChart({ ownerId }: ForecastChartProps) {
     }
 
     fetchData();
-  }, [ownerId, selectedQuarter]);
+  }, [ownerId, selectedQuarter, selectedStage]);
 
   if (loading) {
     return (
@@ -135,9 +152,10 @@ export function ForecastChart({ ownerId }: ForecastChartProps) {
   }
 
   // Calculate chart dimensions
+  const totalTarget = data.unit === 'currency' ? data.quota : (data.targetForStage || data.targets.sqlsNeeded);
   const maxValue = Math.max(
     ...data.weeks.map((w) => Math.max(w.forecast, w.actual)),
-    data.quota
+    totalTarget
   );
 
   // Get current week
@@ -154,7 +172,7 @@ export function ForecastChart({ ownerId }: ForecastChartProps) {
         <div className="flex items-center gap-3">
           <div>
             <h3 className="text-lg font-semibold text-gray-900">Forecast vs Actual</h3>
-            <p className="text-sm text-gray-500">Cumulative closed-won ARR</p>
+            <p className="text-sm text-gray-500">Cumulative progress by week</p>
           </div>
           {/* Quarter Selector */}
           <select
@@ -174,27 +192,41 @@ export function ForecastChart({ ownerId }: ForecastChartProps) {
           </select>
         </div>
 
-        {/* Status Badge */}
-        <div
-          className={`px-3 py-1.5 rounded-full text-sm font-medium ${statusColor.light} ${statusColor.text}`}
-        >
-          {STATUS_LABELS[data.summary.status]}
+        <div className="flex items-center gap-3">
+          {/* Stage Selector */}
+          <select
+            value={selectedStage}
+            onChange={(e) => setSelectedStage(e.target.value as ForecastStage)}
+            className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            {STAGE_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+
+          {/* Status Badge */}
+          <div
+            className={`px-3 py-1.5 rounded-full text-sm font-medium ${statusColor.light} ${statusColor.text}`}
+          >
+            {STATUS_LABELS[data.summary.status]}
+          </div>
         </div>
       </div>
 
       {/* Legend */}
       <div className="flex gap-6 mb-4">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-0.5 bg-gray-400 border-dashed border-t-2 border-gray-400" />
+          <div className="w-4 h-4 rounded bg-gray-300" />
           <span className="text-xs text-gray-600">Forecast</span>
         </div>
         <div className="flex items-center gap-2">
-          <div className={`w-8 h-1 rounded ${statusColor.bg}`} />
+          <div className={`w-4 h-4 rounded ${statusColor.bg}`} />
           <span className="text-xs text-gray-600">Actual</span>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full bg-gray-300" />
-          <span className="text-xs text-gray-600">Quota: {formatCurrency(data.quota)}</span>
+        <div className="text-xs text-gray-500">
+          Target: {data.unit === 'currency' ? formatCurrency(data.quota) : `${totalTarget} ${data.stageLabel}`}
         </div>
       </div>
 
@@ -202,11 +234,11 @@ export function ForecastChart({ ownerId }: ForecastChartProps) {
       <div className="relative h-56">
         {/* Y-axis labels */}
         <div className="absolute left-0 top-0 bottom-6 w-16 flex flex-col justify-between text-xs text-gray-400">
-          <span>{formatCurrency(maxValue)}</span>
-          <span>{formatCurrency(maxValue * 0.75)}</span>
-          <span>{formatCurrency(maxValue * 0.5)}</span>
-          <span>{formatCurrency(maxValue * 0.25)}</span>
-          <span>$0</span>
+          <span>{formatValue(maxValue, data.unit)}</span>
+          <span>{formatValue(Math.round(maxValue * 0.75), data.unit)}</span>
+          <span>{formatValue(Math.round(maxValue * 0.5), data.unit)}</span>
+          <span>{formatValue(Math.round(maxValue * 0.25), data.unit)}</span>
+          <span>{data.unit === 'currency' ? '$0' : '0'}</span>
         </div>
 
         {/* Chart area */}
@@ -218,10 +250,10 @@ export function ForecastChart({ ownerId }: ForecastChartProps) {
             ))}
           </div>
 
-          {/* Quota line */}
+          {/* Target line (horizontal) */}
           <div
-            className="absolute left-0 right-0 border-t-2 border-dashed border-gray-300"
-            style={{ bottom: `${(data.quota / maxValue) * 100}%` }}
+            className="absolute left-0 right-0 border-t-2 border-dashed border-gray-400"
+            style={{ bottom: `${(totalTarget / maxValue) * 100}%` }}
           />
 
           {/* Bars container */}
@@ -229,8 +261,8 @@ export function ForecastChart({ ownerId }: ForecastChartProps) {
             {data.weeks.map((week) => {
               const isCurrent = week.weekNumber === currentWeek;
               const isFuture = new Date(week.weekStart) > today;
-              const forecastHeight = (week.forecast / maxValue) * 100;
-              const actualHeight = (week.actual / maxValue) * 100;
+              const forecastHeight = maxValue > 0 ? (week.forecast / maxValue) * 100 : 0;
+              const actualHeight = maxValue > 0 ? (week.actual / maxValue) * 100 : 0;
 
               return (
                 <div
@@ -241,31 +273,40 @@ export function ForecastChart({ ownerId }: ForecastChartProps) {
                 >
                   {/* Bars */}
                   <div className="w-full h-44 relative flex items-end justify-center gap-1">
-                    {/* Forecast bar (outline only) */}
+                    {/* Forecast bar (semi-transparent filled) */}
                     <div
-                      className="w-3 border-2 border-dashed border-gray-400 rounded-t bg-gray-50"
+                      className="w-4 rounded-t bg-gray-300 transition-all"
                       style={{ height: `${forecastHeight}%` }}
                     />
-                    {/* Actual bar (solid) */}
+                    {/* Actual bar (solid colored) */}
                     <div
-                      className={`w-3 rounded-t ${
+                      className={`w-4 rounded-t transition-all ${
                         isFuture ? 'bg-gray-200' : statusColor.bg
-                      } transition-all`}
+                      }`}
                       style={{ height: `${actualHeight}%` }}
                     />
 
                     {/* Tooltip on hover */}
-                    <div className="absolute -top-20 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-xs px-3 py-2 rounded opacity-0 group-hover:opacity-100 transition whitespace-nowrap z-10 pointer-events-none">
+                    <div className="absolute -top-24 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-xs px-3 py-2 rounded opacity-0 group-hover:opacity-100 transition whitespace-nowrap z-10 pointer-events-none min-w-[140px]">
                       <div className="font-medium mb-1">Week {week.weekNumber}</div>
-                      <div>Forecast: {formatCurrency(week.forecast)}</div>
-                      <div>Actual: {formatCurrency(week.actual)}</div>
+                      <div className="flex justify-between gap-4">
+                        <span className="text-gray-400">Forecast:</span>
+                        <span>{formatValue(week.forecast, data.unit)}</span>
+                      </div>
+                      <div className="flex justify-between gap-4">
+                        <span className="text-gray-400">Actual:</span>
+                        <span>{formatValue(week.actual, data.unit)}</span>
+                      </div>
                       <div
-                        className={
-                          week.variance >= 0 ? 'text-emerald-300' : 'text-red-300'
-                        }
+                        className={`flex justify-between gap-4 mt-1 pt-1 border-t border-gray-700 ${
+                          week.variance >= 0 ? 'text-emerald-400' : 'text-red-400'
+                        }`}
                       >
-                        {week.variance >= 0 ? '+' : ''}
-                        {formatCurrency(week.variance)}
+                        <span>Variance:</span>
+                        <span>
+                          {week.variance >= 0 ? '+' : ''}
+                          {formatValue(week.variance, data.unit)}
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -273,7 +314,7 @@ export function ForecastChart({ ownerId }: ForecastChartProps) {
                   {/* Week label */}
                   <div
                     className={`text-xs font-medium mt-1 ${
-                      isCurrent ? 'text-blue-600' : 'text-gray-500'
+                      isCurrent ? 'text-blue-600 font-bold' : 'text-gray-500'
                     }`}
                   >
                     W{week.weekNumber}
@@ -290,13 +331,13 @@ export function ForecastChart({ ownerId }: ForecastChartProps) {
         <div className="grid grid-cols-4 gap-4">
           <div className="text-center">
             <div className="text-2xl font-semibold text-gray-900">
-              {formatCurrency(data.summary.actualToDate)}
+              {formatValue(data.summary.actualToDate, data.unit)}
             </div>
             <div className="text-xs text-gray-500">Actual to Date</div>
           </div>
           <div className="text-center">
-            <div className="text-2xl font-semibold text-gray-500">
-              {formatCurrency(data.summary.forecastToDate)}
+            <div className="text-2xl font-semibold text-gray-400">
+              {formatValue(data.summary.forecastToDate, data.unit)}
             </div>
             <div className="text-xs text-gray-500">Forecast to Date</div>
           </div>
@@ -307,7 +348,7 @@ export function ForecastChart({ ownerId }: ForecastChartProps) {
               }`}
             >
               {data.summary.variance >= 0 ? '+' : ''}
-              {formatCurrency(data.summary.variance)}
+              {formatValue(data.summary.variance, data.unit)}
             </div>
             <div className="text-xs text-gray-500">Variance</div>
           </div>
@@ -319,6 +360,16 @@ export function ForecastChart({ ownerId }: ForecastChartProps) {
           </div>
         </div>
       </div>
+
+      {/* Stage targets info (only show for non-ARR stages) */}
+      {data.stage !== 'arr' && (
+        <div className="mt-4 pt-4 border-t border-gray-100">
+          <div className="text-xs text-gray-500 text-center">
+            Based on {formatCurrency(data.quota)} quota with $12K avg deal size:
+            Need {data.targets.sqlsNeeded} SQLs → {data.targets.demosNeeded} Demos → {data.targets.proposalsNeeded} Proposals → {data.targets.dealsNeeded} Deals
+          </div>
+        </div>
+      )}
     </div>
   );
 }

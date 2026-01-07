@@ -147,3 +147,175 @@ export function getQuarterWeeks(year: number, quarter: number): Array<{
 
   return weeks;
 }
+
+// ============================================================================
+// STAGE-LEVEL FORECASTS
+// ============================================================================
+
+/**
+ * Conversion rates for pipeline stages
+ * Based on typical B2B SaaS funnel metrics
+ */
+export const CONVERSION_RATES = {
+  SQL_TO_DEMO: 0.33,        // 33% of SQLs become demos
+  DEMO_TO_PROPOSAL: 0.60,   // 60% of demos get proposals
+  PROPOSAL_TO_CLOSE: 0.50,  // 50% of proposals close
+  // Combined: SQL to Close = 0.33 * 0.60 * 0.50 = ~10%
+};
+
+/**
+ * Default average deal size if not provided
+ */
+export const DEFAULT_AVG_DEAL_SIZE = 12000;
+
+/**
+ * Stage-level weekly weights
+ * SQLs are front-loaded (need them early to close deals later)
+ * Demos follow SQLs with ~2 week lag
+ * Proposals follow demos with ~2 week lag
+ */
+const STAGE_WEEKLY_WEIGHTS = {
+  // SQLs: Heavy early weeks to fill pipeline
+  sql: [
+    0.09, // W1
+    0.09, // W2
+    0.09, // W3
+    0.09, // W4
+    0.08, // W5
+    0.08, // W6
+    0.08, // W7
+    0.07, // W8
+    0.07, // W9
+    0.06, // W10
+    0.05, // W11
+    0.04, // W12
+    0.03, // W13
+  ],
+  // Demos: Lag SQLs by ~2 weeks
+  demo: [
+    0.05, // W1
+    0.06, // W2
+    0.07, // W3
+    0.08, // W4
+    0.09, // W5
+    0.09, // W6
+    0.09, // W7
+    0.09, // W8
+    0.09, // W9
+    0.08, // W10
+    0.07, // W11
+    0.06, // W12
+    0.05, // W13 (some demos still convert to proposals for next quarter)
+  ],
+  // Proposals: Lag demos by ~2 weeks
+  proposal: [
+    0.04, // W1
+    0.05, // W2
+    0.06, // W3
+    0.07, // W4
+    0.08, // W5
+    0.09, // W6
+    0.09, // W7
+    0.10, // W8
+    0.10, // W9
+    0.09, // W10
+    0.08, // W11
+    0.07, // W12
+    0.06, // W13 (some will close next quarter)
+  ],
+};
+
+export type ForecastStage = 'arr' | 'sql' | 'demo' | 'proposal';
+
+export interface StageWeeklyForecast {
+  weekNumber: number;
+  weeklyTarget: number;
+  cumulativeTarget: number;
+}
+
+/**
+ * Calculate total stage targets needed to hit quota
+ */
+export function calculateStageTargets(
+  quota: number,
+  avgDealSize: number = DEFAULT_AVG_DEAL_SIZE
+): {
+  dealsNeeded: number;
+  proposalsNeeded: number;
+  demosNeeded: number;
+  sqlsNeeded: number;
+} {
+  const dealsNeeded = Math.ceil(quota / avgDealSize);
+  const proposalsNeeded = Math.ceil(dealsNeeded / CONVERSION_RATES.PROPOSAL_TO_CLOSE);
+  const demosNeeded = Math.ceil(proposalsNeeded / CONVERSION_RATES.DEMO_TO_PROPOSAL);
+  const sqlsNeeded = Math.ceil(demosNeeded / CONVERSION_RATES.SQL_TO_DEMO);
+
+  return {
+    dealsNeeded,
+    proposalsNeeded,
+    demosNeeded,
+    sqlsNeeded,
+  };
+}
+
+/**
+ * Calculate weekly stage-level forecast
+ */
+export function calculateStageForecast(
+  stage: 'sql' | 'demo' | 'proposal',
+  totalNeeded: number
+): StageWeeklyForecast[] {
+  const weights = STAGE_WEEKLY_WEIGHTS[stage];
+  const weeks: StageWeeklyForecast[] = [];
+  let cumulative = 0;
+
+  for (let i = 0; i < 13; i++) {
+    const weeklyTarget = Math.round(totalNeeded * weights[i]);
+    cumulative += weeklyTarget;
+
+    weeks.push({
+      weekNumber: i + 1,
+      weeklyTarget,
+      cumulativeTarget: cumulative,
+    });
+  }
+
+  // Adjust last week to ensure we hit exact total
+  const diff = totalNeeded - cumulative;
+  if (diff !== 0 && weeks.length > 0) {
+    weeks[12].cumulativeTarget = totalNeeded;
+  }
+
+  return weeks;
+}
+
+/**
+ * Calculate all stage forecasts for a given quota
+ */
+export function calculateAllStageForecuts(
+  quota: number,
+  avgDealSize: number = DEFAULT_AVG_DEAL_SIZE
+): {
+  targets: {
+    dealsNeeded: number;
+    proposalsNeeded: number;
+    demosNeeded: number;
+    sqlsNeeded: number;
+  };
+  forecasts: {
+    sql: StageWeeklyForecast[];
+    demo: StageWeeklyForecast[];
+    proposal: StageWeeklyForecast[];
+  };
+} {
+  const targets = calculateStageTargets(quota, avgDealSize);
+
+  return {
+    targets,
+    forecasts: {
+      sql: calculateStageForecast('sql', targets.sqlsNeeded),
+      demo: calculateStageForecast('demo', targets.demosNeeded),
+      proposal: calculateStageForecast('proposal', targets.proposalsNeeded),
+    },
+  };
+}
