@@ -88,8 +88,10 @@ export function ExceptionCard({ deal, hubspotPortalId = '6187034' }: ExceptionCa
     setLoading(true);
     setError(null);
     try {
+      // Strip -hvr suffix for high_value_at_risk deals (they use modified IDs for React keys)
+      const actualDealId = deal.id.replace(/-hvr$/, '');
       const res = await fetch(
-        `/api/deals/${deal.id}/exception-context?type=${deal.exceptionType}`
+        `/api/deals/${actualDealId}/exception-context?type=${deal.exceptionType}`
       );
       if (res.ok) {
         setContext(await res.json());

@@ -11,7 +11,10 @@ export async function GET(
   const { dealId } = await params;
   const exceptionType = request.nextUrl.searchParams.get('type');
 
+  console.log(`[exception-context] Request: dealId=${dealId}, type=${exceptionType}`);
+
   if (!exceptionType) {
+    console.log(`[exception-context] Error: Missing type parameter`);
     return NextResponse.json(
       { error: 'Missing type parameter' },
       { status: 400 }
@@ -30,6 +33,7 @@ export async function GET(
     .single();
 
   if (cached) {
+    console.log(`[exception-context] Cache hit for ${dealId}`);
     return NextResponse.json({
       diagnosis: cached.diagnosis,
       recentActivity: cached.recent_activity,
@@ -49,6 +53,7 @@ export async function GET(
     .single();
 
   if (dealError || !deal) {
+    console.log(`[exception-context] Error: Deal not found - ${dealId}`, dealError);
     return NextResponse.json(
       { error: 'Deal not found' },
       { status: 404 }
@@ -109,61 +114,77 @@ export async function GET(
   // Build exception detail string
   const exceptionDetail = buildExceptionDetail(exceptionType, deal, daysSinceActivity);
 
-  // 3. Generate AI context
-  const context = await generateExceptionContext({
-    deal: {
-      dealName: deal.deal_name,
-      amount: deal.amount,
-      stageName,
-      closeDate: deal.close_date,
-      daysInStage,
-      daysSinceActivity,
-      nextStep: deal.next_step,
-      nextStepDueDate: deal.next_step_due_date,
-    },
-    exceptionType,
-    exceptionDetail,
-    notes: (notes || []).map((n) => ({
-      body: n.note_body || '',
-      timestamp: n.note_timestamp,
-      authorName: n.author_name,
-    })),
-    sentiment: sentiment
-      ? {
-          score: sentiment.sentiment_score,
-          summary: sentiment.summary,
-        }
-      : null,
-  });
+  console.log(`[exception-context] Generating AI context for ${deal.deal_name}`);
 
-  // 4. Cache for 24 hours
-  const notesHash = crypto
-    .createHash('md5')
-    .update((notes || []).map((n) => n.hubspot_note_id).join(','))
-    .digest('hex');
+  try {
+    // 3. Generate AI context
+    const context = await generateExceptionContext({
+      deal: {
+        dealName: deal.deal_name,
+        amount: deal.amount,
+        stageName,
+        closeDate: deal.close_date,
+        daysInStage,
+        daysSinceActivity,
+        nextStep: deal.next_step,
+        nextStepDueDate: deal.next_step_due_date,
+      },
+      exceptionType,
+      exceptionDetail,
+      notes: (notes || []).map((n) => ({
+        body: n.note_body || '',
+        timestamp: n.note_timestamp,
+        authorName: n.author_name,
+      })),
+      sentiment: sentiment
+        ? {
+            score: sentiment.sentiment_score,
+            summary: sentiment.summary,
+          }
+        : null,
+    });
 
-  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-  const generatedAt = new Date().toISOString();
+    // 4. Cache for 24 hours
+    const notesHash = crypto
+      .createHash('md5')
+      .update((notes || []).map((n) => n.hubspot_note_id).join(','))
+      .digest('hex');
 
-  await supabase.from('exception_contexts').upsert(
-    {
-      deal_id: dealId,
-      exception_type: exceptionType,
-      diagnosis: context.diagnosis,
-      recent_activity: context.recentActivity,
-      recommended_action: context.recommendedAction,
-      urgency: context.urgency,
-      confidence: context.confidence,
-      generated_at: generatedAt,
-      expires_at: expiresAt,
-      notes_hash: notesHash,
-    },
-    { onConflict: 'deal_id,exception_type' }
-  );
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    const generatedAt = new Date().toISOString();
 
-  return NextResponse.json({
-    ...context,
-    cached: false,
-    generatedAt,
-  });
+    const { error: cacheError } = await supabase.from('exception_contexts').upsert(
+      {
+        deal_id: dealId,
+        exception_type: exceptionType,
+        diagnosis: context.diagnosis,
+        recent_activity: context.recentActivity,
+        recommended_action: context.recommendedAction,
+        urgency: context.urgency,
+        confidence: context.confidence,
+        generated_at: generatedAt,
+        expires_at: expiresAt,
+        notes_hash: notesHash,
+      },
+      { onConflict: 'deal_id,exception_type' }
+    );
+
+    if (cacheError) {
+      console.log(`[exception-context] Cache write failed (non-blocking):`, cacheError.message);
+    }
+
+    console.log(`[exception-context] Success: ${deal.deal_name} - urgency=${context.urgency}`);
+
+    return NextResponse.json({
+      ...context,
+      cached: false,
+      generatedAt,
+    });
+  } catch (error) {
+    console.error(`[exception-context] Error generating context for ${dealId}:`, error);
+    return NextResponse.json(
+      { error: 'Failed to generate analysis' },
+      { status: 500 }
+    );
+  }
 }

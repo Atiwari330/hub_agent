@@ -6,6 +6,15 @@ import { getNotesByDealIdWithAuthor } from '@/lib/hubspot/engagements';
 import { TRACKED_STAGES } from '@/lib/hubspot/stage-mappings';
 import { SYNC_CONFIG } from '@/lib/hubspot/sync-config';
 
+// Active stages for exception deal notes sync (excludes MQL, Closed Won, Closed Lost)
+const ACTIVE_DEAL_STAGES = [
+  '17915773',                                  // SQL
+  '138092708',                                 // Discovery
+  'baedc188-ba76-4a41-8723-5bb99fe7c5bf',     // Demo - Scheduled
+  '963167283',                                 // Demo - Completed
+  '59865091',                                  // Proposal
+];
+
 // Convert empty strings to null for timestamp fields
 // HubSpot returns "" for empty dates, but PostgreSQL needs null
 const toTimestamp = (value: string | undefined | null): string | null => {
@@ -130,9 +139,10 @@ export async function GET(request: Request) {
     }
 
     // Step 5: Sync notes for exception-eligible deals
-    // Only sync for target AE owners, exclude closed deals, limit scope
+    // Only sync for: target AEs, Sales Pipeline, 2025+ deals, active stages
     const today = new Date().toISOString().split('T')[0];
     const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const minDate = SYNC_CONFIG.MIN_DATE;
 
     // Get target owner IDs from the owner map we already built
     const targetOwnerIds = Array.from(ownerMap.values());
@@ -140,11 +150,13 @@ export async function GET(request: Request) {
     const { data: exceptionDeals } = await supabase
       .from('deals')
       .select('id, hubspot_deal_id')
-      .in('owner_id', targetOwnerIds)                    // Only target AEs
-      .is('closed_won_entered_at', null)                 // Exclude closed won
+      .in('owner_id', targetOwnerIds)                           // Only target AEs
+      .eq('pipeline', SYNC_CONFIG.TARGET_PIPELINE_ID)           // Sales Pipeline only
+      .in('deal_stage', ACTIVE_DEAL_STAGES)                     // Only active stages
+      .gte('hubspot_created_at', minDate)                       // 2025+ deals only
       .or(`next_step_due_date.lt.${today},close_date.lt.${today},last_activity_date.lt.${tenDaysAgo}`)
       .order('amount', { ascending: false, nullsFirst: false })
-      .limit(100);                                        // Safety limit
+      .limit(100);                                               // Safety limit
 
     console.log(`Syncing notes for ${exceptionDeals?.length || 0} exception-eligible deals...`);
 
