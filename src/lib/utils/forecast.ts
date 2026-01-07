@@ -165,8 +165,9 @@ export const CONVERSION_RATES = {
 
 /**
  * Default average deal size if not provided
+ * Based on HubSpot data analysis: median ARR of 138 cleaned deals = ~$15K
  */
-export const DEFAULT_AVG_DEAL_SIZE = 12000;
+export const DEFAULT_AVG_DEAL_SIZE = 15000;
 
 /**
  * Stage-level weekly weights
