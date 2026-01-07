@@ -3,6 +3,7 @@ import { AEHeader } from '@/components/dashboard/ae-header';
 import { MetricsCards } from '@/components/dashboard/metrics-cards';
 import { ActivityStatsBar } from '@/components/dashboard/activity-stats-bar';
 import { TargetProgress } from '@/components/dashboard/target-progress';
+import { ForecastChart } from '@/components/dashboard/forecast-chart';
 import { WeeklyPipelineChart } from '@/components/dashboard/weekly-pipeline-chart';
 import { DealsTable } from '@/components/dashboard/deals-table';
 
@@ -70,6 +71,11 @@ export default async function AEDetailPage({ params }: PageProps) {
       {/* Target Progress Banner */}
       <div className="mb-6">
         <TargetProgress ownerId={ownerId} />
+      </div>
+
+      {/* Forecast vs Actual Chart */}
+      <div className="mb-6">
+        <ForecastChart ownerId={ownerId} />
       </div>
 
       {/* Metrics Cards */}

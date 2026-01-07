@@ -139,7 +139,7 @@ export function DailyDashboard() {
       {/* Header */}
       <div className="mb-6 flex items-start justify-between">
         <div>
-          <h2 className="text-xl font-semibold text-gray-900">Today's Fires</h2>
+          <h2 className="text-xl font-semibold text-gray-900">Today&apos;s Fires</h2>
           <p className="text-sm text-gray-500">{formatDateHeader()}</p>
         </div>
         <AIInsightsButton dashboardType="daily" dashboardData={insightsData} />
