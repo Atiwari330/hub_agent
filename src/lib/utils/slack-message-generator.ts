@@ -36,12 +36,12 @@ export function generateSlackMessage(ownerName: string, deals: DealForMessage[])
     .join('\n');
 
   const intro = isSingle
-    ? 'Quick hygiene check on this new deal:'
-    : 'Quick hygiene check on these new deals:';
+    ? `Hey! Just a heads up - this deal needs a couple fields filled in:`
+    : `Hey! Just a heads up - these deals need a few fields filled in:`;
 
   const outro = isSingle
-    ? 'When can you get this completed?'
-    : 'When do you think you can get these filled out? Just need a date to track against.';
+    ? `When you get a chance, could you update it? Just let me know a rough timeframe that works for you.`
+    : `When you get a chance, could you fill those in? Just let me know a rough timeframe that works for you.`;
 
   return `@${firstName}
 ${intro}
