@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { QueueDealCard } from './queue-deal-card';
 import { CommitmentDateModal } from './commitment-date-modal';
+import { SlackMessageModal } from './slack-message-modal';
 
 interface HygieneQueueDeal {
   id: string;
@@ -44,6 +45,13 @@ export function HygieneQueueView() {
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [commitmentModal, setCommitmentModal] = useState<{ dealId: string; dealName: string } | null>(null);
+  const [slackModalOpen, setSlackModalOpen] = useState(false);
+
+  // Get deals that need commitment for Slack messages
+  const needsCommitmentDeals = useMemo(() => {
+    if (!data) return [];
+    return data.deals.filter((d) => d.status === 'needs_commitment');
+  }, [data]);
 
   const fetchData = useCallback(async () => {
     try {
@@ -121,30 +129,50 @@ export function HygieneQueueView() {
         </p>
       </div>
 
-      {/* Status Tabs */}
-      <div className="flex gap-1 mb-6 bg-gray-100 p-1 rounded-lg w-fit">
-        {STATUS_TABS.map((tab) => (
-          <button
-            key={tab.value}
-            onClick={() => setStatusFilter(tab.value)}
-            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-              statusFilter === tab.value
-                ? 'bg-white text-gray-900 shadow-sm'
-                : 'text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            {tab.label}
-            <span
-              className={`ml-2 px-1.5 py-0.5 text-xs rounded-full ${
+      {/* Status Tabs and Actions */}
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex gap-1 bg-gray-100 p-1 rounded-lg w-fit">
+          {STATUS_TABS.map((tab) => (
+            <button
+              key={tab.value}
+              onClick={() => setStatusFilter(tab.value)}
+              className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
                 statusFilter === tab.value
-                  ? 'bg-indigo-100 text-indigo-600'
-                  : 'bg-gray-200 text-gray-600'
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
               }`}
             >
-              {getTabCount(tab.value)}
-            </span>
+              {tab.label}
+              <span
+                className={`ml-2 px-1.5 py-0.5 text-xs rounded-full ${
+                  statusFilter === tab.value
+                    ? 'bg-indigo-100 text-indigo-600'
+                    : 'bg-gray-200 text-gray-600'
+                }`}
+              >
+                {getTabCount(tab.value)}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        {/* Generate Slack Messages button - shows when there are needs_commitment deals */}
+        {needsCommitmentDeals.length > 0 && (
+          <button
+            onClick={() => setSlackModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"
+              />
+            </svg>
+            Generate Slack Messages
           </button>
-        ))}
+        )}
       </div>
 
       {/* Loading State */}
@@ -215,6 +243,13 @@ export function HygieneQueueView() {
           onSubmit={handleCommitmentSubmit}
         />
       )}
+
+      {/* Slack Message Modal */}
+      <SlackMessageModal
+        isOpen={slackModalOpen}
+        onClose={() => setSlackModalOpen(false)}
+        deals={needsCommitmentDeals}
+      />
     </div>
   );
 }
