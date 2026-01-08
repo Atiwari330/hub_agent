@@ -34,6 +34,8 @@ export const HubSpotDealSchema = z.object({
     hs_next_step: z.string().nullable().optional(),
     product_s: z.string().nullable().optional(),
     proposal_stage: z.string().nullable().optional(),
+    // Deal collaborator for hygiene tracking
+    hs_all_collaborator_owner_ids: z.string().nullable().optional(),
     // Stage entry timestamps for weekly pipeline tracking
     // These use the HubSpot stage IDs as property names
     'hs_v2_date_entered_17915773': z.string().nullable().optional(), // SQL
