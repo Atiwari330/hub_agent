@@ -14,6 +14,54 @@ interface RouteParams {
   params: Promise<{ ownerId: string }>;
 }
 
+// Type definitions for forecast calculations
+interface DealRecord {
+  id: string;
+  deal_name: string | null;
+  amount: number | null;
+  deal_stage: string | null;
+  close_date: string | null;
+  sql_entered_at: string | null;
+  demo_scheduled_entered_at: string | null;
+  demo_completed_entered_at: string | null;
+  closed_won_entered_at: string | null;
+}
+
+interface QuarterInfo {
+  startDate: Date;
+  endDate: Date;
+  label: string;
+}
+
+interface OwnerRecord {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  email: string | null;
+}
+
+interface StageTargets {
+  dealsNeeded: number;
+  proposalsNeeded: number;
+  demosNeeded: number;
+  sqlsNeeded: number;
+}
+
+interface StageWeeklyForecastItem {
+  weekNumber: number;
+  weeklyTarget: number;
+  cumulativeTarget: number;
+}
+
+interface AllStageForecasts {
+  targets: StageTargets;
+  forecasts: {
+    sql: StageWeeklyForecastItem[];
+    demo: StageWeeklyForecastItem[];
+    proposal: StageWeeklyForecastItem[];
+  };
+}
+
 // Closed-won stage detection patterns
 const CLOSED_WON_PATTERNS = ['closedwon', 'closed won', 'closed-won'];
 
@@ -169,14 +217,14 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
 // Handle ARR forecast (closed-won revenue)
 function handleArrForecast(
-  deals: any[],
+  deals: DealRecord[],
   quotaAmount: number,
-  quarterInfo: any,
+  quarterInfo: QuarterInfo,
   currentWeekNum: number,
-  owner: any,
+  owner: OwnerRecord,
   year: number,
   quarter: number,
-  targets: any
+  targets: StageTargets
 ) {
   const forecastWeeks = calculateWeeklyForecast(quotaAmount);
 
@@ -273,14 +321,14 @@ function handleArrForecast(
 // Handle stage forecast (SQL, Demo, Proposal counts)
 function handleStageForecast(
   stage: 'sql' | 'demo' | 'proposal',
-  deals: any[],
+  deals: DealRecord[],
   quotaAmount: number,
-  quarterInfo: any,
+  quarterInfo: QuarterInfo,
   currentWeekNum: number,
-  owner: any,
+  owner: OwnerRecord,
   year: number,
   quarter: number,
-  stageForecasts: any
+  stageForecasts: AllStageForecasts
 ) {
   // Map stage to timestamp field
   const stageConfig = {
