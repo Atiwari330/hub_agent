@@ -40,3 +40,10 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 .claude/
+
+# Data files (CSV exports, PDFs, local analysis)
+*.csv
+*.pdf
+*.xlsx
+src/scripts/analyze-*.ts
+src/scripts/export-*.ts
