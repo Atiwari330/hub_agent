@@ -21,6 +21,8 @@ const DEAL_PROPERTIES = [
   'hs_next_step',
   'product_s',
   'proposal_stage',
+  // Deal collaborator for hygiene tracking
+  'hs_all_collaborator_owner_ids',
   // Stage entry timestamps for weekly pipeline tracking
   ...getStageEntryProperties(),
 ];
@@ -67,6 +69,7 @@ export async function getDealsByOwnerId(ownerId: string): Promise<HubSpotDeal[]>
           hs_next_step: deal.properties.hs_next_step,
           product_s: deal.properties.product_s,
           proposal_stage: deal.properties.proposal_stage,
+          hs_all_collaborator_owner_ids: deal.properties.hs_all_collaborator_owner_ids,
           // Stage entry timestamps
           [TRACKED_STAGES.SQL.property]: deal.properties[TRACKED_STAGES.SQL.property],
           [TRACKED_STAGES.DEMO_SCHEDULED.property]: deal.properties[TRACKED_STAGES.DEMO_SCHEDULED.property],
@@ -112,6 +115,7 @@ export async function getDealById(dealId: string): Promise<HubSpotDeal | null> {
         hs_next_step: deal.properties.hs_next_step,
         product_s: deal.properties.product_s,
         proposal_stage: deal.properties.proposal_stage,
+        hs_all_collaborator_owner_ids: deal.properties.hs_all_collaborator_owner_ids,
         // Stage entry timestamps
         [TRACKED_STAGES.SQL.property]: deal.properties[TRACKED_STAGES.SQL.property],
         [TRACKED_STAGES.DEMO_SCHEDULED.property]: deal.properties[TRACKED_STAGES.DEMO_SCHEDULED.property],
@@ -158,6 +162,7 @@ export async function getAllDeals(): Promise<HubSpotDeal[]> {
           hs_next_step: deal.properties.hs_next_step,
           product_s: deal.properties.product_s,
           proposal_stage: deal.properties.proposal_stage,
+          hs_all_collaborator_owner_ids: deal.properties.hs_all_collaborator_owner_ids,
           // Stage entry timestamps
           [TRACKED_STAGES.SQL.property]: deal.properties[TRACKED_STAGES.SQL.property],
           [TRACKED_STAGES.DEMO_SCHEDULED.property]: deal.properties[TRACKED_STAGES.DEMO_SCHEDULED.property],
@@ -261,6 +266,7 @@ export async function getFilteredDealsForSync(
             hs_next_step: deal.properties.hs_next_step,
             product_s: deal.properties.product_s,
             proposal_stage: deal.properties.proposal_stage,
+            hs_all_collaborator_owner_ids: deal.properties.hs_all_collaborator_owner_ids,
             [TRACKED_STAGES.SQL.property]:
               deal.properties[TRACKED_STAGES.SQL.property],
             [TRACKED_STAGES.DEMO_SCHEDULED.property]:
@@ -357,6 +363,7 @@ export async function getDealWithNextStepHistory(
         hs_next_step: deal.properties.hs_next_step,
         product_s: deal.properties.product_s,
         proposal_stage: deal.properties.proposal_stage,
+        hs_all_collaborator_owner_ids: deal.properties.hs_all_collaborator_owner_ids,
         [TRACKED_STAGES.SQL.property]: deal.properties[TRACKED_STAGES.SQL.property],
         [TRACKED_STAGES.DEMO_SCHEDULED.property]:
           deal.properties[TRACKED_STAGES.DEMO_SCHEDULED.property],

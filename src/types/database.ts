@@ -40,6 +40,8 @@ export const DealRecordSchema = z.object({
   demo_scheduled_entered_at: z.string().nullable().optional(),
   demo_completed_entered_at: z.string().nullable().optional(),
   closed_won_entered_at: z.string().nullable().optional(),
+  // Deal collaborator from 007_hygiene_commitments.sql
+  deal_collaborator: z.string().nullable().optional(),
 });
 
 export type DealRecord = z.infer<typeof DealRecordSchema>;
@@ -105,3 +107,17 @@ export const AeTargetRecordSchema = z.object({
 });
 
 export type AeTargetRecord = z.infer<typeof AeTargetRecordSchema>;
+
+export const HygieneCommitmentRecordSchema = z.object({
+  id: z.string().uuid(),
+  deal_id: z.string().uuid(),
+  owner_id: z.string().uuid(),
+  commitment_date: z.string(),
+  committed_at: z.string(),
+  status: z.enum(['pending', 'completed', 'escalated']),
+  resolved_at: z.string().nullable(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+export type HygieneCommitmentRecord = z.infer<typeof HygieneCommitmentRecordSchema>;

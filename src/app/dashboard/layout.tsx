@@ -3,6 +3,121 @@ import { Sidebar } from '@/components/dashboard/sidebar';
 import { getCurrentQuarter, getQuarterProgress } from '@/lib/utils/quarter';
 import { SYNC_CONFIG } from '@/lib/hubspot/sync-config';
 
+// Active stages for queue counting (excludes MQL, Closed Won, Closed Lost)
+const ACTIVE_DEAL_STAGES = [
+  '17915773',                                  // SQL
+  '138092708',                                 // Discovery
+  'baedc188-ba76-4a41-8723-5bb99fe7c5bf',     // Demo - Scheduled
+  '963167283',                                 // Demo - Completed
+  '59865091',                                  // Proposal
+];
+
+async function getQueueCounts(supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>, ownerIds: string[]) {
+  try {
+    // Fetch active deals with queue-relevant fields
+    const { data: deals } = await supabase
+      .from('deals')
+      .select(`
+        id,
+        hubspot_created_at,
+        deal_substage,
+        close_date,
+        amount,
+        lead_source,
+        products,
+        deal_collaborator,
+        next_step,
+        next_step_due_date,
+        next_step_status
+      `)
+      .in('owner_id', ownerIds)
+      .eq('pipeline', SYNC_CONFIG.TARGET_PIPELINE_ID)
+      .in('deal_stage', ACTIVE_DEAL_STAGES);
+
+    if (!deals || deals.length === 0) {
+      return {
+        hygiene: { total: 0, escalated: 0 },
+        nextStep: { total: 0, overdue: 0 },
+      };
+    }
+
+    // Get pending commitments
+    const dealIds = deals.map(d => d.id);
+    const { data: commitments } = await supabase
+      .from('hygiene_commitments')
+      .select('deal_id, commitment_date, status')
+      .in('deal_id', dealIds)
+      .eq('status', 'pending');
+
+    const commitmentMap = new Map(commitments?.map(c => [c.deal_id, c]) || []);
+
+    // Count hygiene issues
+    let hygieneTotal = 0;
+    let hygieneEscalated = 0;
+    let nextStepTotal = 0;
+    let nextStepOverdue = 0;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    for (const deal of deals) {
+      // Check hygiene
+      const hygieneFields = [
+        deal.deal_substage,
+        deal.close_date,
+        deal.amount,
+        deal.lead_source,
+        deal.products,
+        deal.deal_collaborator,
+      ];
+      const missingCount = hygieneFields.filter(f => f === null || f === undefined || f === '' || f === 0).length;
+
+      if (missingCount > 0) {
+        hygieneTotal++;
+        const commitment = commitmentMap.get(deal.id);
+        const createdAt = deal.hubspot_created_at ? new Date(deal.hubspot_created_at) : null;
+        const daysSinceCreated = createdAt
+          ? Math.floor((today.getTime() - createdAt.getTime()) / (1000 * 60 * 60 * 24))
+          : 999;
+
+        // Escalated if: no commitment and deal > 7 days old, OR commitment date passed
+        const isNewDeal = daysSinceCreated <= 7;
+        if (!commitment && !isNewDeal) {
+          hygieneEscalated++;
+        } else if (commitment) {
+          const commitmentDate = new Date(commitment.commitment_date);
+          if (commitmentDate < today) {
+            hygieneEscalated++;
+          }
+        }
+      }
+
+      // Check next step
+      const hasNextStep = deal.next_step && deal.next_step.trim().length > 0;
+      if (!hasNextStep) {
+        nextStepTotal++;
+      } else if (deal.next_step_due_date && deal.next_step_status) {
+        const dueDate = new Date(deal.next_step_due_date);
+        if (dueDate < today && (deal.next_step_status === 'date_found' || deal.next_step_status === 'date_inferred')) {
+          nextStepTotal++;
+          nextStepOverdue++;
+        }
+      }
+    }
+
+    return {
+      hygiene: { total: hygieneTotal, escalated: hygieneEscalated },
+      nextStep: { total: nextStepTotal, overdue: nextStepOverdue },
+    };
+  } catch (error) {
+    console.error('Error fetching queue counts:', error);
+    return {
+      hygiene: { total: 0, escalated: 0 },
+      nextStep: { total: 0, overdue: 0 },
+    };
+  }
+}
+
 export default async function DashboardLayout({
   children,
 }: {
@@ -35,6 +150,10 @@ export default async function DashboardLayout({
   const quarter = getCurrentQuarter();
   const progress = getQuarterProgress(quarter);
 
+  // Fetch queue counts
+  const ownerIds = owners.map(o => o.id);
+  const queueCounts = await getQueueCounts(supabase, ownerIds);
+
   return (
     <div className="min-h-screen bg-gray-50">
       <Sidebar
@@ -42,6 +161,7 @@ export default async function DashboardLayout({
         lastSync={lastSync}
         quarterLabel={quarter.label}
         quarterProgress={progress.percentComplete}
+        queueCounts={queueCounts}
       />
       <main className="ml-64 min-h-screen">
         {children}

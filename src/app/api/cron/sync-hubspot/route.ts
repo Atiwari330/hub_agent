@@ -113,6 +113,7 @@ export async function GET(request: Request) {
       next_step: deal.properties.hs_next_step,
       products: deal.properties.product_s,
       deal_substage: deal.properties.proposal_stage,
+      deal_collaborator: deal.properties.hs_all_collaborator_owner_ids,
       sql_entered_at: toTimestamp(deal.properties[TRACKED_STAGES.SQL.property]),
       demo_scheduled_entered_at: toTimestamp(deal.properties[TRACKED_STAGES.DEMO_SCHEDULED.property]),
       demo_completed_entered_at: toTimestamp(deal.properties[TRACKED_STAGES.DEMO_COMPLETED.property]),

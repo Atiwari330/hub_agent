@@ -12,11 +12,17 @@ interface Owner {
   email: string;
 }
 
+interface QueueCounts {
+  hygiene: { total: number; escalated: number };
+  nextStep: { total: number; overdue: number };
+}
+
 interface SidebarProps {
   owners: Owner[];
   lastSync: string | null;
   quarterLabel: string;
   quarterProgress: number;
+  queueCounts?: QueueCounts;
 }
 
 function ChevronIcon({ open }: { open: boolean }) {
@@ -75,13 +81,24 @@ function DashboardIcon() {
   );
 }
 
-export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress }: SidebarProps) {
+function QueueIcon() {
+  return (
+    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+    </svg>
+  );
+}
+
+export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, queueCounts }: SidebarProps) {
   const pathname = usePathname();
   const [aeListOpen, setAeListOpen] = useState(true);
+  const [queuesOpen, setQueuesOpen] = useState(true);
 
   // Extract current owner ID from pathname
   const currentOwnerId = pathname?.match(/\/dashboard\/ae\/([^/]+)/)?.[1];
   const isOnMissionControl = pathname === '/dashboard';
+  const isOnHygieneQueue = pathname === '/dashboard/queues/hygiene';
+  const isOnNextStepQueue = pathname === '/dashboard/queues/next-step';
 
   return (
     <aside className="fixed left-0 top-0 h-screen w-64 bg-slate-900 text-slate-100 flex flex-col">
@@ -159,6 +176,71 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress }: Sid
                   No account executives found
                 </li>
               )}
+            </ul>
+          )}
+        </div>
+
+        {/* Queues Section */}
+        <div className="mt-4">
+          <button
+            onClick={() => setQueuesOpen(!queuesOpen)}
+            className="w-full flex items-center justify-between px-4 py-2 text-sm font-medium text-slate-300 hover:bg-slate-800 transition-colors"
+          >
+            <span className="flex items-center gap-2">
+              <QueueIcon />
+              <span>Queues</span>
+            </span>
+            <ChevronIcon open={queuesOpen} />
+          </button>
+
+          {queuesOpen && (
+            <ul className="mt-1 space-y-0.5">
+              <li>
+                <Link
+                  href="/dashboard/queues/hygiene"
+                  className={`flex items-center justify-between px-4 py-2 pl-11 text-sm transition-colors ${
+                    isOnHygieneQueue
+                      ? 'bg-indigo-600 text-white'
+                      : 'text-slate-300 hover:bg-slate-800'
+                  }`}
+                >
+                  <span>Deal Hygiene</span>
+                  {queueCounts && queueCounts.hygiene.total > 0 && (
+                    <span
+                      className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${
+                        queueCounts.hygiene.escalated > 0
+                          ? 'bg-red-500 text-white'
+                          : 'bg-slate-600 text-slate-200'
+                      }`}
+                    >
+                      {queueCounts.hygiene.total}
+                    </span>
+                  )}
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/dashboard/queues/next-step"
+                  className={`flex items-center justify-between px-4 py-2 pl-11 text-sm transition-colors ${
+                    isOnNextStepQueue
+                      ? 'bg-indigo-600 text-white'
+                      : 'text-slate-300 hover:bg-slate-800'
+                  }`}
+                >
+                  <span>Next Steps</span>
+                  {queueCounts && queueCounts.nextStep.total > 0 && (
+                    <span
+                      className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${
+                        queueCounts.nextStep.overdue > 0
+                          ? 'bg-red-500 text-white'
+                          : 'bg-slate-600 text-slate-200'
+                      }`}
+                    >
+                      {queueCounts.nextStep.total}
+                    </span>
+                  )}
+                </Link>
+              </li>
             </ul>
           )}
         </div>
