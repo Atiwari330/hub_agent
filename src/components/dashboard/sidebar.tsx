@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { formatPercent } from '@/lib/utils/currency';
 
@@ -91,8 +91,22 @@ function QueueIcon() {
 
 export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, queueCounts }: SidebarProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const [aeListOpen, setAeListOpen] = useState(true);
   const [queuesOpen, setQueuesOpen] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+
+  const handleSync = async () => {
+    setSyncing(true);
+    try {
+      await fetch('/api/cron/sync-hubspot');
+      router.refresh();
+    } catch (err) {
+      console.error('Sync failed:', err);
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   // Extract current owner ID from pathname
   const currentOwnerId = pathname?.match(/\/dashboard\/ae\/([^/]+)/)?.[1];
@@ -274,8 +288,30 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, queue
         </div>
 
         {/* Last Sync */}
-        <div className="text-xs text-slate-500">
-          Last sync: {formatRelativeTime(lastSync)}
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-slate-500">
+            {syncing ? 'Syncing...' : `Last sync: ${formatRelativeTime(lastSync)}`}
+          </span>
+          <button
+            onClick={handleSync}
+            disabled={syncing}
+            className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-700 rounded transition-colors disabled:opacity-50"
+            title="Sync with HubSpot"
+          >
+            <svg
+              className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+              />
+            </svg>
+          </button>
         </div>
       </div>
     </aside>
