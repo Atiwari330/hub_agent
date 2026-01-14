@@ -139,14 +139,54 @@ export async function GET(request: Request) {
       }
     }
 
+    // Step 4b: Clean up stale deals
+    // Remove deals that are no longer in the target pipeline or have changed owners
+    const syncedDealIds = deals.map((d) => d.id);
+    const targetOwnerIds = Array.from(ownerMap.values());
+    let dealsDeleted = 0;
+    let dealsUnassigned = 0;
+
+    // Delete deals not in the target pipeline (e.g., moved to Upsells)
+    const { data: wrongPipelineDeals, error: wrongPipelineError } = await supabase
+      .from('deals')
+      .delete()
+      .neq('pipeline', SYNC_CONFIG.TARGET_PIPELINE_ID)
+      .select('id');
+
+    if (wrongPipelineError) {
+      console.error('Error deleting wrong pipeline deals:', wrongPipelineError);
+    } else {
+      dealsDeleted = wrongPipelineDeals?.length || 0;
+      if (dealsDeleted > 0) {
+        console.log(`Deleted ${dealsDeleted} deals from non-target pipelines`);
+      }
+    }
+
+    // Clear owner_id for deals owned by target AEs that weren't in sync batch
+    // (These are deals where the owner was changed in HubSpot)
+    if (syncedDealIds.length > 0) {
+      const { data: orphanedDeals, error: orphanError } = await supabase
+        .from('deals')
+        .update({ owner_id: null, hubspot_owner_id: null })
+        .in('owner_id', targetOwnerIds)
+        .not('hubspot_deal_id', 'in', `(${syncedDealIds.join(',')})`)
+        .select('id');
+
+      if (orphanError) {
+        console.error('Error clearing orphaned deal owners:', orphanError);
+      } else {
+        dealsUnassigned = orphanedDeals?.length || 0;
+        if (dealsUnassigned > 0) {
+          console.log(`Cleared owner from ${dealsUnassigned} deals (owner changed in HubSpot)`);
+        }
+      }
+    }
+
     // Step 5: Sync notes for exception-eligible deals
     // Only sync for: target AEs, Sales Pipeline, 2025+ deals, active stages
     const today = new Date().toISOString().split('T')[0];
     const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
     const minDate = SYNC_CONFIG.MIN_DATE;
-
-    // Get target owner IDs from the owner map we already built
-    const targetOwnerIds = Array.from(ownerMap.values());
 
     const { data: exceptionDeals } = await supabase
       .from('deals')
@@ -207,6 +247,8 @@ export async function GET(request: Request) {
         ownersSync: owners.length,
         dealsSync: dealSuccess,
         dealErrors,
+        dealsDeleted,
+        dealsUnassigned,
         notesSynced,
         exceptionDealsProcessed: exceptionDeals?.length || 0,
         durationMs: duration,
@@ -218,13 +260,15 @@ export async function GET(request: Request) {
       },
     }).eq('id', workflowId);
 
-    console.log(`Sync complete in ${duration}ms: ${owners.length} owners, ${dealSuccess} deals, ${notesSynced} notes`);
+    console.log(`Sync complete in ${duration}ms: ${owners.length} owners, ${dealSuccess} deals, ${dealsDeleted} deleted, ${dealsUnassigned} unassigned, ${notesSynced} notes`);
 
     return NextResponse.json({
       success: true,
       ownersSynced: owners.length,
       dealsSynced: dealSuccess,
       dealErrors,
+      dealsDeleted,
+      dealsUnassigned,
       notesSynced,
       exceptionDealsProcessed: exceptionDeals?.length || 0,
       durationMs: duration,

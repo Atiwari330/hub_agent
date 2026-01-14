@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase/client';
 import { SYNC_CONFIG } from '@/lib/hubspot/sync-config';
 import { getAllPipelines } from '@/lib/hubspot/pipelines';
 import { calculateDealRisk } from '@/lib/utils/deal-risk';
+import { getCurrentQuarter, getQuarterInfo } from '@/lib/utils/quarter';
 
 // Stage patterns
 const CLOSED_WON_PATTERNS = ['closedwon', 'closed won', 'closed-won'];
@@ -190,12 +191,24 @@ export async function GET() {
       return CLOSED_LOST_PATTERNS.some((p) => stageLower.includes(p));
     };
 
-    const isInPipeline = (stage: string | null): boolean => {
-      if (!stage) return true;
+    // Get current quarter info for pipeline filtering
+    const currentQ = getCurrentQuarter();
+    const quarterInfo = getQuarterInfo(currentQ.year, currentQ.quarter);
+
+    const isInQuarter = (dateStr: string | null): boolean => {
+      if (!dateStr) return false;
+      const date = new Date(dateStr);
+      return date >= quarterInfo.startDate && date <= quarterInfo.endDate;
+    };
+
+    const isInPipeline = (stage: string | null, closeDate: string | null): boolean => {
+      if (!stage) return false;
       if (isClosedWon(stage) || isClosedLost(stage)) return false;
       const stageName = stageMap.get(stage) || stage;
       const stageLower = stageName.toLowerCase();
-      return !EXCLUDED_FROM_PIPELINE.some((p) => stageLower.includes(p));
+      if (EXCLUDED_FROM_PIPELINE.some((p) => stageLower.includes(p))) return false;
+      // Only include deals with close dates in the current quarter
+      return isInQuarter(closeDate);
     };
 
     const isInWeek = (dateStr: string | null, weekStart: Date): boolean => {
@@ -252,7 +265,7 @@ export async function GET() {
 
     for (const owner of owners || []) {
       const ownerDeals = (deals || []).filter((d) => d.owner_id === owner.id);
-      const pipelineDeals = ownerDeals.filter((d) => isInPipeline(d.deal_stage));
+      const pipelineDeals = ownerDeals.filter((d) => isInPipeline(d.deal_stage, d.close_date));
       const closedWonDeals = ownerDeals.filter((d) => isClosedWon(d.deal_stage));
       const closedLostDeals = ownerDeals.filter((d) => isClosedLost(d.deal_stage));
 
@@ -317,7 +330,7 @@ export async function GET() {
 
     // Calculate stage velocity
     const stageVelocityMap = new Map<string, { count: number; totalDays: number }>();
-    const pipelineDeals = (deals || []).filter((d) => isInPipeline(d.deal_stage));
+    const pipelineDeals = (deals || []).filter((d) => isInPipeline(d.deal_stage, d.close_date));
 
     for (const deal of pipelineDeals) {
       const stageId = deal.deal_stage || 'unknown';

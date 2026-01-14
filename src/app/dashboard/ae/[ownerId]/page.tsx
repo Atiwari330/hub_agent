@@ -100,12 +100,14 @@ export default async function AEDetailPage({ params }: PageProps) {
     return CLOSED_LOST_PATTERNS.some((p) => stageLower.includes(p));
   };
 
-  const isInPipeline = (stage: string | null): boolean => {
-    if (!stage) return true;
+  const isInPipeline = (stage: string | null, closeDate: string | null): boolean => {
+    if (!stage) return false;
     if (isClosedWon(stage) || isClosedLost(stage)) return false;
     if (excludedStages.has(stage)) return false;
     const stageLower = stage.toLowerCase();
-    return !EXCLUDED_FROM_PIPELINE.some((p) => stageLower.includes(p));
+    if (EXCLUDED_FROM_PIPELINE.some((p) => stageLower.includes(p))) return false;
+    // Only include deals with close dates in the current quarter
+    return isInQuarter(closeDate);
   };
 
   const isInQuarter = (dateStr: string | null): boolean => {
@@ -118,7 +120,7 @@ export default async function AEDetailPage({ params }: PageProps) {
   const closedWonDeals = deals.filter((deal) => isClosedWon(deal.deal_stage) && isInQuarter(deal.close_date));
   const closedWonAmount = closedWonDeals.reduce((sum, deal) => sum + (deal.amount || 0), 0);
 
-  const pipelineDeals = deals.filter((deal) => isInPipeline(deal.deal_stage));
+  const pipelineDeals = deals.filter((deal) => isInPipeline(deal.deal_stage, deal.close_date));
   const pipelineValue = pipelineDeals.reduce((sum, deal) => sum + (deal.amount || 0), 0);
 
   const closedWonAll = deals.filter((deal) => isClosedWon(deal.deal_stage));

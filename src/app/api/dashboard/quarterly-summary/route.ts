@@ -201,12 +201,14 @@ export async function GET(request: NextRequest) {
       return CLOSED_LOST_PATTERNS.some((p) => stageLower.includes(p));
     };
 
-    const isInPipeline = (stage: string | null): boolean => {
-      if (!stage) return true;
+    const isInPipeline = (stage: string | null, closeDate: string | null): boolean => {
+      if (!stage) return false;
       if (isClosedWon(stage) || isClosedLost(stage)) return false;
       const stageName = stageMap.get(stage) || stage;
       const stageLower = stageName.toLowerCase();
-      return !EXCLUDED_FROM_PIPELINE.some((p) => stageLower.includes(p));
+      if (EXCLUDED_FROM_PIPELINE.some((p) => stageLower.includes(p))) return false;
+      // Only include deals with close dates in the current quarter
+      return isInQuarter(closeDate);
     };
 
     const isInQuarter = (dateStr: string | null): boolean => {
@@ -239,8 +241,8 @@ export async function GET(request: NextRequest) {
       const closedWonAmount = closedWonDeals.reduce((sum, d) => sum + (d.amount || 0), 0);
       totalClosedWon += closedWonAmount;
 
-      // Pipeline deals
-      const pipelineDeals = ownerDeals.filter((d) => isInPipeline(d.deal_stage));
+      // Pipeline deals (only those with close dates in current quarter)
+      const pipelineDeals = ownerDeals.filter((d) => isInPipeline(d.deal_stage, d.close_date));
       const pipelineValue = pipelineDeals.reduce((sum, d) => sum + (d.amount || 0), 0);
       totalPipeline += pipelineValue;
 

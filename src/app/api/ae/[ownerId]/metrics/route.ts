@@ -117,13 +117,15 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return CLOSED_LOST_PATTERNS.some((p) => stageLower.includes(p));
     };
 
-    // Helper to check if a deal is in pipeline (not closed, not excluded)
-    const isInPipeline = (stage: string | null): boolean => {
-      if (!stage) return true; // Include deals with no stage
+    // Helper to check if a deal is in pipeline (not closed, not excluded, close date in quarter)
+    const isInPipeline = (stage: string | null, closeDate: string | null): boolean => {
+      if (!stage) return false;
       if (isClosedWon(stage) || isClosedLost(stage)) return false;
       if (excludedStages.has(stage)) return false;
       const stageLower = stage.toLowerCase();
-      return !EXCLUDED_FROM_PIPELINE.some((p) => stageLower.includes(p));
+      if (EXCLUDED_FROM_PIPELINE.some((p) => stageLower.includes(p))) return false;
+      // Only include deals with close dates in the current quarter
+      return isInQuarter(closeDate);
     };
 
     // Helper to check if a date is within the quarter
@@ -140,8 +142,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     );
     const closedWonAmount = closedWonDeals.reduce((sum, deal) => sum + (deal.amount || 0), 0);
 
-    // 2. Pipeline value (active deals)
-    const pipelineDeals = deals.filter((deal) => isInPipeline(deal.deal_stage));
+    // 2. Pipeline value (active deals with close date in current quarter)
+    const pipelineDeals = deals.filter((deal) => isInPipeline(deal.deal_stage, deal.close_date));
     const pipelineValue = pipelineDeals.reduce((sum, deal) => sum + (deal.amount || 0), 0);
 
     // 3. All closed deals (for win rate calculation)
