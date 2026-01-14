@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useCallback } from 'react';
 import { formatCurrency } from '@/lib/utils/currency';
+import { getCurrentQuarter, getQuarterInfo } from '@/lib/utils/quarter';
 
 interface RiskFactor {
   type: string;
@@ -55,6 +56,25 @@ interface DealsTableProps {
 type SortColumn = 'dealName' | 'amount' | 'closeDate' | 'stage';
 type SortOrder = 'asc' | 'desc';
 type DealFilter = 'active' | 'closed_won' | 'closed_lost' | 'all';
+type QuarterFilter = 'q1' | 'q2' | 'q3' | 'q4' | 'all';
+
+// Generate quarter options for the dropdown
+function getQuarterOptions(): { value: QuarterFilter; label: string; year: number }[] {
+  const currentQ = getCurrentQuarter();
+  return [
+    { value: 'q1', label: `Q1 ${currentQ.year}`, year: currentQ.year },
+    { value: 'q2', label: `Q2 ${currentQ.year}`, year: currentQ.year },
+    { value: 'q3', label: `Q3 ${currentQ.year}`, year: currentQ.year },
+    { value: 'q4', label: `Q4 ${currentQ.year}`, year: currentQ.year },
+    { value: 'all', label: 'All Quarters', year: currentQ.year },
+  ];
+}
+
+// Get the current quarter filter value
+function getCurrentQuarterFilter(): QuarterFilter {
+  const currentQ = getCurrentQuarter();
+  return `q${currentQ.quarter}` as QuarterFilter;
+}
 
 // Stage color mapping
 function getStageColor(stage: string | null): string {
@@ -287,9 +307,14 @@ function AnalyzeButton({
 export function DealsTable({ deals: initialDeals, ownerId }: DealsTableProps) {
   const [sortColumn, setSortColumn] = useState<SortColumn>('amount');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
+  const [quarterFilter, setQuarterFilter] = useState<QuarterFilter>(getCurrentQuarterFilter());
   const [filter, setFilter] = useState<DealFilter>('active');
   const [analyzingDeals, setAnalyzingDeals] = useState<Set<string>>(new Set());
   const [dealAnalyses, setDealAnalyses] = useState<Record<string, NextStepAnalysis>>({});
+
+  // Get quarter options and info for filtering
+  const quarterOptions = useMemo(() => getQuarterOptions(), []);
+  const currentYear = quarterOptions[0]?.year || new Date().getFullYear();
 
   // Merge initial data with any updated analyses
   const deals = useMemo(() => {
@@ -336,12 +361,29 @@ export function DealsTable({ deals: initialDeals, ownerId }: DealsTableProps) {
     }
   }, []);
 
+  // Check if a deal's close date falls within a quarter
+  const isInQuarter = useCallback((closeDate: string | null, quarterNum: number, year: number): boolean => {
+    if (!closeDate) return false;
+    const quarterInfo = getQuarterInfo(year, quarterNum);
+    const date = new Date(closeDate);
+    return date >= quarterInfo.startDate && date <= quarterInfo.endDate;
+  }, []);
+
   const filteredDeals = useMemo(() => {
     return deals.filter((deal) => {
       const stageLower = (deal.stageName || deal.stage || '').toLowerCase();
       const isClosedWon = stageLower.includes('closed won') || stageLower.includes('closedwon');
       const isClosedLost = stageLower.includes('closed lost') || stageLower.includes('closedlost');
 
+      // Filter by quarter first
+      if (quarterFilter !== 'all') {
+        const quarterNum = parseInt(quarterFilter.replace('q', ''), 10);
+        if (!isInQuarter(deal.closeDate, quarterNum, currentYear)) {
+          return false;
+        }
+      }
+
+      // Then filter by status
       switch (filter) {
         case 'active':
           return !isClosedWon && !isClosedLost;
@@ -353,7 +395,7 @@ export function DealsTable({ deals: initialDeals, ownerId }: DealsTableProps) {
           return true;
       }
     });
-  }, [deals, filter]);
+  }, [deals, filter, quarterFilter, currentYear, isInQuarter]);
 
   const sortedDeals = useMemo(() => {
     return [...filteredDeals].sort((a, b) => {
@@ -398,19 +440,34 @@ export function DealsTable({ deals: initialDeals, ownerId }: DealsTableProps) {
 
   return (
     <div>
-      {/* Header with filter */}
+      {/* Header with filters */}
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-semibold text-gray-900">Deals</h2>
-        <select
-          value={filter}
-          onChange={(e) => setFilter(e.target.value as DealFilter)}
-          className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-        >
-          <option value="active">Active Pipeline</option>
-          <option value="closed_won">Closed Won</option>
-          <option value="closed_lost">Closed Lost</option>
-          <option value="all">All Deals</option>
-        </select>
+        <div className="flex items-center gap-2">
+          {/* Quarter filter */}
+          <select
+            value={quarterFilter}
+            onChange={(e) => setQuarterFilter(e.target.value as QuarterFilter)}
+            className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+          >
+            {quarterOptions.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+          {/* Status filter */}
+          <select
+            value={filter}
+            onChange={(e) => setFilter(e.target.value as DealFilter)}
+            className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+          >
+            <option value="active">Active Pipeline</option>
+            <option value="closed_won">Closed Won</option>
+            <option value="closed_lost">Closed Lost</option>
+            <option value="all">All Deals</option>
+          </select>
+        </div>
       </div>
 
       {filteredDeals.length === 0 ? (

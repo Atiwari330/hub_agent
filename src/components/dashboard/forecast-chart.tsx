@@ -57,6 +57,7 @@ interface ForecastData {
 
 interface ForecastChartProps {
   ownerId: string;
+  defaultCollapsed?: boolean;
 }
 
 // Stage options for dropdown
@@ -100,11 +101,25 @@ function formatValue(value: number, unit: 'currency' | 'count'): string {
   return value.toString();
 }
 
-export function ForecastChart({ ownerId }: ForecastChartProps) {
+function ChevronIcon({ expanded }: { expanded: boolean }) {
+  return (
+    <svg
+      className={`w-5 h-5 text-gray-500 transition-transform ${expanded ? 'rotate-180' : ''}`}
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+    >
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+    </svg>
+  );
+}
+
+export function ForecastChart({ ownerId, defaultCollapsed = true }: ForecastChartProps) {
   const [data, setData] = useState<ForecastData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedStage, setSelectedStage] = useState<ForecastStage>('arr');
+  const [collapsed, setCollapsed] = useState(defaultCollapsed);
 
   // Quarter selection state
   const quarterOptions = getQuarterOptions();
@@ -166,54 +181,77 @@ export function ForecastChart({ ownerId }: ForecastChartProps) {
   const statusColor = STATUS_COLORS[data.summary.status];
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-6">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4">
+    <div className="bg-white rounded-xl border border-gray-200">
+      {/* Collapsible Header - always visible */}
+      <button
+        onClick={() => setCollapsed(!collapsed)}
+        className="w-full p-4 flex items-center justify-between text-left hover:bg-gray-50 rounded-xl transition-colors"
+      >
         <div className="flex items-center gap-3">
           <div>
             <h3 className="text-lg font-semibold text-gray-900">Forecast vs Actual</h3>
-            <p className="text-sm text-gray-500">Cumulative progress by week</p>
+            {collapsed && (
+              <p className="text-sm text-gray-500">
+                {formatValue(data.summary.actualToDate, data.unit)} actual vs {formatValue(data.summary.forecastToDate, data.unit)} forecast
+              </p>
+            )}
+            {!collapsed && (
+              <p className="text-sm text-gray-500">Cumulative progress by week</p>
+            )}
           </div>
-          {/* Quarter Selector */}
-          <select
-            value={`${selectedQuarter.year}-${selectedQuarter.quarter}`}
-            onChange={(e) => {
-              const [year, quarter] = e.target.value.split('-').map(Number);
-              const option = quarterOptions.find((q) => q.year === year && q.quarter === quarter);
-              if (option) setSelectedQuarter(option);
-            }}
-            className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            {quarterOptions.map((q) => (
-              <option key={`${q.year}-${q.quarter}`} value={`${q.year}-${q.quarter}`}>
-                {q.label}
-              </option>
-            ))}
-          </select>
         </div>
-
         <div className="flex items-center gap-3">
-          {/* Stage Selector */}
-          <select
-            value={selectedStage}
-            onChange={(e) => setSelectedStage(e.target.value as ForecastStage)}
-            className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            {STAGE_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-
-          {/* Status Badge */}
+          {/* Status Badge - always visible */}
           <div
             className={`px-3 py-1.5 rounded-full text-sm font-medium ${statusColor.light} ${statusColor.text}`}
           >
             {STATUS_LABELS[data.summary.status]}
           </div>
+          <ChevronIcon expanded={!collapsed} />
         </div>
-      </div>
+      </button>
+
+      {/* Expandable content */}
+      {!collapsed && (
+        <div className="px-6 pb-6">
+          {/* Controls row */}
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              {/* Quarter Selector */}
+              <select
+                value={`${selectedQuarter.year}-${selectedQuarter.quarter}`}
+                onChange={(e) => {
+                  const [year, quarter] = e.target.value.split('-').map(Number);
+                  const option = quarterOptions.find((q) => q.year === year && q.quarter === quarter);
+                  if (option) setSelectedQuarter(option);
+                }}
+                onClick={(e) => e.stopPropagation()}
+                className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                {quarterOptions.map((q) => (
+                  <option key={`${q.year}-${q.quarter}`} value={`${q.year}-${q.quarter}`}>
+                    {q.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex items-center gap-3">
+              {/* Stage Selector */}
+              <select
+                value={selectedStage}
+                onChange={(e) => setSelectedStage(e.target.value as ForecastStage)}
+                onClick={(e) => e.stopPropagation()}
+                className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                {STAGE_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
 
       {/* Legend */}
       <div className="flex gap-6 mb-4">
@@ -361,13 +399,15 @@ export function ForecastChart({ ownerId }: ForecastChartProps) {
         </div>
       </div>
 
-      {/* Stage targets info (only show for non-ARR stages) */}
-      {data.stage !== 'arr' && (
-        <div className="mt-4 pt-4 border-t border-gray-100">
-          <div className="text-xs text-gray-500 text-center">
-            Based on {formatCurrency(data.quota)} quota with $12K avg deal size:
-            Need {data.targets.sqlsNeeded} SQLs → {data.targets.demosNeeded} Demos → {data.targets.proposalsNeeded} Proposals → {data.targets.dealsNeeded} Deals
-          </div>
+          {/* Stage targets info (only show for non-ARR stages) */}
+          {data.stage !== 'arr' && (
+            <div className="mt-4 pt-4 border-t border-gray-100">
+              <div className="text-xs text-gray-500 text-center">
+                Based on {formatCurrency(data.quota)} quota with $12K avg deal size:
+                Need {data.targets.sqlsNeeded} SQLs → {data.targets.demosNeeded} Demos → {data.targets.proposalsNeeded} Proposals → {data.targets.dealsNeeded} Deals
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
