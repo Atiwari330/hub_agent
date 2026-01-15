@@ -83,3 +83,63 @@ export async function createHygieneTasksBatch(
 
   return { results, errors };
 }
+
+interface CreateNextStepTaskParams {
+  hubspotDealId: string;
+  hubspotOwnerId: string;
+  dealName: string;
+  taskType: 'missing' | 'overdue';
+  nextStepText?: string | null;
+  daysOverdue?: number | null;
+}
+
+/**
+ * Creates a HubSpot task for next step issues (missing or overdue).
+ * The task will be assigned to the deal's owner.
+ */
+export async function createNextStepTask(params: CreateNextStepTaskParams): Promise<CreateTaskResult> {
+  const { hubspotDealId, hubspotOwnerId, dealName, taskType, nextStepText, daysOverdue } = params;
+  const client = getHubSpotClient();
+
+  // Build task body based on type
+  let taskSubject: string;
+  let taskBody: string;
+
+  if (taskType === 'missing') {
+    taskSubject = `Next Step Required: ${dealName}`;
+    taskBody = `This deal is missing a defined next step.\n\nPlease add a next step with a due date to keep this deal progressing through the pipeline.\n\nGood next steps are specific and actionable (e.g., "Send proposal by Friday", "Schedule follow-up call").`;
+  } else {
+    taskSubject = `Overdue Next Step: ${dealName}`;
+    taskBody = `The next step for this deal is overdue by ${daysOverdue || 0} day${daysOverdue !== 1 ? 's' : ''}.\n\nOriginal next step: "${nextStepText || 'Not specified'}"\n\nPlease complete this next step or update it with a new action and due date.`;
+  }
+
+  // Create the task
+  const taskResponse = await client.crm.objects.tasks.basicApi.create({
+    properties: {
+      hs_task_subject: taskSubject,
+      hs_task_body: taskBody,
+      hs_task_status: 'NOT_STARTED',
+      hs_task_priority: taskType === 'overdue' ? 'HIGH' : 'MEDIUM',
+      hs_task_type: 'TODO',
+      hubspot_owner_id: hubspotOwnerId,
+      // Set due date to 2 days from now for overdue, 3 days for missing
+      hs_timestamp: new Date(Date.now() + (taskType === 'overdue' ? 2 : 3) * 24 * 60 * 60 * 1000).toISOString(),
+    },
+    associations: [
+      {
+        to: { id: hubspotDealId },
+        types: [
+          {
+            associationCategory: AssociationSpecAssociationCategoryEnum.HubspotDefined,
+            associationTypeId: TASK_TO_DEAL_ASSOCIATION_TYPE_ID,
+          },
+        ],
+      },
+    ],
+  });
+
+  return {
+    taskId: taskResponse.id,
+    success: true,
+  };
+}
