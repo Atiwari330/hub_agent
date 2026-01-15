@@ -2,50 +2,40 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { formatCurrency } from '@/lib/utils/currency';
-import { CommitmentDateModal } from './commitment-date-modal';
 import { SlackMessageModal } from './slack-message-modal';
+
+interface ExistingTaskInfo {
+  hubspotTaskId: string;
+  createdAt: string;
+  fieldsTaskedFor: string[];
+  coversAllCurrentFields: boolean;
+}
 
 interface HygieneQueueDeal {
   id: string;
+  hubspotDealId: string;
   dealName: string;
   amount: number | null;
   stageName: string;
   ownerName: string;
   ownerId: string;
+  hubspotOwnerId: string;
   createdAt: string | null;
   businessDaysOld: number;
-  status: 'needs_commitment' | 'pending' | 'escalated';
   missingFields: { field: string; label: string }[];
-  commitment: { date: string; daysRemaining: number } | null;
   reason: string;
+  existingTask: ExistingTaskInfo | null;
 }
 
 interface HygieneQueueResponse {
   deals: HygieneQueueDeal[];
   counts: {
-    needsCommitment: number;
-    pending: number;
-    escalated: number;
     total: number;
   };
 }
 
-type StatusFilter = 'all' | 'needs_commitment' | 'pending' | 'escalated';
-type SortColumn = 'dealName' | 'ownerName' | 'amount' | 'stageName' | 'status';
+type SortColumn = 'dealName' | 'ownerName' | 'amount' | 'stageName';
 type SortDirection = 'asc' | 'desc';
-
-const STATUS_TABS: { value: StatusFilter; label: string }[] = [
-  { value: 'all', label: 'All' },
-  { value: 'needs_commitment', label: 'Needs Date' },
-  { value: 'pending', label: 'Pending' },
-  { value: 'escalated', label: 'Escalated' },
-];
-
-const STATUS_CONFIG = {
-  needs_commitment: { label: 'Needs Date', bg: 'bg-blue-100', text: 'text-blue-800' },
-  pending: { label: 'Pending', bg: 'bg-amber-100', text: 'text-amber-800' },
-  escalated: { label: 'Escalated', bg: 'bg-red-100', text: 'text-red-800' },
-} as const;
 
 const MISSING_FIELD_COLORS: Record<string, string> = {
   'Lead Source': 'bg-orange-100 text-orange-700',
@@ -81,7 +71,6 @@ export function HygieneQueueView() {
   const [error, setError] = useState<string | null>(null);
 
   // Filters
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [aeFilter, setAeFilter] = useState<string>('all');
   const [missingFieldFilter, setMissingFieldFilter] = useState<string>('all');
 
@@ -92,8 +81,10 @@ export function HygieneQueueView() {
   // Selection
   const [selectedDeals, setSelectedDeals] = useState<Set<string>>(new Set());
 
+  // Task creation state (only tracks in-progress creations)
+  const [creatingTasks, setCreatingTasks] = useState<Set<string>>(new Set());
+
   // Modals
-  const [commitmentModal, setCommitmentModal] = useState<{ dealId: string; dealName: string } | null>(null);
   const [slackModalOpen, setSlackModalOpen] = useState(false);
 
   // Extract unique AEs for filter dropdown
@@ -126,11 +117,6 @@ export function HygieneQueueView() {
 
     let result = data.deals;
 
-    // Apply status filter
-    if (statusFilter !== 'all') {
-      result = result.filter((d) => d.status === statusFilter);
-    }
-
     // Apply AE filter
     if (aeFilter !== 'all') {
       result = result.filter((d) => d.ownerId === aeFilter);
@@ -157,25 +143,21 @@ export function HygieneQueueView() {
         case 'stageName':
           comparison = a.stageName.localeCompare(b.stageName);
           break;
-        case 'status':
-          const statusOrder = { escalated: 0, needs_commitment: 1, pending: 2 };
-          comparison = statusOrder[a.status] - statusOrder[b.status];
-          break;
       }
       return sortDirection === 'asc' ? comparison : -comparison;
     });
 
     return result;
-  }, [data, statusFilter, aeFilter, missingFieldFilter, sortColumn, sortDirection]);
+  }, [data, aeFilter, missingFieldFilter, sortColumn, sortDirection]);
 
-  // Get deals for Slack modal (selected deals that need commitment)
+  // Get deals for Slack modal
   const dealsForSlack = useMemo(() => {
     if (selectedDeals.size === 0) {
-      // If nothing selected, use all visible needs_commitment deals
-      return filteredDeals.filter((d) => d.status === 'needs_commitment');
+      // If nothing selected, use all visible deals
+      return filteredDeals;
     }
-    // Use selected deals that need commitment
-    return filteredDeals.filter((d) => selectedDeals.has(d.id) && d.status === 'needs_commitment');
+    // Use selected deals
+    return filteredDeals.filter((d) => selectedDeals.has(d.id));
   }, [filteredDeals, selectedDeals]);
 
   const fetchData = useCallback(async () => {
@@ -226,107 +208,111 @@ export function HygieneQueueView() {
     setSelectedDeals(newSelected);
   };
 
-  const handleSetCommitment = (dealId: string) => {
-    const deal = data?.deals.find((d) => d.id === dealId);
-    if (deal) {
-      setCommitmentModal({ dealId, dealName: deal.dealName });
+  // Create HubSpot task for a deal
+  const handleCreateTask = async (deal: HygieneQueueDeal, skipRefresh = false) => {
+    // Add to creating state
+    setCreatingTasks((prev) => new Set(prev).add(deal.id));
+
+    try {
+      const response = await fetch('/api/queues/create-task', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          dealId: deal.id,
+          hubspotDealId: deal.hubspotDealId,
+          hubspotOwnerId: deal.hubspotOwnerId,
+          dealName: deal.dealName,
+          missingFields: deal.missingFields.map((f) => f.label),
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to create task');
+      }
+
+      // Refresh data to show the new task status (unless doing bulk)
+      if (!skipRefresh) {
+        await fetchData();
+      }
+    } catch (err) {
+      console.error('Failed to create task:', err);
+      alert(err instanceof Error ? err.message : 'Failed to create task');
+    } finally {
+      // Remove from creating state
+      setCreatingTasks((prev) => {
+        const next = new Set(prev);
+        next.delete(deal.id);
+        return next;
+      });
     }
   };
 
-  const handleCommitmentSubmit = async (date: string) => {
-    if (!commitmentModal) return;
+  // Bulk create tasks for selected deals (only those without existing tasks covering all fields)
+  const handleCreateTasksForSelected = async () => {
+    const dealsToProcess = filteredDeals.filter(
+      (d) => selectedDeals.has(d.id) && (!d.existingTask || !d.existingTask.coversAllCurrentFields)
+    );
 
-    const response = await fetch(`/api/queues/${commitmentModal.dealId}/commitment`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ commitmentDate: date }),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to set commitment');
+    for (const deal of dealsToProcess) {
+      await handleCreateTask(deal, true); // Skip refresh for each, do one at end
     }
 
+    // Refresh data once at the end
     await fetchData();
-  };
-
-  const getTabCount = (tab: StatusFilter): number => {
-    if (!data) return 0;
-    switch (tab) {
-      case 'all':
-        return data.counts.total;
-      case 'needs_commitment':
-        return data.counts.needsCommitment;
-      case 'pending':
-        return data.counts.pending;
-      case 'escalated':
-        return data.counts.escalated;
-      default:
-        return 0;
-    }
-  };
-
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-    });
+    setSelectedDeals(new Set()); // Clear selection
   };
 
   return (
     <div className="p-6">
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Deal Hygiene Queue</h1>
-        <p className="text-sm text-gray-600 mt-1">
-          Deals missing required fields. Track and commit to updating deal information.
-        </p>
-      </div>
-
-      {/* Status Tabs */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex gap-1 bg-gray-100 p-1 rounded-lg w-fit">
-          {STATUS_TABS.map((tab) => (
-            <button
-              key={tab.value}
-              onClick={() => setStatusFilter(tab.value)}
-              className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-                statusFilter === tab.value
-                  ? 'bg-white text-gray-900 shadow-sm'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              {tab.label}
-              <span
-                className={`ml-2 px-1.5 py-0.5 text-xs rounded-full ${
-                  statusFilter === tab.value
-                    ? 'bg-indigo-100 text-indigo-600'
-                    : 'bg-gray-200 text-gray-600'
-                }`}
-              >
-                {getTabCount(tab.value)}
-              </span>
-            </button>
-          ))}
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Deal Hygiene Queue</h1>
+          <p className="text-sm text-gray-600 mt-1">
+            Deals missing required fields. Create HubSpot tasks to notify AEs.
+          </p>
         </div>
 
-        {/* Generate Slack Messages button */}
-        {dealsForSlack.length > 0 && (
-          <button
-            onClick={() => setSlackModalOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"
-              />
-            </svg>
-            Generate Slack {selectedDeals.size > 0 ? `(${dealsForSlack.length} selected)` : `(${dealsForSlack.length})`}
-          </button>
-        )}
+        {/* Action buttons */}
+        <div className="flex items-center gap-3">
+          {/* Bulk Create Tasks button */}
+          {selectedDeals.size > 0 && (
+            <button
+              onClick={handleCreateTasksForSelected}
+              disabled={creatingTasks.size > 0}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
+                />
+              </svg>
+              Create Tasks ({selectedDeals.size})
+            </button>
+          )}
+
+          {/* Generate Slack Messages button */}
+          {dealsForSlack.length > 0 && (
+            <button
+              onClick={() => setSlackModalOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"
+                />
+              </svg>
+              Generate Slack {selectedDeals.size > 0 ? `(${dealsForSlack.length} selected)` : `(${dealsForSlack.length})`}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Filters Row */}
@@ -476,23 +462,9 @@ export function HygieneQueueView() {
                       <SortIcon active={sortColumn === 'stageName'} direction={sortDirection} />
                     </div>
                   </th>
-                  {/* Status */}
-                  <th
-                    className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100 select-none whitespace-nowrap"
-                    onClick={() => handleSort('status')}
-                  >
-                    <div className="flex items-center gap-1">
-                      <span>Status</span>
-                      <SortIcon active={sortColumn === 'status'} direction={sortDirection} />
-                    </div>
-                  </th>
                   {/* Missing Fields */}
                   <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">
                     Missing Fields
-                  </th>
-                  {/* Commitment */}
-                  <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">
-                    Due Date
                   </th>
                   {/* Actions */}
                   <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">
@@ -502,13 +474,22 @@ export function HygieneQueueView() {
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {filteredDeals.map((deal) => {
-                  const statusConfig = STATUS_CONFIG[deal.status];
+                  const isCreating = creatingTasks.has(deal.id);
+                  const hasTask = deal.existingTask !== null;
+                  const taskCoversAll = deal.existingTask?.coversAllCurrentFields ?? false;
+
+                  // Format task date
+                  const formatTaskDate = (dateStr: string) => {
+                    const date = new Date(dateStr);
+                    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                  };
+
                   return (
                     <tr
                       key={deal.id}
                       className={`hover:bg-slate-50 transition-colors ${
                         selectedDeals.has(deal.id) ? 'bg-indigo-50' : ''
-                      }`}
+                      } ${hasTask && taskCoversAll ? 'bg-emerald-50/50' : ''}`}
                     >
                       {/* Checkbox */}
                       <td className="px-4 py-3">
@@ -537,14 +518,6 @@ export function HygieneQueueView() {
                       <td className="px-4 py-3">
                         <span className="text-sm text-gray-600 whitespace-nowrap">{deal.stageName}</span>
                       </td>
-                      {/* Status */}
-                      <td className="px-4 py-3">
-                        <span
-                          className={`inline-flex px-2 py-1 text-xs font-medium rounded-full whitespace-nowrap ${statusConfig.bg} ${statusConfig.text}`}
-                        >
-                          {statusConfig.label}
-                        </span>
-                      </td>
                       {/* Missing Fields */}
                       <td className="px-4 py-3">
                         <div className="flex flex-wrap gap-1">
@@ -560,42 +533,71 @@ export function HygieneQueueView() {
                           ))}
                         </div>
                       </td>
-                      {/* Commitment/Due Date */}
-                      <td className="px-4 py-3">
-                        {deal.commitment ? (
-                          <div className="text-sm">
-                            <span className="text-gray-900">{formatDate(deal.commitment.date)}</span>
-                            <span className="text-gray-500 ml-1">
-                              ({deal.commitment.daysRemaining > 0
-                                ? `${deal.commitment.daysRemaining}d left`
-                                : deal.commitment.daysRemaining === 0
-                                  ? 'Today'
-                                  : 'Overdue'
-                              })
-                            </span>
-                          </div>
-                        ) : (
-                          <span className="text-sm text-gray-400">-</span>
-                        )}
-                      </td>
                       {/* Actions */}
                       <td className="px-4 py-3">
-                        {(deal.status === 'needs_commitment' || deal.status === 'pending') && (
-                          <button
-                            onClick={() => handleSetCommitment(deal.id)}
-                            className="px-3 py-1.5 text-xs font-medium text-indigo-600 bg-indigo-50 rounded hover:bg-indigo-100 transition-colors whitespace-nowrap"
-                          >
-                            {deal.status === 'needs_commitment' ? 'Set Date' : 'Update'}
-                          </button>
-                        )}
-                        {deal.status === 'escalated' && (
-                          <button
-                            onClick={() => handleSetCommitment(deal.id)}
-                            className="px-3 py-1.5 text-xs font-medium text-red-600 bg-red-50 rounded hover:bg-red-100 transition-colors whitespace-nowrap"
-                          >
-                            Resolve
-                          </button>
-                        )}
+                        <div className="flex flex-col gap-1">
+                          {hasTask && taskCoversAll ? (
+                            // Task exists and covers all current missing fields
+                            <div className="flex items-center gap-2">
+                              <span className="flex items-center gap-1 text-xs font-medium text-emerald-600">
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                </svg>
+                                Task Created {formatTaskDate(deal.existingTask!.createdAt)}
+                              </span>
+                              <button
+                                onClick={() => handleCreateTask(deal)}
+                                disabled={isCreating}
+                                className="text-xs text-gray-500 hover:text-gray-700 underline"
+                              >
+                                Re-create
+                              </button>
+                            </div>
+                          ) : hasTask && !taskCoversAll ? (
+                            // Task exists but doesn't cover new missing fields
+                            <div className="flex flex-col gap-1">
+                              <span className="text-xs text-amber-600">
+                                Task created {formatTaskDate(deal.existingTask!.createdAt)} for other fields
+                              </span>
+                              <button
+                                onClick={() => handleCreateTask(deal)}
+                                disabled={isCreating}
+                                className="px-3 py-1.5 text-xs font-medium text-emerald-600 bg-emerald-50 rounded hover:bg-emerald-100 transition-colors whitespace-nowrap disabled:opacity-50 w-fit"
+                              >
+                                {isCreating ? (
+                                  <span className="flex items-center gap-1">
+                                    <svg className="animate-spin w-3 h-3" fill="none" viewBox="0 0 24 24">
+                                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                    </svg>
+                                    Creating...
+                                  </span>
+                                ) : (
+                                  'Create Task for New Fields'
+                                )}
+                              </button>
+                            </div>
+                          ) : (
+                            // No task exists
+                            <button
+                              onClick={() => handleCreateTask(deal)}
+                              disabled={isCreating}
+                              className="px-3 py-1.5 text-xs font-medium text-emerald-600 bg-emerald-50 rounded hover:bg-emerald-100 transition-colors whitespace-nowrap disabled:opacity-50"
+                            >
+                              {isCreating ? (
+                                <span className="flex items-center gap-1">
+                                  <svg className="animate-spin w-3 h-3" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                  </svg>
+                                  Creating...
+                                </span>
+                              ) : (
+                                'Create Task'
+                              )}
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -604,16 +606,6 @@ export function HygieneQueueView() {
             </table>
           </div>
         </div>
-      )}
-
-      {/* Commitment Modal */}
-      {commitmentModal && (
-        <CommitmentDateModal
-          dealName={commitmentModal.dealName}
-          isOpen={true}
-          onClose={() => setCommitmentModal(null)}
-          onSubmit={handleCommitmentSubmit}
-        />
       )}
 
       {/* Slack Message Modal */}

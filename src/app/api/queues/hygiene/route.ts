@@ -4,12 +4,9 @@ import { SYNC_CONFIG } from '@/lib/hubspot/sync-config';
 import { getAllPipelines } from '@/lib/hubspot/pipelines';
 import {
   checkDealHygiene,
-  determineHygieneStatus,
   type HygieneCheckInput,
-  type HygieneCommitment,
-  type HygieneStatus,
 } from '@/lib/utils/queue-detection';
-import { getDaysUntil } from '@/lib/utils/business-days';
+import { getBusinessDaysSinceDate } from '@/lib/utils/business-days';
 
 // Active stages (excludes MQL, Closed Won, Closed Lost)
 const ACTIVE_DEAL_STAGES = [
@@ -20,19 +17,27 @@ const ACTIVE_DEAL_STAGES = [
   '59865091',                                  // Proposal
 ];
 
+interface ExistingTaskInfo {
+  hubspotTaskId: string;
+  createdAt: string;
+  fieldsTaskedFor: string[];  // Which missing fields the task was created for
+  coversAllCurrentFields: boolean;  // True if task covers all currently missing fields
+}
+
 interface HygieneQueueDeal {
   id: string;
+  hubspotDealId: string;
   dealName: string;
   amount: number | null;
   stageName: string;
   ownerName: string;
   ownerId: string;
+  hubspotOwnerId: string;
   createdAt: string | null;
   businessDaysOld: number;
-  status: HygieneStatus;
   missingFields: { field: string; label: string }[];
-  commitment: { date: string; daysRemaining: number } | null;
   reason: string;
+  existingTask: ExistingTaskInfo | null;
 }
 
 export async function GET(request: NextRequest) {
@@ -40,27 +45,26 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = new URL(request.url);
   const ownerIdFilter = searchParams.get('ownerId');
-  const statusFilter = searchParams.get('status'); // needs_commitment, pending, escalated, all
 
   try {
     // Get target owners
     const { data: owners } = await supabase
       .from('owners')
-      .select('id, first_name, last_name, email')
+      .select('id, hubspot_owner_id, first_name, last_name, email')
       .in('email', SYNC_CONFIG.TARGET_AE_EMAILS);
 
     if (!owners || owners.length === 0) {
       return NextResponse.json({
         deals: [],
-        counts: { needsCommitment: 0, pending: 0, escalated: 0, total: 0 },
+        counts: { total: 0 },
       });
     }
 
     // Build owner lookup map
-    const ownerMap = new Map<string, { name: string; email: string }>();
+    const ownerMap = new Map<string, { name: string; email: string; hubspotOwnerId: string }>();
     for (const owner of owners) {
       const name = [owner.first_name, owner.last_name].filter(Boolean).join(' ') || owner.email;
-      ownerMap.set(owner.id, { name, email: owner.email });
+      ownerMap.set(owner.id, { name, email: owner.email, hubspotOwnerId: owner.hubspot_owner_id });
     }
 
     let ownerIds = owners.map((o) => o.id);
@@ -70,7 +74,7 @@ export async function GET(request: NextRequest) {
       if (!ownerIds.includes(ownerIdFilter)) {
         return NextResponse.json({
           deals: [],
-          counts: { needsCommitment: 0, pending: 0, escalated: 0, total: 0 },
+          counts: { total: 0 },
         });
       }
       ownerIds = [ownerIdFilter];
@@ -81,6 +85,7 @@ export async function GET(request: NextRequest) {
       .from('deals')
       .select(`
         id,
+        hubspot_deal_id,
         deal_name,
         amount,
         deal_stage,
@@ -105,21 +110,23 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Get all pending hygiene commitments
+    // Get existing hygiene tasks for these deals
     const dealIds = deals?.map((d) => d.id) || [];
-    const { data: commitments } = await supabase
-      .from('hygiene_commitments')
-      .select('deal_id, commitment_date, status')
-      .in('deal_id', dealIds);
+    const { data: existingTasks } = await supabase
+      .from('hygiene_tasks')
+      .select('deal_id, hubspot_task_id, missing_fields, created_at')
+      .in('deal_id', dealIds)
+      .order('created_at', { ascending: false });
 
-    // Create commitment lookup map (most recent per deal)
-    const commitmentMap = new Map<string, HygieneCommitment>();
-    for (const c of commitments || []) {
-      // Only use pending commitments for status determination
-      if (c.status === 'pending') {
-        commitmentMap.set(c.deal_id, {
-          commitment_date: c.commitment_date,
-          status: c.status,
+    // Build a map of deal_id -> most recent task
+    const taskMap = new Map<string, { hubspotTaskId: string; createdAt: string; missingFields: string[] }>();
+    for (const task of existingTasks || []) {
+      // Only keep the most recent task per deal (they're ordered by created_at desc)
+      if (!taskMap.has(task.deal_id)) {
+        taskMap.set(task.deal_id, {
+          hubspotTaskId: task.hubspot_task_id,
+          createdAt: task.created_at,
+          missingFields: task.missing_fields || [],
         });
       }
     }
@@ -136,12 +143,6 @@ export async function GET(request: NextRequest) {
 
     // Process deals and build queue
     const queueDeals: HygieneQueueDeal[] = [];
-    const counts = {
-      needsCommitment: 0,
-      pending: 0,
-      escalated: 0,
-      total: 0,
-    };
 
     for (const deal of deals || []) {
       const hygieneInput: HygieneCheckInput = {
@@ -162,56 +163,52 @@ export async function GET(request: NextRequest) {
         continue;
       }
 
-      const commitment = commitmentMap.get(deal.id) || null;
-      const statusResult = determineHygieneStatus({ deal: hygieneInput, commitment });
-
-      // Skip compliant status
-      if (statusResult.status === 'compliant') {
-        continue;
-      }
-
-      // Apply status filter
-      if (statusFilter && statusFilter !== 'all' && statusResult.status !== statusFilter) {
-        // Still count it for totals
-        counts.total++;
-        if (statusResult.status === 'needs_commitment') counts.needsCommitment++;
-        else if (statusResult.status === 'pending') counts.pending++;
-        else if (statusResult.status === 'escalated') counts.escalated++;
-        continue;
-      }
-
-      // Update counts
-      counts.total++;
-      if (statusResult.status === 'needs_commitment') counts.needsCommitment++;
-      else if (statusResult.status === 'pending') counts.pending++;
-      else if (statusResult.status === 'escalated') counts.escalated++;
-
       const ownerInfo = deal.owner_id ? ownerMap.get(deal.owner_id) : null;
+      const businessDaysOld = deal.hubspot_created_at
+        ? getBusinessDaysSinceDate(deal.hubspot_created_at)
+        : 999;
+      const missingFieldsList = hygieneCheck.missingFields.map((f) => f.label).join(', ');
+      const reason = `Missing: ${missingFieldsList}`;
+
+      // Check for existing task
+      const existingTaskData = taskMap.get(deal.id);
+      let existingTask: ExistingTaskInfo | null = null;
+
+      if (existingTaskData) {
+        const currentMissingLabels = hygieneCheck.missingFields.map((f) => f.label);
+        // Check if all current missing fields were covered by the existing task
+        const coversAllCurrentFields = currentMissingLabels.every((label) =>
+          existingTaskData.missingFields.includes(label)
+        );
+
+        existingTask = {
+          hubspotTaskId: existingTaskData.hubspotTaskId,
+          createdAt: existingTaskData.createdAt,
+          fieldsTaskedFor: existingTaskData.missingFields,
+          coversAllCurrentFields,
+        };
+      }
 
       queueDeals.push({
         id: deal.id,
+        hubspotDealId: deal.hubspot_deal_id,
         dealName: deal.deal_name,
         amount: deal.amount,
         stageName: stageMap.get(deal.deal_stage || '') || deal.deal_stage || 'Unknown',
         ownerName: ownerInfo?.name || 'Unknown',
         ownerId: deal.owner_id || '',
+        hubspotOwnerId: ownerInfo?.hubspotOwnerId || '',
         createdAt: deal.hubspot_created_at,
-        businessDaysOld: statusResult.businessDaysOld,
-        status: statusResult.status,
-        missingFields: statusResult.missingFields,
-        commitment: commitment
-          ? {
-              date: commitment.commitment_date,
-              daysRemaining: getDaysUntil(commitment.commitment_date),
-            }
-          : null,
-        reason: statusResult.reason,
+        businessDaysOld,
+        missingFields: hygieneCheck.missingFields,
+        reason,
+        existingTask,
       });
     }
 
     return NextResponse.json({
       deals: queueDeals,
-      counts,
+      counts: { total: queueDeals.length },
     });
   } catch (error) {
     console.error('Hygiene queue error:', error);
