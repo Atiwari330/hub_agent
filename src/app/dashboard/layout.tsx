@@ -1,5 +1,5 @@
 import { createServerSupabaseClient } from '@/lib/supabase/client';
-import { Sidebar } from '@/components/dashboard/sidebar';
+import { DashboardShell } from '@/components/dashboard/dashboard-shell';
 import { getCurrentQuarter, getQuarterProgress } from '@/lib/utils/quarter';
 import { SYNC_CONFIG } from '@/lib/hubspot/sync-config';
 
@@ -155,17 +155,14 @@ export default async function DashboardLayout({
   const queueCounts = await getQueueCounts(supabase, ownerIds);
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Sidebar
-        owners={owners}
-        lastSync={lastSync}
-        quarterLabel={quarter.label}
-        quarterProgress={progress.percentComplete}
-        queueCounts={queueCounts}
-      />
-      <main className="ml-64 min-h-screen">
-        {children}
-      </main>
-    </div>
+    <DashboardShell
+      owners={owners}
+      lastSync={lastSync}
+      quarterLabel={quarter.label}
+      quarterProgress={progress.percentComplete}
+      queueCounts={queueCounts}
+    >
+      {children}
+    </DashboardShell>
   );
 }
