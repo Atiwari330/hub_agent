@@ -1,6 +1,16 @@
 /**
  * Quarter utility functions for fiscal period calculations
+ *
+ * IMPORTANT: All date boundaries are calculated in EST (Eastern Standard Time)
+ * to match HubSpot's date display behavior. HubSpot stores dates in UTC but
+ * displays them to users in their local timezone (EST for this account).
+ *
+ * This ensures deals closing on "March 31 EST" are included in Q1, even if
+ * the UTC timestamp shows "April 1".
  */
+
+// EST offset from UTC (5 hours). Note: We use fixed EST, not EDT, for consistency.
+const EST_OFFSET_HOURS = 5;
 
 export interface QuarterInfo {
   year: number;
@@ -26,25 +36,21 @@ export function getCurrentQuarter(): QuarterInfo {
 
 /**
  * Get quarter info for a specific date
+ *
+ * Interprets the date in EST context to determine which quarter it belongs to.
+ * This ensures consistency with HubSpot's date display behavior.
  */
 export function getQuarterFromDate(date: Date): QuarterInfo {
-  const year = date.getFullYear();
-  const month = date.getMonth(); // 0-11
+  // Convert the UTC date to EST by subtracting the offset
+  // This gives us the "EST view" of when this date occurs
+  const estDate = new Date(date.getTime() - EST_OFFSET_HOURS * 60 * 60 * 1000);
+
+  const year = estDate.getUTCFullYear();
+  const month = estDate.getUTCMonth(); // 0-11
   const quarter = Math.floor(month / 3) + 1;
 
-  const startMonth = (quarter - 1) * 3;
-  const startDate = new Date(year, startMonth, 1);
-
-  // End date is last day of the quarter
-  const endDate = new Date(year, startMonth + 3, 0);
-
-  return {
-    year,
-    quarter,
-    startDate,
-    endDate,
-    label: `Q${quarter} ${year}`,
-  };
+  // Use getQuarterInfo to get consistent EST-aware boundaries
+  return getQuarterInfo(year, quarter);
 }
 
 /**
@@ -104,6 +110,10 @@ export function isDateInQuarter(date: Date, quarterInfo: QuarterInfo): boolean {
 
 /**
  * Get quarter info for a specific fiscal year and quarter
+ *
+ * Date boundaries are EST-aware to match HubSpot's display behavior:
+ * - Q1 starts Jan 1 00:00:00 EST = Jan 1 05:00:00 UTC
+ * - Q1 ends Mar 31 23:59:59 EST = Apr 1 04:59:59 UTC
  */
 export function getQuarterInfo(year: number, quarter: number): QuarterInfo {
   if (quarter < 1 || quarter > 4) {
@@ -111,8 +121,15 @@ export function getQuarterInfo(year: number, quarter: number): QuarterInfo {
   }
 
   const startMonth = (quarter - 1) * 3;
-  const startDate = new Date(year, startMonth, 1);
-  const endDate = new Date(year, startMonth + 3, 0);
+
+  // Create dates that represent EST boundaries in UTC
+  // Start: First day of quarter at 00:00:00 EST = 05:00:00 UTC
+  const startDate = new Date(Date.UTC(year, startMonth, 1, EST_OFFSET_HOURS, 0, 0, 0));
+
+  // End: Last day of quarter at 23:59:59.999 EST = next day 04:59:59.999 UTC
+  // startMonth + 3 gives us the first month of next quarter, day 1 at 05:00 UTC
+  // Subtract 1ms to get the last moment of the previous quarter in EST
+  const endDate = new Date(Date.UTC(year, startMonth + 3, 1, EST_OFFSET_HOURS, 0, 0, 0) - 1);
 
   return {
     year,
