@@ -171,3 +171,67 @@ export async function getNotesByDealIdWithAuthor(
 
   return notes;
 }
+
+// ===== HubSpot Task Types =====
+
+export interface HubSpotTask {
+  id: string;
+  properties: {
+    hs_task_subject: string | null;
+    hs_task_status: string | null;
+    hs_timestamp: string | null; // Due date
+    hubspot_owner_id: string | null;
+  };
+}
+
+/**
+ * Fetch tasks associated with a deal
+ */
+export async function getTasksByDealId(dealId: string): Promise<HubSpotTask[]> {
+  const client = getHubSpotClient();
+  const tasks: HubSpotTask[] = [];
+
+  try {
+    // Get associations using v4 API: deals -> tasks
+    const associations = await client.crm.associations.v4.basicApi.getPage(
+      'deals',
+      dealId,
+      'tasks',
+      undefined,
+      100
+    );
+
+    if (associations.results.length === 0) {
+      return tasks;
+    }
+
+    // Fetch each task's details
+    const taskIds = associations.results.map((a) => a.toObjectId);
+
+    for (const taskId of taskIds) {
+      try {
+        const task = await client.crm.objects.tasks.basicApi.getById(
+          taskId,
+          ['hs_task_subject', 'hs_task_status', 'hs_timestamp', 'hubspot_owner_id']
+        );
+
+        tasks.push({
+          id: task.id,
+          properties: {
+            hs_task_subject: task.properties.hs_task_subject || null,
+            hs_task_status: task.properties.hs_task_status || null,
+            hs_timestamp: task.properties.hs_timestamp || null,
+            hubspot_owner_id: task.properties.hubspot_owner_id || null,
+          },
+        });
+      } catch (error) {
+        // Skip tasks that can't be fetched
+        console.warn(`Failed to fetch task ${taskId}:`, error);
+      }
+    }
+  } catch (error) {
+    console.warn(`Failed to get task associations for deal ${dealId}:`, error);
+  }
+
+  return tasks;
+}

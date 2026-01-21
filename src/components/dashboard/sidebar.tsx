@@ -15,6 +15,7 @@ interface Owner {
 interface QueueCounts {
   hygiene: { total: number; escalated: number };
   nextStep: { total: number; overdue: number };
+  overdueTasks: { total: number; critical: number };
 }
 
 interface SidebarProps {
@@ -155,6 +156,7 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, queue
   const isOnMissionControl = pathname === '/dashboard';
   const isOnHygieneQueue = pathname === '/dashboard/queues/hygiene';
   const isOnNextStepQueue = pathname === '/dashboard/queues/next-step';
+  const isOnOverdueTasksQueue = pathname === '/dashboard/queues/overdue-tasks';
 
   return (
     <aside className={`fixed left-0 top-0 h-screen bg-slate-900 text-slate-100 flex flex-col transition-all duration-300 ${isCollapsed ? 'w-16' : 'w-64'}`}>
@@ -352,6 +354,51 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, queue
                           }`}
                         >
                           {queueCounts.nextStep.total}
+                        </span>
+                      )}
+                    </>
+                  )}
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/dashboard/queues/overdue-tasks"
+                  className={`flex items-center py-2 text-sm transition-colors ${
+                    isCollapsed
+                      ? 'px-0 justify-center'
+                      : 'justify-between px-4 pl-11'
+                  } ${
+                    isOnOverdueTasksQueue
+                      ? 'bg-indigo-600 text-white'
+                      : 'text-slate-300 hover:bg-slate-800'
+                  }`}
+                  title={isCollapsed ? `Overdue Tasks (${queueCounts?.overdueTasks?.total || 0})` : undefined}
+                >
+                  {isCollapsed ? (
+                    <div className="relative">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      {queueCounts?.overdueTasks && queueCounts.overdueTasks.total > 0 && (
+                        <span
+                          className={`absolute -top-1 -right-1 w-2 h-2 rounded-full ${
+                            queueCounts.overdueTasks.critical > 0 ? 'bg-red-500' : 'bg-slate-500'
+                          }`}
+                        />
+                      )}
+                    </div>
+                  ) : (
+                    <>
+                      <span>Overdue Tasks</span>
+                      {queueCounts?.overdueTasks && queueCounts.overdueTasks.total > 0 && (
+                        <span
+                          className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${
+                            queueCounts.overdueTasks.critical > 0
+                              ? 'bg-red-500 text-white'
+                              : 'bg-slate-600 text-slate-200'
+                          }`}
+                        >
+                          {queueCounts.overdueTasks.total}
                         </span>
                       )}
                     </>

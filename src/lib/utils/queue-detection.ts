@@ -228,6 +228,75 @@ export function generateHygieneReason(
   }
 }
 
+// ===== OVERDUE TASKS QUEUE TYPES =====
+
+export interface OverdueTaskInfo {
+  taskId: string;
+  subject: string;
+  dueDate: string;
+  daysOverdue: number;
+}
+
+export interface OverdueTasksCheckResult {
+  hasOverdueTasks: boolean;
+  overdueCount: number;
+  overdueTasks: OverdueTaskInfo[];
+  oldestOverdueDays: number;
+}
+
+/**
+ * Task input from HubSpot for checking overdue status
+ */
+export interface TaskCheckInput {
+  id: string;
+  hs_task_subject: string | null;
+  hs_task_status: string | null;
+  hs_timestamp: string | null; // Due date
+}
+
+/**
+ * Check tasks for overdue status
+ * Returns overdue tasks that have NOT_STARTED status and past due date
+ */
+export function checkOverdueTasks(tasks: TaskCheckInput[]): OverdueTasksCheckResult {
+  const overdueTasks: OverdueTaskInfo[] = [];
+
+  for (const task of tasks) {
+    // Only check NOT_STARTED tasks
+    if (task.hs_task_status !== 'NOT_STARTED') {
+      continue;
+    }
+
+    // Must have a due date
+    if (!task.hs_timestamp) {
+      continue;
+    }
+
+    // Check if due date is in the past
+    if (isDateInPast(task.hs_timestamp)) {
+      const daysOverdue = Math.abs(getDaysUntil(task.hs_timestamp));
+      overdueTasks.push({
+        taskId: task.id,
+        subject: task.hs_task_subject || 'Untitled Task',
+        dueDate: task.hs_timestamp,
+        daysOverdue,
+      });
+    }
+  }
+
+  // Sort by days overdue descending (most overdue first)
+  overdueTasks.sort((a, b) => b.daysOverdue - a.daysOverdue);
+
+  const oldestOverdueDays = overdueTasks.length > 0 ? overdueTasks[0].daysOverdue : 0;
+
+  return {
+    hasOverdueTasks: overdueTasks.length > 0,
+    overdueCount: overdueTasks.length,
+    overdueTasks,
+    oldestOverdueDays,
+  };
+}
+
 // ===== NEXT STEP QUEUE DETECTION =====
 
 /**

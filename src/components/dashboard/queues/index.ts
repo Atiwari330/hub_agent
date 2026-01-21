@@ -3,3 +3,4 @@ export { QueueDealCard } from './queue-deal-card';
 export { SlackMessageModal } from './slack-message-modal';
 export { HygieneQueueView } from './hygiene-queue-view';
 export { NextStepQueueView } from './next-step-queue-view';
+export { OverdueTasksQueueView } from './overdue-tasks-queue-view';

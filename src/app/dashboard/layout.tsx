@@ -38,6 +38,7 @@ async function getQueueCounts(supabase: Awaited<ReturnType<typeof createServerSu
       return {
         hygiene: { total: 0, escalated: 0 },
         nextStep: { total: 0, overdue: 0 },
+        overdueTasks: { total: 0, critical: 0 },
       };
     }
 
@@ -108,12 +109,16 @@ async function getQueueCounts(supabase: Awaited<ReturnType<typeof createServerSu
     return {
       hygiene: { total: hygieneTotal, escalated: hygieneEscalated },
       nextStep: { total: nextStepTotal, overdue: nextStepOverdue },
+      // Overdue tasks are fetched from HubSpot in real-time (not cached)
+      // Count is set to 0 here - actual count is shown on the queue page
+      overdueTasks: { total: 0, critical: 0 },
     };
   } catch (error) {
     console.error('Error fetching queue counts:', error);
     return {
       hygiene: { total: 0, escalated: 0 },
       nextStep: { total: 0, overdue: 0 },
+      overdueTasks: { total: 0, critical: 0 },
     };
   }
 }

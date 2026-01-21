@@ -13,6 +13,7 @@ interface Owner {
 interface QueueCounts {
   hygiene: { total: number; escalated: number };
   nextStep: { total: number; overdue: number };
+  overdueTasks: { total: number; critical: number };
 }
 
 interface DashboardShellProps {

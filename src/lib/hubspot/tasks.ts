@@ -183,3 +183,64 @@ export async function createNextStepTask(params: CreateNextStepTaskParams): Prom
     success: true,
   };
 }
+
+interface OverdueTaskDetail {
+  subject: string;
+  daysOverdue: number;
+}
+
+interface CreateOverdueTaskReminderParams {
+  hubspotDealId: string;
+  hubspotOwnerId: string;
+  dealName: string;
+  overdueTasks: OverdueTaskDetail[];
+}
+
+/**
+ * Creates a HubSpot task reminding about overdue tasks on a deal.
+ * The task will be assigned based on override configuration (or to the deal's owner if no override).
+ */
+export async function createOverdueTaskReminder(params: CreateOverdueTaskReminderParams): Promise<CreateTaskResult> {
+  const { hubspotDealId, hubspotOwnerId, dealName, overdueTasks } = params;
+  const client = getHubSpotClient();
+
+  // Resolve the actual task assignee (may be overridden)
+  const assigneeOwnerId = await resolveTaskAssignee(hubspotOwnerId);
+
+  // Build task body with overdue task list
+  const taskList = overdueTasks
+    .map((t) => `- ${t.subject} (${t.daysOverdue} day${t.daysOverdue !== 1 ? 's' : ''} overdue)`)
+    .join('\n');
+
+  const taskBody = `This deal has ${overdueTasks.length} overdue task${overdueTasks.length !== 1 ? 's' : ''} that need attention:\n\n${taskList}\n\nPlease complete or reschedule these tasks to keep this deal moving forward.`;
+
+  // Create the task
+  const taskResponse = await client.crm.objects.tasks.basicApi.create({
+    properties: {
+      hs_task_subject: `Overdue Tasks Reminder: ${dealName}`,
+      hs_task_body: taskBody,
+      hs_task_status: 'NOT_STARTED',
+      hs_task_priority: 'HIGH',
+      hs_task_type: 'TODO',
+      hubspot_owner_id: assigneeOwnerId,
+      // Set due date to tomorrow
+      hs_timestamp: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+    },
+    associations: [
+      {
+        to: { id: hubspotDealId },
+        types: [
+          {
+            associationCategory: AssociationSpecAssociationCategoryEnum.HubspotDefined,
+            associationTypeId: TASK_TO_DEAL_ASSOCIATION_TYPE_ID,
+          },
+        ],
+      },
+    ],
+  });
+
+  return {
+    taskId: taskResponse.id,
+    success: true,
+  };
+}
