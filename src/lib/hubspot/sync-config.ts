@@ -22,6 +22,12 @@ export const SYNC_CONFIG = {
 
   // Batch size for database upsert operations
   DB_BATCH_SIZE: 500,
+
+  // Task assignment overrides: tasks for deals owned by key email are assigned to value email
+  // Adi Tiwari's deal tasks get assigned to Gabriel Lacap
+  TASK_ASSIGNMENT_OVERRIDES: {
+    'atiwari@opusbehavioral.com': 'glacap@opusbehavioral.com',
+  } as Record<string, string>,
 } as const;
 
 export type SyncConfig = typeof SYNC_CONFIG;

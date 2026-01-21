@@ -1,8 +1,42 @@
 import { AssociationSpecAssociationCategoryEnum } from '@hubspot/api-client/lib/codegen/crm/objects/tasks';
 import { getHubSpotClient } from './client';
+import { getOwnerById, getOwnerByEmail } from './owners';
+import { SYNC_CONFIG } from './sync-config';
 
 // Task to Deal association type ID (discovered via API)
 const TASK_TO_DEAL_ASSOCIATION_TYPE_ID = 216;
+
+/**
+ * Resolves the actual task assignee based on override configuration.
+ * If the deal owner has an override configured (e.g., Adi Tiwari -> D. Lacap),
+ * returns the override assignee's HubSpot owner ID.
+ * Otherwise, returns the original owner ID.
+ */
+export async function resolveTaskAssignee(hubspotOwnerId: string): Promise<string> {
+  // Look up the owner to get their email
+  const owner = await getOwnerById(hubspotOwnerId);
+  if (!owner?.email) {
+    // Can't look up owner, fall back to original ID
+    return hubspotOwnerId;
+  }
+
+  // Check if there's an override for this owner
+  const overrideEmail = SYNC_CONFIG.TASK_ASSIGNMENT_OVERRIDES[owner.email.toLowerCase()];
+  if (!overrideEmail) {
+    // No override configured
+    return hubspotOwnerId;
+  }
+
+  // Look up the override assignee
+  const overrideOwner = await getOwnerByEmail(overrideEmail);
+  if (!overrideOwner) {
+    console.warn(`Task assignment override configured for ${owner.email} -> ${overrideEmail}, but override owner not found in HubSpot`);
+    return hubspotOwnerId;
+  }
+
+  console.log(`Task assignment override: ${owner.email} -> ${overrideEmail} (HubSpot ID: ${hubspotOwnerId} -> ${overrideOwner.id})`);
+  return overrideOwner.id;
+}
 
 interface CreateHygieneTaskParams {
   hubspotDealId: string;
@@ -18,11 +52,14 @@ interface CreateTaskResult {
 
 /**
  * Creates a HubSpot task for deal hygiene and associates it with the deal.
- * The task will be assigned to the deal's owner.
+ * The task will be assigned based on override configuration (or to the deal's owner if no override).
  */
 export async function createHygieneTask(params: CreateHygieneTaskParams): Promise<CreateTaskResult> {
   const { hubspotDealId, hubspotOwnerId, dealName, missingFields } = params;
   const client = getHubSpotClient();
+
+  // Resolve the actual task assignee (may be overridden)
+  const assigneeOwnerId = await resolveTaskAssignee(hubspotOwnerId);
 
   // Build task body with missing fields
   const missingFieldsList = missingFields.map((f) => `• ${f}`).join('\n');
@@ -36,9 +73,9 @@ export async function createHygieneTask(params: CreateHygieneTaskParams): Promis
       hs_task_status: 'NOT_STARTED',
       hs_task_priority: 'MEDIUM',
       hs_task_type: 'TODO',
-      hubspot_owner_id: hubspotOwnerId,
-      // Set due date to 3 days from now
-      hs_timestamp: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
+      hubspot_owner_id: assigneeOwnerId,
+      // Set due date to tomorrow
+      hs_timestamp: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
     },
     associations: [
       {
@@ -95,11 +132,14 @@ interface CreateNextStepTaskParams {
 
 /**
  * Creates a HubSpot task for next step issues (missing or overdue).
- * The task will be assigned to the deal's owner.
+ * The task will be assigned based on override configuration (or to the deal's owner if no override).
  */
 export async function createNextStepTask(params: CreateNextStepTaskParams): Promise<CreateTaskResult> {
   const { hubspotDealId, hubspotOwnerId, dealName, taskType, nextStepText, daysOverdue } = params;
   const client = getHubSpotClient();
+
+  // Resolve the actual task assignee (may be overridden)
+  const assigneeOwnerId = await resolveTaskAssignee(hubspotOwnerId);
 
   // Build task body based on type
   let taskSubject: string;
@@ -121,9 +161,9 @@ export async function createNextStepTask(params: CreateNextStepTaskParams): Prom
       hs_task_status: 'NOT_STARTED',
       hs_task_priority: taskType === 'overdue' ? 'HIGH' : 'MEDIUM',
       hs_task_type: 'TODO',
-      hubspot_owner_id: hubspotOwnerId,
-      // Set due date to 2 days from now for overdue, 3 days for missing
-      hs_timestamp: new Date(Date.now() + (taskType === 'overdue' ? 2 : 3) * 24 * 60 * 60 * 1000).toISOString(),
+      hubspot_owner_id: assigneeOwnerId,
+      // Set due date to tomorrow
+      hs_timestamp: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
     },
     associations: [
       {

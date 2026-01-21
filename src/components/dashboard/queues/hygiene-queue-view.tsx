@@ -73,6 +73,8 @@ export function HygieneQueueView() {
   // Filters
   const [aeFilter, setAeFilter] = useState<string>('all');
   const [missingFieldFilter, setMissingFieldFilter] = useState<string>('all');
+  const [stageFilter, setStageFilter] = useState<string[]>([]); // Empty = all stages
+  const [stageDropdownOpen, setStageDropdownOpen] = useState(false);
 
   // Sorting (default: amount descending)
   const [sortColumn, setSortColumn] = useState<SortColumn>('amount');
@@ -111,6 +113,18 @@ export function HygieneQueueView() {
     return Array.from(fields).sort();
   }, [data]);
 
+  // Extract unique stages for filter dropdown
+  const uniqueStages = useMemo(() => {
+    if (!data) return [];
+    const stages = new Set<string>();
+    for (const deal of data.deals) {
+      if (deal.stageName) {
+        stages.add(deal.stageName);
+      }
+    }
+    return Array.from(stages).sort();
+  }, [data]);
+
   // Filtered and sorted deals
   const filteredDeals = useMemo(() => {
     if (!data) return [];
@@ -125,6 +139,11 @@ export function HygieneQueueView() {
     // Apply missing field filter
     if (missingFieldFilter !== 'all') {
       result = result.filter((d) => d.missingFields.some((mf) => mf.label === missingFieldFilter));
+    }
+
+    // Apply stage filter
+    if (stageFilter.length > 0) {
+      result = result.filter((d) => stageFilter.includes(d.stageName));
     }
 
     // Sort
@@ -148,7 +167,7 @@ export function HygieneQueueView() {
     });
 
     return result;
-  }, [data, aeFilter, missingFieldFilter, sortColumn, sortDirection]);
+  }, [data, aeFilter, missingFieldFilter, stageFilter, sortColumn, sortDirection]);
 
   // Get deals for Slack modal
   const dealsForSlack = useMemo(() => {
@@ -345,11 +364,64 @@ export function HygieneQueueView() {
           </select>
         </div>
 
-        {(aeFilter !== 'all' || missingFieldFilter !== 'all') && (
+        <div className="flex items-center gap-2 relative">
+          <label className="text-sm text-gray-600">Stage:</label>
+          <button
+            onClick={() => setStageDropdownOpen(!stageDropdownOpen)}
+            className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 flex items-center gap-2 min-w-[120px]"
+          >
+            <span>{stageFilter.length === 0 ? 'All Stages' : `${stageFilter.length} Stage${stageFilter.length > 1 ? 's' : ''}`}</span>
+            <svg className={`w-4 h-4 text-gray-400 transition-transform ${stageDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          {stageDropdownOpen && (
+            <>
+              {/* Backdrop to close dropdown on outside click */}
+              <div
+                className="fixed inset-0 z-10"
+                onClick={() => setStageDropdownOpen(false)}
+              />
+              <div className="absolute top-full left-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-20 min-w-[200px] max-h-[300px] overflow-y-auto">
+                {uniqueStages.map((stage) => (
+                  <label
+                    key={stage}
+                    className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer text-sm"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={stageFilter.includes(stage)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setStageFilter([...stageFilter, stage]);
+                        } else {
+                          setStageFilter(stageFilter.filter((s) => s !== stage));
+                        }
+                      }}
+                      className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
+                    />
+                    <span className="text-gray-700">{stage}</span>
+                  </label>
+                ))}
+                {stageFilter.length > 0 && (
+                  <button
+                    onClick={() => setStageFilter([])}
+                    className="w-full px-3 py-2 text-sm text-indigo-600 hover:bg-indigo-50 border-t border-gray-200 text-left"
+                  >
+                    Clear selection
+                  </button>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+
+        {(aeFilter !== 'all' || missingFieldFilter !== 'all' || stageFilter.length > 0) && (
           <button
             onClick={() => {
               setAeFilter('all');
               setMissingFieldFilter('all');
+              setStageFilter([]);
             }}
             className="text-sm text-gray-500 hover:text-gray-700"
           >
