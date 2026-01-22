@@ -6,6 +6,7 @@ import { calculateDealRisk } from '@/lib/utils/deal-risk';
 import { AEHeader } from '@/components/dashboard/ae-header';
 import { MetricsCards } from '@/components/dashboard/metrics-cards';
 import { ActivityStatsBar } from '@/components/dashboard/activity-stats-bar';
+import { CallActivityCard } from '@/components/dashboard/call-activity-card';
 import { TargetProgress } from '@/components/dashboard/target-progress';
 import { ForecastChart } from '@/components/dashboard/forecast-chart';
 import { WeeklyPipelineChart } from '@/components/dashboard/weekly-pipeline-chart';
@@ -293,6 +294,11 @@ export default async function AEDetailPage({ params }: PageProps) {
         closedWonCount={metricsData.activityStats.closedWonCount}
         closedLostCount={metricsData.activityStats.closedLostCount}
       />
+
+      {/* Call Activity */}
+      <div className="mt-6">
+        <CallActivityCard ownerId={ownerId} />
+      </div>
 
       {/* Weekly Pipeline Chart */}
       <div className="mt-6">
