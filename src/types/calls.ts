@@ -80,3 +80,51 @@ export const CallActivityResponseSchema = z.object({
 });
 
 export type CallActivityResponse = z.infer<typeof CallActivityResponseSchema>;
+
+// Call contact association
+export const CallContactSchema = z.object({
+  id: z.string(),
+  name: z.string().nullable(),
+  email: z.string().nullable(),
+  hubspotUrl: z.string(),
+});
+
+export type CallContact = z.infer<typeof CallContactSchema>;
+
+// Call deal association
+export const CallDealSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  amount: z.number().nullable(),
+  hubspotUrl: z.string(),
+});
+
+export type CallDeal = z.infer<typeof CallDealSchema>;
+
+// Call with associations (for drill-down view)
+export const CallWithAssociationsSchema = z.object({
+  id: z.string(),
+  timestamp: z.string(), // ISO string
+  title: z.string().nullable(),
+  durationMs: z.number().nullable(),
+  durationFormatted: z.string(),
+  outcomeId: z.string().nullable(),
+  outcomeLabel: z.string(),
+  hubspotUrl: z.string(),
+  contacts: z.array(CallContactSchema),
+  deals: z.array(CallDealSchema),
+});
+
+export type CallWithAssociations = z.infer<typeof CallWithAssociationsSchema>;
+
+// Drill-down API response (extends CallActivityResponse with call details)
+export const CallDrillDownResponseSchema = CallActivityResponseSchema.extend({
+  calls: z.array(CallWithAssociationsSchema),
+  filter: z.object({
+    type: z.enum(['date', 'outcome']),
+    value: z.string(),
+    label: z.string(),
+  }),
+});
+
+export type CallDrillDownResponse = z.infer<typeof CallDrillDownResponseSchema>;

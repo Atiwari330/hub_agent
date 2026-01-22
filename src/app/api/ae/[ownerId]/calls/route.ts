@@ -1,9 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/client';
-import { fetchCallsByOwner } from '@/lib/hubspot/calls';
+import { fetchCallsByOwner, fetchCallAssociations, getHubSpotCallUrl } from '@/lib/hubspot/calls';
 import { getCurrentQuarter, getQuarterInfo } from '@/lib/utils/quarter';
-import { isConnectedOutcome, formatCallDuration, getOutcomeKey } from '@/lib/utils/call-outcomes';
-import type { CallPeriod, CallActivityResponse, OutcomeBreakdown, DailyTrendPoint } from '@/types/calls';
+import { isConnectedOutcome, formatCallDuration, getOutcomeKey, getOutcomeLabel } from '@/lib/utils/call-outcomes';
+import type { CallPeriod, CallActivityResponse, CallDrillDownResponse, OutcomeBreakdown, DailyTrendPoint, CallWithAssociations, CallData } from '@/types/calls';
+
+// Map outcome keys to display labels for drill-down filter
+const OUTCOME_KEY_LABELS: Record<string, string> = {
+  connected: 'Connected',
+  leftVoicemail: 'Left Voicemail',
+  leftLiveMessage: 'Left Live Message',
+  noAnswer: 'No Answer',
+  wrongNumber: 'Wrong Number',
+  busy: 'Busy',
+  unknown: 'Unknown',
+};
 
 interface RouteParams {
   params: Promise<{ ownerId: string }>;
@@ -75,6 +86,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const period = (searchParams.get('period') || 'today') as CallPeriod;
     const year = searchParams.get('year') ? parseInt(searchParams.get('year')!) : undefined;
     const quarter = searchParams.get('quarter') ? parseInt(searchParams.get('quarter')!) : undefined;
+
+    // Drill-down params
+    const dateFilter = searchParams.get('date'); // YYYY-MM-DD
+    const outcomeFilter = searchParams.get('outcome'); // outcome key (e.g., 'connected', 'leftVoicemail')
+    const includeAssociations = searchParams.get('includeAssociations') === 'true';
 
     // Validate period
     const validPeriods: CallPeriod[] = ['today', 'this_week', 'this_month', 'quarter'];
@@ -169,6 +185,92 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
       // Sort by date
       dailyTrend.sort((a, b) => a.date.localeCompare(b.date));
+    }
+
+    // If drill-down requested (date or outcome filter with associations)
+    if ((dateFilter || outcomeFilter) && includeAssociations) {
+      // Filter calls by date or outcome
+      let filteredCalls: CallData[] = calls;
+      let filterType: 'date' | 'outcome';
+      let filterValue: string;
+      let filterLabel: string;
+
+      if (dateFilter) {
+        // Filter to specific date
+        filteredCalls = calls.filter((c) => formatDate(c.timestamp) === dateFilter);
+        filterType = 'date';
+        filterValue = dateFilter;
+        // Format date for display
+        const dateObj = new Date(dateFilter + 'T12:00:00');
+        filterLabel = dateObj.toLocaleDateString('en-US', {
+          weekday: 'long',
+          month: 'long',
+          day: 'numeric',
+          year: 'numeric',
+        });
+      } else {
+        // Filter by outcome key
+        filteredCalls = calls.filter((c) => getOutcomeKey(c.outcomeId) === outcomeFilter);
+        filterType = 'outcome';
+        filterValue = outcomeFilter!;
+        filterLabel = OUTCOME_KEY_LABELS[outcomeFilter!] || 'Unknown';
+      }
+
+      // Sort by timestamp descending (most recent first)
+      filteredCalls.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+
+      // Fetch associations for filtered calls
+      const callIds = filteredCalls.map((c) => c.id);
+      const associations = await fetchCallAssociations(callIds);
+
+      // Build detailed call data
+      const callsWithAssociations: CallWithAssociations[] = filteredCalls.map((call) => {
+        const assoc = associations.get(call.id) || { contacts: [], deals: [] };
+        return {
+          id: call.id,
+          timestamp: call.timestamp.toISOString(),
+          title: call.title,
+          durationMs: call.durationMs,
+          durationFormatted: formatCallDuration(call.durationMs),
+          outcomeId: call.outcomeId,
+          outcomeLabel: getOutcomeLabel(call.outcomeId),
+          hubspotUrl: getHubSpotCallUrl(call.id),
+          contacts: assoc.contacts,
+          deals: assoc.deals,
+        };
+      });
+
+      const drillDownResponse: CallDrillDownResponse = {
+        owner: {
+          id: owner.id,
+          firstName: owner.first_name,
+          lastName: owner.last_name,
+          email: owner.email,
+        },
+        period: {
+          type: period,
+          label,
+          startDate: startDate.toISOString(),
+          endDate: endDate.toISOString(),
+        },
+        summary: {
+          totalCalls,
+          connectedCalls,
+          connectRate: Math.round(connectRate * 10) / 10,
+          avgDurationMs: Math.round(avgDurationMs),
+          avgDurationFormatted: formatCallDuration(avgDurationMs),
+        },
+        outcomeBreakdown,
+        dailyTrend,
+        calls: callsWithAssociations,
+        filter: {
+          type: filterType,
+          value: filterValue,
+          label: filterLabel,
+        },
+      };
+
+      return NextResponse.json(drillDownResponse);
     }
 
     const response: CallActivityResponse = {

@@ -2,9 +2,16 @@
 
 import { useEffect, useState } from 'react';
 import type { CallActivityResponse, CallPeriod } from '@/types/calls';
+import { CallDrillDownModal } from './call-drill-down-modal';
 
 interface CallActivityCardProps {
   ownerId: string;
+}
+
+interface DrillDownState {
+  isOpen: boolean;
+  filterType: 'date' | 'outcome';
+  filterValue: string;
 }
 
 const PERIOD_OPTIONS: Array<{ value: CallPeriod; label: string }> = [
@@ -29,6 +36,19 @@ export function CallActivityCard({ ownerId }: CallActivityCardProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [period, setPeriod] = useState<CallPeriod>('today');
+  const [drillDown, setDrillDown] = useState<DrillDownState>({
+    isOpen: false,
+    filterType: 'date',
+    filterValue: '',
+  });
+
+  const openDrillDown = (filterType: 'date' | 'outcome', filterValue: string) => {
+    setDrillDown({ isOpen: true, filterType, filterValue });
+  };
+
+  const closeDrillDown = () => {
+    setDrillDown((prev) => ({ ...prev, isOpen: false }));
+  };
 
   useEffect(() => {
     async function fetchData() {
@@ -157,10 +177,12 @@ export function CallActivityCard({ ownerId }: CallActivityCardProps) {
           {/* Stacked horizontal bar */}
           <div className="h-8 flex rounded-lg overflow-hidden mb-2">
             {outcomePercentages.map((outcome) => (
-              <div
+              <button
                 key={outcome.key}
-                className={`${outcome.bgClass} relative group flex items-center justify-center transition-all`}
+                onClick={() => openDrillDown('outcome', outcome.key)}
+                className={`${outcome.bgClass} relative group flex items-center justify-center transition-all hover:opacity-90 cursor-pointer`}
                 style={{ width: `${outcome.percent}%` }}
+                title={`View ${outcome.label} calls`}
               >
                 {outcome.percent >= 10 && (
                   <span className="text-xs font-medium text-white truncate px-1">
@@ -168,10 +190,10 @@ export function CallActivityCard({ ownerId }: CallActivityCardProps) {
                   </span>
                 )}
                 {/* Tooltip */}
-                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 bg-gray-900 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition whitespace-nowrap z-10">
-                  {outcome.label}: {outcome.count} ({outcome.percent.toFixed(0)}%)
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 bg-gray-900 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition whitespace-nowrap z-10 pointer-events-none">
+                  {outcome.label}: {outcome.count} ({outcome.percent.toFixed(0)}%) - Click to view
                 </div>
-              </div>
+              </button>
             ))}
           </div>
 
@@ -204,7 +226,8 @@ export function CallActivityCard({ ownerId }: CallActivityCardProps) {
           </div>
           <div className="flex items-end gap-1 h-32">
             {data.dailyTrend.map((day) => {
-              const dayDate = new Date(day.date);
+              // Add T12:00:00 to parse as noon local time, avoiding UTC midnight shift
+              const dayDate = new Date(day.date + 'T12:00:00');
               const isToday =
                 dayDate.toDateString() === new Date().toDateString();
               const dayLabel = dayDate.toLocaleDateString('en-US', {
@@ -223,11 +246,13 @@ export function CallActivityCard({ ownerId }: CallActivityCardProps) {
                   {/* Stacked bar: connected (green) on top of not connected (gray) */}
                   <div className="w-full flex flex-col items-center h-24">
                     {day.calls > 0 ? (
-                      <div
-                        className="w-full flex flex-col justify-end relative group"
+                      <button
+                        onClick={() => openDrillDown('date', day.date)}
+                        className="w-full flex flex-col justify-end relative group cursor-pointer hover:opacity-90 transition-opacity"
                         style={{
                           height: `${(day.calls / maxCalls) * 100}%`,
                         }}
+                        title={`View calls for ${day.date}`}
                       >
                         {/* Not connected portion */}
                         {day.calls - day.connected > 0 && (
@@ -250,10 +275,10 @@ export function CallActivityCard({ ownerId }: CallActivityCardProps) {
                           />
                         )}
                         {/* Tooltip */}
-                        <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition whitespace-nowrap z-10">
-                          {day.calls} calls ({day.connected} connected)
+                        <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition whitespace-nowrap z-10 pointer-events-none">
+                          {day.calls} calls ({day.connected} connected) - Click to view
                         </div>
-                      </div>
+                      </button>
                     ) : (
                       <div className="w-full h-1 bg-gray-100 rounded mt-auto" />
                     )}
@@ -285,6 +310,17 @@ export function CallActivityCard({ ownerId }: CallActivityCardProps) {
           </div>
         </div>
       )}
+
+      {/* Drill-down Modal */}
+      <CallDrillDownModal
+        isOpen={drillDown.isOpen}
+        onClose={closeDrillDown}
+        ownerId={ownerId}
+        period={period}
+        periodLabel={data?.period.label || ''}
+        filterType={drillDown.filterType}
+        filterValue={drillDown.filterValue}
+      />
     </div>
   );
 }
