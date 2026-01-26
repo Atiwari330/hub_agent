@@ -53,6 +53,21 @@ function getDateRange(period: CallPeriod, year?: number, quarter?: number): { st
       return { startDate: start, endDate: end, label: 'This Week' };
     }
 
+    case 'last_week': {
+      // Get Monday of LAST week
+      const start = new Date(now);
+      const day = start.getDay();
+      const diff = start.getDate() - day + (day === 0 ? -6 : 1) - 7;
+      start.setDate(diff);
+      start.setHours(0, 0, 0, 0);
+
+      // Get Sunday of last week
+      const end = new Date(start);
+      end.setDate(end.getDate() + 6);
+      end.setHours(23, 59, 59, 999);
+      return { startDate: start, endDate: end, label: 'Last Week' };
+    }
+
     case 'this_month': {
       const start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
       const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
@@ -93,7 +108,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const includeAssociations = searchParams.get('includeAssociations') === 'true';
 
     // Validate period
-    const validPeriods: CallPeriod[] = ['today', 'this_week', 'this_month', 'quarter'];
+    const validPeriods: CallPeriod[] = ['today', 'this_week', 'last_week', 'this_month', 'quarter'];
     if (!validPeriods.includes(period)) {
       return NextResponse.json(
         { error: 'Invalid period. Must be one of: today, this_week, this_month, quarter' },

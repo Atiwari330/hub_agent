@@ -17,6 +17,7 @@ interface DrillDownState {
 const PERIOD_OPTIONS: Array<{ value: CallPeriod; label: string }> = [
   { value: 'today', label: 'Today' },
   { value: 'this_week', label: 'This Week' },
+  { value: 'last_week', label: 'Last Week' },
   { value: 'this_month', label: 'This Month' },
   { value: 'quarter', label: 'Quarter' },
 ];
@@ -290,7 +291,7 @@ export function CallActivityCard({ ownerId }: CallActivityCardProps) {
                       isToday ? 'text-blue-600 font-medium' : 'text-gray-500'
                     }`}
                   >
-                    {period === 'this_week' ? dayLabel : dateLabel}
+                    {period === 'this_week' || period === 'last_week' ? dayLabel : dateLabel}
                   </div>
                 </div>
               );
