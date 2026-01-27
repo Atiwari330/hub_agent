@@ -40,7 +40,7 @@ async function main() {
     console.log('KEY DEAL PROPERTIES:');
     const keyProps = [
       'dealname', 'amount', 'closedate', 'dealstage', 'pipeline',
-      'hubspot_owner_id', 'lead_source', 'lead_source_detail',
+      'hubspot_owner_id', 'lead_source__sync_', 'lead_source_detail',
       'hs_deal_stage_probability', 'amount_in_home_currency',
       'next_step', 'hs_next_step', 'products', 'prior_ehr',
       'onboarding_fee', 'migration_fee', 'cltv', 'deal_sub_stage',
@@ -236,7 +236,7 @@ async function main() {
   // Key properties to analyze
   const analyzeProps = [
     'dealname', 'amount', 'closedate', 'dealstage', 'pipeline',
-    'lead_source', 'lead_source_detail', 'products', 'prior_ehr',
+    'lead_source__sync_', 'lead_source_detail', 'products', 'prior_ehr',
     'onboarding_fee', 'migration_fee', 'cltv', 'next_step',
     'hs_lastmodifieddate', 'notes_last_updated', 'hs_next_step'
   ];
@@ -280,8 +280,8 @@ async function main() {
           stages[deal.properties.dealstage] = (stages[deal.properties.dealstage] || 0) + 1;
         }
 
-        if (deal.properties.lead_source) {
-          leadSources[deal.properties.lead_source] = (leadSources[deal.properties.lead_source] || 0) + 1;
+        if (deal.properties['lead_source__sync_']) {
+          leadSources[deal.properties['lead_source__sync_']] = (leadSources[deal.properties['lead_source__sync_']] || 0) + 1;
         }
       }
 

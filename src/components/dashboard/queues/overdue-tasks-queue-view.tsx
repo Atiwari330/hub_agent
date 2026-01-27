@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { formatCurrency } from '@/lib/utils/currency';
+import { getHubSpotDealUrl } from '@/lib/hubspot/urls';
 
 interface OverdueTaskInfo {
   taskId: string;
@@ -584,7 +585,14 @@ export function OverdueTasksQueueView() {
                           </button>
                         </td>
                         <td className="px-4 py-3">
-                          <span className="text-sm font-medium text-gray-900">{deal.dealName}</span>
+                          <a
+                            href={getHubSpotDealUrl(deal.hubspotDealId)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-sm font-medium text-gray-900 hover:text-indigo-600 transition-colors"
+                          >
+                            {deal.dealName}
+                          </a>
                         </td>
                         <td className="px-4 py-3">
                           <span className="text-sm text-gray-600">{deal.ownerName}</span>

@@ -12,18 +12,11 @@ interface Owner {
   email: string;
 }
 
-interface QueueCounts {
-  hygiene: { total: number; escalated: number };
-  nextStep: { total: number; overdue: number };
-  overdueTasks: { total: number; critical: number };
-}
-
 interface SidebarProps {
   owners: Owner[];
   lastSync: string | null;
   quarterLabel: string;
   quarterProgress: number;
-  queueCounts?: QueueCounts;
   onCollapsedChange?: (collapsed: boolean) => void;
 }
 
@@ -114,7 +107,7 @@ function MenuIcon() {
 
 const SIDEBAR_COLLAPSED_KEY = 'sidebar-collapsed';
 
-export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, queueCounts, onCollapsedChange }: SidebarProps) {
+export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCollapsedChange }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [aeListOpen, setAeListOpen] = useState(true);
@@ -278,40 +271,18 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, queue
                   className={`flex items-center py-2 text-sm transition-colors ${
                     isCollapsed
                       ? 'px-0 justify-center'
-                      : 'justify-between px-4 pl-11'
+                      : 'px-4 pl-11'
                   } ${
                     isOnHygieneQueue
                       ? 'bg-indigo-600 text-white'
                       : 'text-slate-300 hover:bg-slate-800'
                   }`}
-                  title={isCollapsed ? `Deal Hygiene (${queueCounts?.hygiene.total || 0})` : undefined}
+                  title={isCollapsed ? 'Deal Hygiene' : undefined}
                 >
                   {isCollapsed ? (
-                    <div className="relative">
-                      <QueueIcon />
-                      {queueCounts && queueCounts.hygiene.total > 0 && (
-                        <span
-                          className={`absolute -top-1 -right-1 w-2 h-2 rounded-full ${
-                            queueCounts.hygiene.escalated > 0 ? 'bg-red-500' : 'bg-slate-500'
-                          }`}
-                        />
-                      )}
-                    </div>
+                    <QueueIcon />
                   ) : (
-                    <>
-                      <span>Deal Hygiene</span>
-                      {queueCounts && queueCounts.hygiene.total > 0 && (
-                        <span
-                          className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${
-                            queueCounts.hygiene.escalated > 0
-                              ? 'bg-red-500 text-white'
-                              : 'bg-slate-600 text-slate-200'
-                          }`}
-                        >
-                          {queueCounts.hygiene.total}
-                        </span>
-                      )}
-                    </>
+                    <span>Deal Hygiene</span>
                   )}
                 </Link>
               </li>
@@ -321,42 +292,20 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, queue
                   className={`flex items-center py-2 text-sm transition-colors ${
                     isCollapsed
                       ? 'px-0 justify-center'
-                      : 'justify-between px-4 pl-11'
+                      : 'px-4 pl-11'
                   } ${
                     isOnNextStepQueue
                       ? 'bg-indigo-600 text-white'
                       : 'text-slate-300 hover:bg-slate-800'
                   }`}
-                  title={isCollapsed ? `Next Steps (${queueCounts?.nextStep.total || 0})` : undefined}
+                  title={isCollapsed ? 'Next Steps' : undefined}
                 >
                   {isCollapsed ? (
-                    <div className="relative">
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
-                      {queueCounts && queueCounts.nextStep.total > 0 && (
-                        <span
-                          className={`absolute -top-1 -right-1 w-2 h-2 rounded-full ${
-                            queueCounts.nextStep.overdue > 0 ? 'bg-red-500' : 'bg-slate-500'
-                          }`}
-                        />
-                      )}
-                    </div>
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
                   ) : (
-                    <>
-                      <span>Next Steps</span>
-                      {queueCounts && queueCounts.nextStep.total > 0 && (
-                        <span
-                          className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${
-                            queueCounts.nextStep.overdue > 0
-                              ? 'bg-red-500 text-white'
-                              : 'bg-slate-600 text-slate-200'
-                          }`}
-                        >
-                          {queueCounts.nextStep.total}
-                        </span>
-                      )}
-                    </>
+                    <span>Next Steps</span>
                   )}
                 </Link>
               </li>
@@ -366,42 +315,20 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, queue
                   className={`flex items-center py-2 text-sm transition-colors ${
                     isCollapsed
                       ? 'px-0 justify-center'
-                      : 'justify-between px-4 pl-11'
+                      : 'px-4 pl-11'
                   } ${
                     isOnOverdueTasksQueue
                       ? 'bg-indigo-600 text-white'
                       : 'text-slate-300 hover:bg-slate-800'
                   }`}
-                  title={isCollapsed ? `Overdue Tasks (${queueCounts?.overdueTasks?.total || 0})` : undefined}
+                  title={isCollapsed ? 'Overdue Tasks' : undefined}
                 >
                   {isCollapsed ? (
-                    <div className="relative">
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      {queueCounts?.overdueTasks && queueCounts.overdueTasks.total > 0 && (
-                        <span
-                          className={`absolute -top-1 -right-1 w-2 h-2 rounded-full ${
-                            queueCounts.overdueTasks.critical > 0 ? 'bg-red-500' : 'bg-slate-500'
-                          }`}
-                        />
-                      )}
-                    </div>
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
                   ) : (
-                    <>
-                      <span>Overdue Tasks</span>
-                      {queueCounts?.overdueTasks && queueCounts.overdueTasks.total > 0 && (
-                        <span
-                          className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${
-                            queueCounts.overdueTasks.critical > 0
-                              ? 'bg-red-500 text-white'
-                              : 'bg-slate-600 text-slate-200'
-                          }`}
-                        >
-                          {queueCounts.overdueTasks.total}
-                        </span>
-                      )}
-                    </>
+                    <span>Overdue Tasks</span>
                   )}
                 </Link>
               </li>

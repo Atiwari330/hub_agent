@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { formatCurrency } from '@/lib/utils/currency';
+import { getHubSpotDealUrl } from '@/lib/hubspot/urls';
 import type { ExceptionContextResponse } from '@/types/exception-context';
 
 export type ExceptionType =
@@ -30,7 +31,6 @@ export interface ExceptionDeal {
 
 interface ExceptionCardProps {
   deal: ExceptionDeal;
-  hubspotPortalId?: string;
 }
 
 const EXCEPTION_LABELS: Record<ExceptionType, { label: string; color: string; icon: string }> = {
@@ -74,14 +74,14 @@ function formatDate(dateString: string | null): string {
   });
 }
 
-export function ExceptionCard({ deal, hubspotPortalId = '6187034' }: ExceptionCardProps) {
+export function ExceptionCard({ deal }: ExceptionCardProps) {
   const [context, setContext] = useState<ExceptionContextResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const exception = EXCEPTION_LABELS[deal.exceptionType];
-  const hubspotUrl = `https://app.hubspot.com/contacts/${hubspotPortalId}/deal/${deal.hubspotDealId}`;
+  const hubspotUrl = getHubSpotDealUrl(deal.hubspotDealId);
 
   async function loadContext() {
     if (context || loading) return;
@@ -216,10 +216,9 @@ interface ExceptionListProps {
   deals: ExceptionDeal[];
   title: string;
   emptyMessage?: string;
-  hubspotPortalId?: string;
 }
 
-export function ExceptionList({ deals, title, emptyMessage = 'No exceptions', hubspotPortalId }: ExceptionListProps) {
+export function ExceptionList({ deals, title, emptyMessage = 'No exceptions' }: ExceptionListProps) {
   return (
     <div>
       <h3 className="text-sm font-medium text-gray-700 mb-3">{title}</h3>
@@ -228,7 +227,7 @@ export function ExceptionList({ deals, title, emptyMessage = 'No exceptions', hu
       ) : (
         <div className="space-y-2">
           {deals.map((deal) => (
-            <ExceptionCard key={deal.id} deal={deal} hubspotPortalId={hubspotPortalId} />
+            <ExceptionCard key={deal.id} deal={deal} />
           ))}
         </div>
       )}

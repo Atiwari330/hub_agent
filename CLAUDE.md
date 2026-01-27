@@ -154,7 +154,7 @@ The deals table displays these properties (in order):
 
 HubSpot property mappings (see `src/lib/hubspot/deals.ts`):
 - `createdate` → `hubspot_created_at`
-- `lead_source` → `lead_source`
+- `lead_source__sync_` → `lead_source`
 - `notes_last_updated` → `last_activity_date`
 - `notes_next_activity_date` → `next_activity_date`
 - `hs_next_step` → `next_step`

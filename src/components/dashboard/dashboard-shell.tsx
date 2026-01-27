@@ -10,18 +10,11 @@ interface Owner {
   email: string;
 }
 
-interface QueueCounts {
-  hygiene: { total: number; escalated: number };
-  nextStep: { total: number; overdue: number };
-  overdueTasks: { total: number; critical: number };
-}
-
 interface DashboardShellProps {
   owners: Owner[];
   lastSync: string | null;
   quarterLabel: string;
   quarterProgress: number;
-  queueCounts: QueueCounts;
   children: React.ReactNode;
 }
 
@@ -32,7 +25,6 @@ export function DashboardShell({
   lastSync,
   quarterLabel,
   quarterProgress,
-  queueCounts,
   children,
 }: DashboardShellProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -56,7 +48,6 @@ export function DashboardShell({
         lastSync={lastSync}
         quarterLabel={quarterLabel}
         quarterProgress={quarterProgress}
-        queueCounts={queueCounts}
         onCollapsedChange={handleCollapsedChange}
       />
       <main className={`min-h-screen transition-all duration-300 ${isCollapsed ? 'ml-16' : 'ml-64'}`}>

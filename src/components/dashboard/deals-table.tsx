@@ -3,6 +3,7 @@
 import { useState, useMemo, useCallback } from 'react';
 import { formatCurrency } from '@/lib/utils/currency';
 import { getCurrentQuarter, getQuarterInfo } from '@/lib/utils/quarter';
+import { getHubSpotDealUrl } from '@/lib/hubspot/urls';
 
 interface RiskFactor {
   type: string;
@@ -548,7 +549,7 @@ export function DealsTable({ deals: initialDeals, ownerId }: DealsTableProps) {
               <tr key={deal.id} className="hover:bg-slate-50 transition-colors">
                 <td className="px-4 py-3">
                   <a
-                    href={`https://app.hubspot.com/contacts/YOUR_PORTAL/deal/${deal.hubspotDealId}`}
+                    href={getHubSpotDealUrl(deal.hubspotDealId)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-sm font-medium text-gray-900 hover:text-indigo-600 transition-colors"
