@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/client';
 import { getTargetOwners } from '@/lib/hubspot/owners';
-import { getFilteredDealsForSync } from '@/lib/hubspot/deals';
+import { getFilteredDealsForSync, getUpsellDealsForSync } from '@/lib/hubspot/deals';
+import { getOwnerById } from '@/lib/hubspot/owners';
 import { getNotesByDealIdWithAuthor } from '@/lib/hubspot/engagements';
 import { TRACKED_STAGES } from '@/lib/hubspot/stage-mappings';
 import { SYNC_CONFIG } from '@/lib/hubspot/sync-config';
@@ -144,18 +145,109 @@ export async function GET(request: Request) {
       }
     }
 
+    // Step 4a: Sync Upsell Pipeline deals (ALL owners, not just target AEs)
+    console.log('Syncing Upsell Pipeline deals (all owners)...');
+    const upsellDeals = await getUpsellDealsForSync();
+    console.log(`Found ${upsellDeals.length} upsell deals matching criteria`);
+
+    // Discover and sync any new owners from upsell deals
+    const upsellOwnerIds = new Set<string>();
+    for (const deal of upsellDeals) {
+      if (deal.properties.hubspot_owner_id && !ownerMap.has(deal.properties.hubspot_owner_id)) {
+        upsellOwnerIds.add(deal.properties.hubspot_owner_id);
+      }
+    }
+
+    let upsellOwnersAdded = 0;
+    if (upsellOwnerIds.size > 0) {
+      console.log(`Discovering ${upsellOwnerIds.size} new owners from upsell deals...`);
+      for (const hubspotOwnerId of upsellOwnerIds) {
+        try {
+          const owner = await getOwnerById(hubspotOwnerId);
+          if (owner) {
+            const { data: newOwner, error: ownerInsertError } = await supabase
+              .from('owners')
+              .upsert({
+                hubspot_owner_id: owner.id,
+                email: owner.email,
+                first_name: owner.firstName,
+                last_name: owner.lastName,
+                synced_at: new Date().toISOString(),
+              }, { onConflict: 'hubspot_owner_id' })
+              .select('id, hubspot_owner_id')
+              .single();
+
+            if (!ownerInsertError && newOwner) {
+              ownerMap.set(newOwner.hubspot_owner_id, newOwner.id);
+              upsellOwnersAdded++;
+            }
+          }
+        } catch (err) {
+          console.warn(`Failed to fetch owner ${hubspotOwnerId}:`, err);
+        }
+      }
+      console.log(`Added ${upsellOwnersAdded} new owners from upsell deals`);
+    }
+
+    // Map upsell deals to DB format and upsert
+    const upsellDealData = upsellDeals.map((deal) => ({
+      hubspot_deal_id: deal.id,
+      deal_name: deal.properties.dealname,
+      amount: deal.properties.amount ? parseFloat(deal.properties.amount) : null,
+      close_date: toTimestamp(deal.properties.closedate),
+      pipeline: deal.properties.pipeline,
+      deal_stage: deal.properties.dealstage,
+      description: deal.properties.description,
+      owner_id: deal.properties.hubspot_owner_id
+        ? ownerMap.get(deal.properties.hubspot_owner_id) ?? null
+        : null,
+      hubspot_owner_id: deal.properties.hubspot_owner_id,
+      hubspot_created_at: toTimestamp(deal.properties.createdate),
+      lead_source: deal.properties.lead_source,
+      last_activity_date: toTimestamp(deal.properties.notes_last_updated),
+      next_activity_date: toTimestamp(deal.properties.notes_next_activity_date),
+      next_step: deal.properties.hs_next_step,
+      products: deal.properties.product_s,
+      deal_substage: deal.properties.proposal_stage,
+      deal_collaborator: deal.properties.hs_all_collaborator_owner_ids,
+      sql_entered_at: toTimestamp(deal.properties[TRACKED_STAGES.SQL.property]),
+      demo_scheduled_entered_at: toTimestamp(deal.properties[TRACKED_STAGES.DEMO_SCHEDULED.property]),
+      demo_completed_entered_at: toTimestamp(deal.properties[TRACKED_STAGES.DEMO_COMPLETED.property]),
+      closed_won_entered_at: toTimestamp(deal.properties[TRACKED_STAGES.CLOSED_WON.property]),
+      synced_at: new Date().toISOString(),
+    }));
+
+    let upsellDealSuccess = 0;
+    let upsellDealErrors = 0;
+
+    for (let i = 0; i < upsellDealData.length; i += SYNC_CONFIG.DB_BATCH_SIZE) {
+      const chunk = upsellDealData.slice(i, i + SYNC_CONFIG.DB_BATCH_SIZE);
+      const { error: dealError } = await supabase
+        .from('deals')
+        .upsert(chunk, { onConflict: 'hubspot_deal_id' });
+
+      if (dealError) {
+        console.error(`Upsell deal batch upsert error (chunk ${i / SYNC_CONFIG.DB_BATCH_SIZE + 1}):`, dealError);
+        upsellDealErrors += chunk.length;
+      } else {
+        upsellDealSuccess += chunk.length;
+      }
+    }
+
+    console.log(`Synced ${upsellDealSuccess} upsell deals (${upsellDealErrors} errors)`);
+
     // Step 4b: Clean up stale deals
-    // Remove deals that are no longer in the target pipeline or have changed owners
-    const syncedDealIds = deals.map((d) => d.id);
+    // Remove deals that are not in any synced pipeline
     const targetOwnerIds = Array.from(ownerMap.values());
     let dealsDeleted = 0;
     let dealsUnassigned = 0;
 
-    // Delete deals not in the target pipeline (e.g., moved to Upsells)
+    // Delete deals not in ANY of our synced pipelines (Sales or Upsells)
+    // This handles deals moved to pipelines we don't track
     const { data: wrongPipelineDeals, error: wrongPipelineError } = await supabase
       .from('deals')
       .delete()
-      .neq('pipeline', SYNC_CONFIG.TARGET_PIPELINE_ID)
+      .not('pipeline', 'in', `(${SYNC_CONFIG.ALL_PIPELINE_IDS.join(',')})`)
       .select('id');
 
     if (wrongPipelineError) {
@@ -163,18 +255,21 @@ export async function GET(request: Request) {
     } else {
       dealsDeleted = wrongPipelineDeals?.length || 0;
       if (dealsDeleted > 0) {
-        console.log(`Deleted ${dealsDeleted} deals from non-target pipelines`);
+        console.log(`Deleted ${dealsDeleted} deals from non-tracked pipelines`);
       }
     }
 
-    // Clear owner_id for deals owned by target AEs that weren't in sync batch
+    // Clear owner_id for Sales Pipeline deals owned by target AEs that weren't in sync batch
     // (These are deals where the owner was changed in HubSpot)
-    if (syncedDealIds.length > 0) {
+    // Note: We only do this for sales pipeline deals, not upsell deals
+    const salesSyncedDealIds = deals.map((d) => d.id);
+    if (salesSyncedDealIds.length > 0) {
       const { data: orphanedDeals, error: orphanError } = await supabase
         .from('deals')
         .update({ owner_id: null, hubspot_owner_id: null })
         .in('owner_id', targetOwnerIds)
-        .not('hubspot_deal_id', 'in', `(${syncedDealIds.join(',')})`)
+        .eq('pipeline', SYNC_CONFIG.TARGET_PIPELINE_ID)
+        .not('hubspot_deal_id', 'in', `(${salesSyncedDealIds.join(',')})`)
         .select('id');
 
       if (orphanError) {
@@ -250,8 +345,11 @@ export async function GET(request: Request) {
       completed_at: new Date().toISOString(),
       result: {
         ownersSync: owners.length,
+        upsellOwnersAdded,
         dealsSync: dealSuccess,
+        upsellDealsSync: upsellDealSuccess,
         dealErrors,
+        upsellDealErrors,
         dealsDeleted,
         dealsUnassigned,
         notesSynced,
@@ -259,19 +357,23 @@ export async function GET(request: Request) {
         durationMs: duration,
         filters: {
           targetAEs: SYNC_CONFIG.TARGET_AE_EMAILS,
-          pipeline: SYNC_CONFIG.TARGET_PIPELINE_ID,
+          salesPipeline: SYNC_CONFIG.TARGET_PIPELINE_ID,
+          upsellPipeline: SYNC_CONFIG.UPSELL_PIPELINE_ID,
           minDate: SYNC_CONFIG.MIN_DATE,
         },
       },
     }).eq('id', workflowId);
 
-    console.log(`Sync complete in ${duration}ms: ${owners.length} owners, ${dealSuccess} deals, ${dealsDeleted} deleted, ${dealsUnassigned} unassigned, ${notesSynced} notes`);
+    console.log(`Sync complete in ${duration}ms: ${owners.length} owners (+${upsellOwnersAdded} from upsells), ${dealSuccess} sales deals, ${upsellDealSuccess} upsell deals, ${dealsDeleted} deleted, ${dealsUnassigned} unassigned, ${notesSynced} notes`);
 
     return NextResponse.json({
       success: true,
       ownersSynced: owners.length,
-      dealsSynced: dealSuccess,
+      upsellOwnersAdded,
+      salesDealsSynced: dealSuccess,
+      upsellDealsSynced: upsellDealSuccess,
       dealErrors,
+      upsellDealErrors,
       dealsDeleted,
       dealsUnassigned,
       notesSynced,

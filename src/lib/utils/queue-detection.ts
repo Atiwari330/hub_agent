@@ -7,6 +7,7 @@ import { getBusinessDaysSinceDate, getDaysUntil, isDateInPast } from './business
 
 // ===== HYGIENE QUEUE CONFIGURATION =====
 
+// Sales Pipeline required fields (6 fields)
 export const HYGIENE_REQUIRED_FIELDS = [
   { field: 'deal_substage', label: 'Substage' },
   { field: 'close_date', label: 'Close Date' },
@@ -16,7 +17,21 @@ export const HYGIENE_REQUIRED_FIELDS = [
   { field: 'deal_collaborator', label: 'Collaborator' },
 ] as const;
 
+// Upsell Pipeline required fields (3 fields)
+export const UPSELL_HYGIENE_REQUIRED_FIELDS = [
+  { field: 'amount', label: 'Amount' },
+  { field: 'close_date', label: 'Close Date' },
+  { field: 'products', label: 'Products' },
+] as const;
+
 export type HygieneField = typeof HYGIENE_REQUIRED_FIELDS[number]['field'];
+export type UpsellHygieneField = typeof UPSELL_HYGIENE_REQUIRED_FIELDS[number]['field'];
+
+// Generic hygiene field configuration type
+export interface HygieneFieldConfig {
+  field: string;
+  label: string;
+}
 
 export const NEW_DEAL_THRESHOLD_BUSINESS_DAYS = 7;
 
@@ -82,7 +97,35 @@ export interface NextStepCheckResult {
 // ===== HYGIENE QUEUE DETECTION =====
 
 /**
- * Check if a deal has all required hygiene fields
+ * Generic hygiene check with configurable required fields
+ * Works with any deal-like object that has the required field properties
+ */
+export function checkDealHygieneWithConfig<T extends Record<string, unknown>>(
+  deal: T,
+  requiredFields: readonly HygieneFieldConfig[]
+): HygieneCheckResult {
+  const missingFields: HygieneMissingField[] = [];
+
+  for (const { field, label } of requiredFields) {
+    const value = deal[field as keyof T];
+    // Check for null, undefined, empty string, or zero amount
+    const isEmpty = value === null || value === undefined || value === '';
+    // For amount, also consider 0 as missing
+    const isEmptyAmount = field === 'amount' && (isEmpty || value === 0);
+
+    if (isEmpty || isEmptyAmount) {
+      missingFields.push({ field: field as HygieneField, label });
+    }
+  }
+
+  return {
+    isCompliant: missingFields.length === 0,
+    missingFields,
+  };
+}
+
+/**
+ * Check if a deal has all required hygiene fields (Sales Pipeline)
  */
 export function checkDealHygiene(deal: HygieneCheckInput): HygieneCheckResult {
   const missingFields: HygieneMissingField[] = [];
@@ -103,6 +146,13 @@ export function checkDealHygiene(deal: HygieneCheckInput): HygieneCheckResult {
     isCompliant: missingFields.length === 0,
     missingFields,
   };
+}
+
+/**
+ * Check if a deal has all required hygiene fields (Upsell Pipeline)
+ */
+export function checkUpsellDealHygiene(deal: Record<string, unknown>): HygieneCheckResult {
+  return checkDealHygieneWithConfig(deal, UPSELL_HYGIENE_REQUIRED_FIELDS);
 }
 
 /**

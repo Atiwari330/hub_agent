@@ -14,8 +14,17 @@ export const SYNC_CONFIG = {
     'atiwari@opusbehavioral.com',
   ],
 
-  // Only sync deals from Sales Pipeline
+  // Sales Pipeline ID - sync only specific AEs' deals from this pipeline
   TARGET_PIPELINE_ID: '1c27e5a3-5e5e-4403-ab0f-d356bf268cf3',
+
+  // Upsell Pipeline ID - sync ALL owners' deals from this pipeline
+  UPSELL_PIPELINE_ID: '130845758',
+
+  // All pipeline IDs we sync (used for cleanup logic)
+  ALL_PIPELINE_IDS: [
+    '1c27e5a3-5e5e-4403-ab0f-d356bf268cf3', // Sales
+    '130845758', // Upsells
+  ],
 
   // Only sync deals created or closing on/after this date
   MIN_DATE: '2025-01-01',

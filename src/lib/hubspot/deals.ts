@@ -296,6 +296,104 @@ export async function getFilteredDealsForSync(
 }
 
 /**
+ * Fetch ALL upsell pipeline deals for sync job
+ * - No owner filter (sync all owners)
+ * - Only Upsell Pipeline
+ * - Only deals with createdate >= MIN_DATE OR closedate >= MIN_DATE
+ */
+export async function getUpsellDealsForSync(): Promise<HubSpotDeal[]> {
+  const client = getHubSpotClient();
+  const allDeals: HubSpotDeal[] = [];
+  let after: string | undefined;
+
+  do {
+    const response = await client.crm.deals.searchApi.doSearch({
+      // Filter groups are OR-ed together
+      filterGroups: [
+        // Group 1: Upsell Pipeline + createdate >= MIN_DATE
+        {
+          filters: [
+            {
+              propertyName: 'pipeline',
+              operator: FilterOperatorEnum.Eq,
+              value: SYNC_CONFIG.UPSELL_PIPELINE_ID,
+            },
+            {
+              propertyName: 'createdate',
+              operator: FilterOperatorEnum.Gte,
+              value: SYNC_CONFIG.MIN_DATE,
+            },
+          ],
+        },
+        // Group 2: Upsell Pipeline + closedate >= MIN_DATE
+        {
+          filters: [
+            {
+              propertyName: 'pipeline',
+              operator: FilterOperatorEnum.Eq,
+              value: SYNC_CONFIG.UPSELL_PIPELINE_ID,
+            },
+            {
+              propertyName: 'closedate',
+              operator: FilterOperatorEnum.Gte,
+              value: SYNC_CONFIG.MIN_DATE,
+            },
+          ],
+        },
+      ],
+      properties: DEAL_PROPERTIES,
+      limit: 100,
+      after: after ? after : undefined,
+    });
+
+    for (const deal of response.results) {
+      allDeals.push({
+        id: deal.id,
+        properties: {
+          dealname: deal.properties.dealname || '',
+          amount: deal.properties.amount,
+          closedate: deal.properties.closedate,
+          pipeline: deal.properties.pipeline,
+          dealstage: deal.properties.dealstage,
+          hubspot_owner_id: deal.properties.hubspot_owner_id,
+          createdate: deal.properties.createdate,
+          hs_lastmodifieddate: deal.properties.hs_lastmodifieddate,
+          description: deal.properties.description,
+          notes_last_updated: deal.properties.notes_last_updated,
+          lead_source: deal.properties['lead_source__sync_'],
+          notes_next_activity_date: deal.properties.notes_next_activity_date,
+          hs_next_step: deal.properties.hs_next_step,
+          product_s: deal.properties.product_s,
+          proposal_stage: deal.properties.proposal_stage,
+          hs_all_collaborator_owner_ids: deal.properties.hs_all_collaborator_owner_ids,
+          [TRACKED_STAGES.SQL.property]:
+            deal.properties[TRACKED_STAGES.SQL.property],
+          [TRACKED_STAGES.DEMO_SCHEDULED.property]:
+            deal.properties[TRACKED_STAGES.DEMO_SCHEDULED.property],
+          [TRACKED_STAGES.DEMO_COMPLETED.property]:
+            deal.properties[TRACKED_STAGES.DEMO_COMPLETED.property],
+          [TRACKED_STAGES.CLOSED_WON.property]:
+            deal.properties[TRACKED_STAGES.CLOSED_WON.property],
+        },
+        createdAt: deal.createdAt?.toISOString(),
+        updatedAt: deal.updatedAt?.toISOString(),
+        archived: deal.archived,
+      });
+    }
+
+    after = response.paging?.next?.after;
+  } while (after);
+
+  // Deduplicate deals (a deal might match both date conditions)
+  const uniqueDeals = new Map<string, HubSpotDeal>();
+  for (const deal of allDeals) {
+    uniqueDeals.set(deal.id, deal);
+  }
+
+  return Array.from(uniqueDeals.values());
+}
+
+/**
  * Result of fetching a deal with next step history
  */
 export interface DealWithNextStepHistory {

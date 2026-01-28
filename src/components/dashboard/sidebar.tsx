@@ -147,10 +147,13 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
   // Extract current owner ID from pathname
   const currentOwnerId = pathname?.match(/\/dashboard\/ae\/([^/]+)/)?.[1];
   const isOnMissionControl = pathname === '/dashboard';
+  // Sales Pipeline queues
   const isOnHygieneQueue = pathname === '/dashboard/queues/hygiene';
   const isOnNextStepQueue = pathname === '/dashboard/queues/next-step';
   const isOnOverdueTasksQueue = pathname === '/dashboard/queues/overdue-tasks';
   const isOnStalledDealsQueue = pathname === '/dashboard/queues/stalled-deals';
+  // Upsell Pipeline queues
+  const isOnUpsellHygieneQueue = pathname === '/dashboard/queues/upsell-hygiene';
 
   return (
     <aside className={`fixed left-0 top-0 h-screen bg-slate-900 text-slate-100 flex flex-col transition-all duration-300 ${isCollapsed ? 'w-16' : 'w-64'}`}>
@@ -265,98 +268,138 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
           )}
 
           {(isCollapsed || queuesOpen) && (
-            <ul className={`space-y-0.5 ${!isCollapsed ? 'mt-1' : ''}`}>
-              <li>
-                <Link
-                  href="/dashboard/queues/hygiene"
-                  className={`flex items-center py-2 text-sm transition-colors ${
-                    isCollapsed
-                      ? 'px-0 justify-center'
-                      : 'px-4 pl-11'
-                  } ${
-                    isOnHygieneQueue
-                      ? 'bg-indigo-600 text-white'
-                      : 'text-slate-300 hover:bg-slate-800'
-                  }`}
-                  title={isCollapsed ? 'Deal Hygiene' : undefined}
-                >
-                  {isCollapsed ? (
-                    <QueueIcon />
-                  ) : (
-                    <span>Deal Hygiene</span>
-                  )}
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/dashboard/queues/next-step"
-                  className={`flex items-center py-2 text-sm transition-colors ${
-                    isCollapsed
-                      ? 'px-0 justify-center'
-                      : 'px-4 pl-11'
-                  } ${
-                    isOnNextStepQueue
-                      ? 'bg-indigo-600 text-white'
-                      : 'text-slate-300 hover:bg-slate-800'
-                  }`}
-                  title={isCollapsed ? 'Next Steps' : undefined}
-                >
-                  {isCollapsed ? (
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-                  ) : (
-                    <span>Next Steps</span>
-                  )}
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/dashboard/queues/overdue-tasks"
-                  className={`flex items-center py-2 text-sm transition-colors ${
-                    isCollapsed
-                      ? 'px-0 justify-center'
-                      : 'px-4 pl-11'
-                  } ${
-                    isOnOverdueTasksQueue
-                      ? 'bg-indigo-600 text-white'
-                      : 'text-slate-300 hover:bg-slate-800'
-                  }`}
-                  title={isCollapsed ? 'Overdue Tasks' : undefined}
-                >
-                  {isCollapsed ? (
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  ) : (
-                    <span>Overdue Tasks</span>
-                  )}
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/dashboard/queues/stalled-deals"
-                  className={`flex items-center py-2 text-sm transition-colors ${
-                    isCollapsed
-                      ? 'px-0 justify-center'
-                      : 'px-4 pl-11'
-                  } ${
-                    isOnStalledDealsQueue
-                      ? 'bg-indigo-600 text-white'
-                      : 'text-slate-300 hover:bg-slate-800'
-                  }`}
-                  title={isCollapsed ? 'Stalled Deals' : undefined}
-                >
-                  {isCollapsed ? (
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  ) : (
-                    <span>Stalled Deals</span>
-                  )}
-                </Link>
-              </li>
-            </ul>
+            <div className={`${!isCollapsed ? 'mt-1' : ''}`}>
+              {/* Sales Pipeline Section */}
+              {!isCollapsed && (
+                <div className="px-4 pl-11 py-1.5">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Sales Pipeline</span>
+                </div>
+              )}
+              <ul className="space-y-0.5">
+                <li>
+                  <Link
+                    href="/dashboard/queues/hygiene"
+                    className={`flex items-center py-2 text-sm transition-colors ${
+                      isCollapsed
+                        ? 'px-0 justify-center'
+                        : 'px-4 pl-14'
+                    } ${
+                      isOnHygieneQueue
+                        ? 'bg-indigo-600 text-white'
+                        : 'text-slate-300 hover:bg-slate-800'
+                    }`}
+                    title={isCollapsed ? 'Deal Hygiene (Sales)' : undefined}
+                  >
+                    {isCollapsed ? (
+                      <QueueIcon />
+                    ) : (
+                      <span>Deal Hygiene</span>
+                    )}
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="/dashboard/queues/next-step"
+                    className={`flex items-center py-2 text-sm transition-colors ${
+                      isCollapsed
+                        ? 'px-0 justify-center'
+                        : 'px-4 pl-14'
+                    } ${
+                      isOnNextStepQueue
+                        ? 'bg-indigo-600 text-white'
+                        : 'text-slate-300 hover:bg-slate-800'
+                    }`}
+                    title={isCollapsed ? 'Next Steps' : undefined}
+                  >
+                    {isCollapsed ? (
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    ) : (
+                      <span>Next Steps</span>
+                    )}
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="/dashboard/queues/overdue-tasks"
+                    className={`flex items-center py-2 text-sm transition-colors ${
+                      isCollapsed
+                        ? 'px-0 justify-center'
+                        : 'px-4 pl-14'
+                    } ${
+                      isOnOverdueTasksQueue
+                        ? 'bg-indigo-600 text-white'
+                        : 'text-slate-300 hover:bg-slate-800'
+                    }`}
+                    title={isCollapsed ? 'Overdue Tasks' : undefined}
+                  >
+                    {isCollapsed ? (
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    ) : (
+                      <span>Overdue Tasks</span>
+                    )}
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="/dashboard/queues/stalled-deals"
+                    className={`flex items-center py-2 text-sm transition-colors ${
+                      isCollapsed
+                        ? 'px-0 justify-center'
+                        : 'px-4 pl-14'
+                    } ${
+                      isOnStalledDealsQueue
+                        ? 'bg-indigo-600 text-white'
+                        : 'text-slate-300 hover:bg-slate-800'
+                    }`}
+                    title={isCollapsed ? 'Stalled Deals' : undefined}
+                  >
+                    {isCollapsed ? (
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    ) : (
+                      <span>Stalled Deals</span>
+                    )}
+                  </Link>
+                </li>
+              </ul>
+
+              {/* Upsells Pipeline Section */}
+              {!isCollapsed && (
+                <div className="px-4 pl-11 py-1.5 mt-2">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Upsells Pipeline</span>
+                </div>
+              )}
+              <ul className="space-y-0.5">
+                <li>
+                  <Link
+                    href="/dashboard/queues/upsell-hygiene"
+                    className={`flex items-center py-2 text-sm transition-colors ${
+                      isCollapsed
+                        ? 'px-0 justify-center'
+                        : 'px-4 pl-14'
+                    } ${
+                      isOnUpsellHygieneQueue
+                        ? 'bg-indigo-600 text-white'
+                        : 'text-slate-300 hover:bg-slate-800'
+                    }`}
+                    title={isCollapsed ? 'Deal Hygiene (Upsells)' : undefined}
+                  >
+                    {isCollapsed ? (
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                      </svg>
+                    ) : (
+                      <span>Deal Hygiene</span>
+                    )}
+                  </Link>
+                </li>
+              </ul>
+            </div>
           )}
         </div>
 
