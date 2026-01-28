@@ -50,45 +50,160 @@ export async function getNotesByDealId(dealId: string): Promise<HubSpotNote[]> {
   return notes;
 }
 
-export async function getEmailsByDealId(dealId: string): Promise<Array<{ id: string; subject: string; body: string }>> {
+export interface HubSpotEmail {
+  id: string;
+  subject: string;
+  body: string;
+  direction: string | null;
+  timestamp: string | null;
+  fromEmail: string | null;
+}
+
+export async function getEmailsByDealId(dealId: string): Promise<HubSpotEmail[]> {
   const client = getHubSpotClient();
-  const emails: Array<{ id: string; subject: string; body: string }> = [];
+  const emailIds = new Set<string>();
 
   try {
-    // Get associations using v4 API: deals -> emails
-    const associations = await client.crm.associations.v4.basicApi.getPage(
-      'deals',
-      dealId,
-      'emails',
-      undefined,
-      10 // Limit to 10 emails
-    );
+    // Fetch deal→emails and deal→contacts associations in parallel
+    const [dealEmailAssocs, contactAssocs] = await Promise.all([
+      client.crm.associations.v4.basicApi
+        .getPage('deals', dealId, 'emails', undefined, 15)
+        .catch(() => ({ results: [] as { toObjectId: string }[] })),
+      client.crm.associations.v4.basicApi
+        .getPage('deals', dealId, 'contacts', undefined, 50)
+        .catch(() => ({ results: [] as { toObjectId: string }[] })),
+    ]);
 
-    if (associations.results.length === 0) {
-      return emails;
+    // Collect direct deal email IDs
+    for (const a of dealEmailAssocs.results) {
+      emailIds.add(a.toObjectId);
     }
 
-    for (const assoc of associations.results) {
+    // Fetch contact→emails associations in parallel
+    if (contactAssocs.results.length > 0) {
+      const contactEmailResults = await Promise.all(
+        contactAssocs.results.map((c) =>
+          client.crm.associations.v4.basicApi
+            .getPage('contacts', c.toObjectId, 'emails', undefined, 15)
+            .catch(() => ({ results: [] as { toObjectId: string }[] }))
+        )
+      );
+      for (const result of contactEmailResults) {
+        for (const a of result.results) {
+          emailIds.add(a.toObjectId);
+        }
+      }
+    }
+
+    if (emailIds.size === 0) return [];
+
+    // Fetch email details (limit to 15 most relevant)
+    const idsToFetch = Array.from(emailIds).slice(0, 15);
+    const emails: HubSpotEmail[] = [];
+
+    for (const eId of idsToFetch) {
       try {
         const email = await client.crm.objects.emails.basicApi.getById(
-          assoc.toObjectId,
-          ['hs_email_subject', 'hs_email_text']
+          eId,
+          ['hs_email_subject', 'hs_email_text', 'hs_email_direction', 'hs_timestamp', 'hs_email_from_email']
         );
 
         emails.push({
           id: email.id,
           subject: email.properties.hs_email_subject || '',
           body: email.properties.hs_email_text || '',
+          direction: email.properties.hs_email_direction || null,
+          timestamp: email.properties.hs_timestamp || null,
+          fromEmail: email.properties.hs_email_from_email || null,
         });
       } catch {
         // Skip emails that can't be fetched
       }
     }
+
+    // Sort by timestamp descending (newest first)
+    emails.sort((a, b) => {
+      const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+      const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+      return timeB - timeA;
+    });
+
+    return emails;
   } catch {
     // No email associations
+    return [];
+  }
+}
+
+// ===== HubSpot Call Types =====
+
+export interface HubSpotCall {
+  id: string;
+  properties: {
+    hs_call_title: string | null;
+    hs_call_body: string | null;
+    hs_timestamp: string | null;
+    hs_call_duration: string | null;
+    hs_call_disposition: string | null;
+  };
+}
+
+/**
+ * Fetch calls associated with a deal
+ */
+export async function getCallsByDealId(dealId: string): Promise<HubSpotCall[]> {
+  const client = getHubSpotClient();
+  const calls: HubSpotCall[] = [];
+
+  try {
+    // Get associations using v4 API: deals -> calls
+    const associations = await client.crm.associations.v4.basicApi.getPage(
+      'deals',
+      dealId,
+      'calls',
+      undefined,
+      15 // Limit to 15 calls
+    );
+
+    if (associations.results.length === 0) {
+      return calls;
+    }
+
+    const callIds = associations.results.map((a) => a.toObjectId);
+
+    for (const callId of callIds) {
+      try {
+        const call = await client.crm.objects.calls.basicApi.getById(
+          callId,
+          ['hs_call_title', 'hs_call_body', 'hs_timestamp', 'hs_call_duration', 'hs_call_disposition']
+        );
+
+        calls.push({
+          id: call.id,
+          properties: {
+            hs_call_title: call.properties.hs_call_title || null,
+            hs_call_body: call.properties.hs_call_body || null,
+            hs_timestamp: call.properties.hs_timestamp || null,
+            hs_call_duration: call.properties.hs_call_duration || null,
+            hs_call_disposition: call.properties.hs_call_disposition || null,
+          },
+        });
+      } catch (error) {
+        console.warn(`Failed to fetch call ${callId}:`, error);
+      }
+    }
+
+    // Sort by timestamp descending (newest first)
+    calls.sort((a, b) => {
+      const timeA = a.properties.hs_timestamp ? new Date(a.properties.hs_timestamp).getTime() : 0;
+      const timeB = b.properties.hs_timestamp ? new Date(b.properties.hs_timestamp).getTime() : 0;
+      return timeB - timeA;
+    });
+  } catch (error) {
+    console.warn(`Failed to get call associations for deal ${dealId}:`, error);
   }
 
-  return emails;
+  return calls;
 }
 
 /**

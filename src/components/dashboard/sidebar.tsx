@@ -150,6 +150,7 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
   const isOnHygieneQueue = pathname === '/dashboard/queues/hygiene';
   const isOnNextStepQueue = pathname === '/dashboard/queues/next-step';
   const isOnOverdueTasksQueue = pathname === '/dashboard/queues/overdue-tasks';
+  const isOnStalledDealsQueue = pathname === '/dashboard/queues/stalled-deals';
 
   return (
     <aside className={`fixed left-0 top-0 h-screen bg-slate-900 text-slate-100 flex flex-col transition-all duration-300 ${isCollapsed ? 'w-16' : 'w-64'}`}>
@@ -329,6 +330,29 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
                     </svg>
                   ) : (
                     <span>Overdue Tasks</span>
+                  )}
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/dashboard/queues/stalled-deals"
+                  className={`flex items-center py-2 text-sm transition-colors ${
+                    isCollapsed
+                      ? 'px-0 justify-center'
+                      : 'px-4 pl-11'
+                  } ${
+                    isOnStalledDealsQueue
+                      ? 'bg-indigo-600 text-white'
+                      : 'text-slate-300 hover:bg-slate-800'
+                  }`}
+                  title={isCollapsed ? 'Stalled Deals' : undefined}
+                >
+                  {isCollapsed ? (
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  ) : (
+                    <span>Stalled Deals</span>
                   )}
                 </Link>
               </li>

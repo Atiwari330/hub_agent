@@ -297,6 +297,141 @@ export function checkOverdueTasks(tasks: TaskCheckInput[]): OverdueTasksCheckRes
   };
 }
 
+// ===== STALLED DEALS QUEUE TYPES =====
+
+export const STALLED_THRESHOLDS = {
+  WATCH: 7,      // > 7 business days without activity
+  WARNING: 10,   // > 10 business days without activity
+  CRITICAL: 14,  // > 14 business days without activity
+  MIN_AGE: 7,    // Deal must be at least 7 business days old
+  MIN_INACTIVE: 7, // Minimum inactive days before a deal is considered stalled
+} as const;
+
+export type StalledThresholds = {
+  WATCH: number;
+  WARNING: number;
+  CRITICAL: number;
+  MIN_AGE: number;
+  MIN_INACTIVE: number;
+};
+
+export type StalledSeverity = 'critical' | 'warning' | 'watch';
+
+export interface StalledDealCheckInput {
+  last_activity_date: string | null;
+  next_activity_date: string | null;
+  hubspot_created_at: string | null;
+  close_date: string | null;
+  next_step: string | null;
+  next_step_due_date: string | null;
+  next_step_status: string | null;
+  amount: number | null;
+}
+
+export interface StalledAggravatingFactors {
+  closeDateInPast: boolean;
+  closeDateWithin14Days: boolean;
+  noNextStep: boolean;
+  nextStepOverdue: boolean;
+}
+
+export interface StalledDealCheckResult {
+  isStalled: boolean;
+  severity: StalledSeverity | null;
+  daysSinceActivity: number;
+  aggravatingFactors: StalledAggravatingFactors;
+}
+
+/**
+ * Check if a deal is stalled (no recent activity and no future activity scheduled).
+ *
+ * A deal is stalled if ALL of:
+ * 1. last_activity_date > MIN_INACTIVE business days ago
+ * 2. next_activity_date is NULL or in the past
+ * 3. Deal is older than MIN_AGE business days
+ *
+ * Accepts optional threshold overrides; defaults to STALLED_THRESHOLDS.
+ */
+export function checkDealStaleness(
+  deal: StalledDealCheckInput,
+  thresholds?: Partial<StalledThresholds>,
+): StalledDealCheckResult {
+  const t: StalledThresholds = { ...STALLED_THRESHOLDS, ...thresholds };
+  const minInactive = t.MIN_INACTIVE ?? t.WATCH; // fallback for callers not setting MIN_INACTIVE
+
+  const notStalled: StalledDealCheckResult = {
+    isStalled: false,
+    severity: null,
+    daysSinceActivity: 0,
+    aggravatingFactors: { closeDateInPast: false, closeDateWithin14Days: false, noNextStep: false, nextStepOverdue: false },
+  };
+
+  // Must be old enough (not brand new)
+  if (!deal.hubspot_created_at) return notStalled;
+  const dealAge = getBusinessDaysSinceDate(deal.hubspot_created_at);
+  if (dealAge <= t.MIN_AGE) return notStalled;
+
+  // Must have a last_activity_date and it must be stale
+  if (!deal.last_activity_date) {
+    // No activity date at all - treat as stalled since creation
+    // Use deal age as days since activity
+    const daysSinceActivity = dealAge;
+    if (daysSinceActivity <= minInactive) return notStalled;
+
+    return buildStalledResult(deal, daysSinceActivity, t);
+  }
+
+  const daysSinceActivity = getBusinessDaysSinceDate(deal.last_activity_date);
+  if (daysSinceActivity <= minInactive) return notStalled;
+
+  // Must have no future activity scheduled
+  if (deal.next_activity_date && !isDateInPast(deal.next_activity_date)) {
+    return notStalled;
+  }
+
+  return buildStalledResult(deal, daysSinceActivity, t);
+}
+
+function buildStalledResult(
+  deal: StalledDealCheckInput,
+  daysSinceActivity: number,
+  t: StalledThresholds,
+): StalledDealCheckResult {
+  let severity: StalledSeverity;
+  if (daysSinceActivity > t.CRITICAL) {
+    severity = 'critical';
+  } else if (daysSinceActivity > t.WARNING) {
+    severity = 'warning';
+  } else {
+    severity = 'watch';
+  }
+
+  // Calculate aggravating factors (display only)
+  const closeDateInPast = deal.close_date ? isDateInPast(deal.close_date) : false;
+  const closeDateWithin14Days = deal.close_date && !closeDateInPast
+    ? getDaysUntil(deal.close_date) <= 14
+    : false;
+  const noNextStep = !deal.next_step || deal.next_step.trim().length === 0;
+  const nextStepOverdue = !!(
+    deal.next_step_due_date &&
+    deal.next_step_status &&
+    (deal.next_step_status === 'date_found' || deal.next_step_status === 'date_inferred') &&
+    isDateInPast(deal.next_step_due_date)
+  );
+
+  return {
+    isStalled: true,
+    severity,
+    daysSinceActivity,
+    aggravatingFactors: {
+      closeDateInPast,
+      closeDateWithin14Days,
+      noNextStep,
+      nextStepOverdue,
+    },
+  };
+}
+
 // ===== NEXT STEP QUEUE DETECTION =====
 
 /**
