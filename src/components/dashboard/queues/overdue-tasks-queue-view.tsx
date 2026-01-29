@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { formatCurrency } from '@/lib/utils/currency';
 import { getHubSpotDealUrl } from '@/lib/hubspot/urls';
+import { getCurrentQuarter, getQuarterInfo } from '@/lib/utils/quarter';
 
 interface OverdueTaskInfo {
   taskId: string;
@@ -24,6 +25,7 @@ interface OverdueTasksQueueDeal {
   hubspotOwnerId: string;
   dealName: string;
   amount: number | null;
+  closeDate: string | null;
   stageName: string;
   ownerName: string;
   ownerId: string;
@@ -43,6 +45,25 @@ interface OverdueTasksQueueResponse {
 
 type SortColumn = 'dealName' | 'ownerName' | 'amount' | 'stageName' | 'overdueTaskCount' | 'oldestOverdueDays';
 type SortDirection = 'asc' | 'desc';
+type QuarterFilter = 'q1' | 'q2' | 'q3' | 'q4' | 'all';
+
+// ===== Quarter Filter Helpers =====
+
+function getQuarterOptions(): { value: QuarterFilter; label: string; year: number }[] {
+  const currentQ = getCurrentQuarter();
+  return [
+    { value: 'q1', label: `Q1 ${currentQ.year}`, year: currentQ.year },
+    { value: 'q2', label: `Q2 ${currentQ.year}`, year: currentQ.year },
+    { value: 'q3', label: `Q3 ${currentQ.year}`, year: currentQ.year },
+    { value: 'q4', label: `Q4 ${currentQ.year}`, year: currentQ.year },
+    { value: 'all', label: 'All Quarters', year: currentQ.year },
+  ];
+}
+
+function getCurrentQuarterFilter(): QuarterFilter {
+  const currentQ = getCurrentQuarter();
+  return `q${currentQ.quarter}` as QuarterFilter;
+}
 
 // Stage options for multi-select filter
 const STAGE_OPTIONS = [
@@ -90,6 +111,11 @@ export function OverdueTasksQueueView() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Quarter filter
+  const [quarterFilter, setQuarterFilter] = useState<QuarterFilter>(getCurrentQuarterFilter());
+  const quarterOptions = useMemo(() => getQuarterOptions(), []);
+  const currentYear = quarterOptions[0]?.year || new Date().getFullYear();
+
   // Filters
   const [aeFilter, setAeFilter] = useState<string>('all');
   const [selectedStages, setSelectedStages] = useState<Set<string>>(new Set(STAGE_OPTIONS.map((s) => s.id)));
@@ -125,7 +151,17 @@ export function OverdueTasksQueueView() {
   const filteredDeals = useMemo(() => {
     if (!data) return [];
 
+    // Step 0: Filter by quarter (close date scope)
     let result = data.deals;
+    if (quarterFilter !== 'all') {
+      const quarterNum = parseInt(quarterFilter.replace('q', ''), 10);
+      const qi = getQuarterInfo(currentYear, quarterNum);
+      result = result.filter((deal) => {
+        if (!deal.closeDate) return false;
+        const closeTime = new Date(deal.closeDate).getTime();
+        return closeTime >= qi.startDate.getTime() && closeTime <= qi.endDate.getTime();
+      });
+    }
 
     // Apply AE filter
     if (aeFilter !== 'all') {
@@ -159,7 +195,7 @@ export function OverdueTasksQueueView() {
     });
 
     return result;
-  }, [data, aeFilter, sortColumn, sortDirection]);
+  }, [data, quarterFilter, currentYear, aeFilter, sortColumn, sortDirection]);
 
   const fetchData = useCallback(async () => {
     try {
@@ -395,6 +431,20 @@ export function OverdueTasksQueueView() {
           )}
         </div>
 
+        {/* Quarter Filter */}
+        <div className="flex items-center gap-2">
+          <label className="text-sm text-gray-600">Quarter:</label>
+          <select
+            value={quarterFilter}
+            onChange={(e) => setQuarterFilter(e.target.value as QuarterFilter)}
+            className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          >
+            {quarterOptions.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+        </div>
+
         <div className="flex items-center gap-2">
           <label className="text-sm text-gray-600">Severity:</label>
           <select
@@ -409,11 +459,12 @@ export function OverdueTasksQueueView() {
           </select>
         </div>
 
-        {(aeFilter !== 'all' || selectedStages.size < STAGE_OPTIONS.length || severityFilter !== 'all') && (
+        {(aeFilter !== 'all' || selectedStages.size < STAGE_OPTIONS.length || quarterFilter !== getCurrentQuarterFilter() || severityFilter !== 'all') && (
           <button
             onClick={() => {
               setAeFilter('all');
               setSelectedStages(new Set(STAGE_OPTIONS.map((s) => s.id)));
+              setQuarterFilter(getCurrentQuarterFilter());
               setSeverityFilter('all');
             }}
             className="text-sm text-gray-500 hover:text-gray-700"
