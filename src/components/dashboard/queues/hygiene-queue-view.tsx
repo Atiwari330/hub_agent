@@ -6,7 +6,6 @@ import { BaseHygieneQueueView } from './base-hygiene-queue-view';
 const SALES_MISSING_FIELD_COLORS: Record<string, string> = {
   'Lead Source': 'bg-orange-100 text-orange-700',
   'Products': 'bg-purple-100 text-purple-700',
-  'Collaborator': 'bg-cyan-100 text-cyan-700',
   'Amount': 'bg-red-100 text-red-700',
   'Close Date': 'bg-pink-100 text-pink-700',
   'Substage': 'bg-slate-100 text-slate-700',

@@ -7,14 +7,13 @@ import { getBusinessDaysSinceDate, getDaysUntil, isDateInPast } from './business
 
 // ===== HYGIENE QUEUE CONFIGURATION =====
 
-// Sales Pipeline required fields (6 fields)
+// Sales Pipeline required fields (5 fields)
 export const HYGIENE_REQUIRED_FIELDS = [
   { field: 'deal_substage', label: 'Substage' },
   { field: 'close_date', label: 'Close Date' },
   { field: 'amount', label: 'Amount' },
   { field: 'lead_source', label: 'Lead Source' },
   { field: 'products', label: 'Products' },
-  { field: 'deal_collaborator', label: 'Collaborator' },
 ] as const;
 
 // Upsell Pipeline required fields (3 fields)
