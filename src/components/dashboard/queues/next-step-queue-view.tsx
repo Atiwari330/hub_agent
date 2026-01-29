@@ -96,6 +96,17 @@ export function NextStepQueueView() {
   // Analysis state
   const [analyzingDeals, setAnalyzingDeals] = useState<Set<string>>(new Set());
 
+  // Batch analysis state
+  const [isBatchAnalyzing, setIsBatchAnalyzing] = useState(false);
+  const [batchProgress, setBatchProgress] = useState<{
+    current: number;
+    total: number;
+    currentDealName: string;
+  } | null>(null);
+  const [batchResults, setBatchResults] = useState<Map<string, { success: boolean; error?: string }>>(
+    new Map()
+  );
+
   // Extract unique AEs for filter dropdown
   const uniqueAEs = useMemo(() => {
     if (!data) return [];
@@ -274,6 +285,113 @@ export function NextStepQueueView() {
     }
   };
 
+  // Batch analyze selected deals
+  const handleBatchAnalyze = async () => {
+    if (selectedDeals.size === 0 || isBatchAnalyzing) return;
+
+    const dealIds = Array.from(selectedDeals);
+    setIsBatchAnalyzing(true);
+    setBatchProgress({ current: 0, total: dealIds.length, currentDealName: '' });
+    setBatchResults(new Map());
+
+    try {
+      const response = await fetch('/api/queues/batch-analyze-next-step', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dealIds }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to start batch analysis');
+      }
+
+      if (!response.body) {
+        throw new Error('No response body');
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const jsonStr = line.slice(6);
+          if (!jsonStr) continue;
+
+          try {
+            const event = JSON.parse(jsonStr);
+
+            if (event.type === 'progress') {
+              setBatchProgress({
+                current: event.index,
+                total: event.total,
+                currentDealName: event.dealName,
+              });
+
+              setBatchResults((prev) => {
+                const next = new Map(prev);
+                next.set(event.dealId, {
+                  success: event.status === 'success',
+                  error: event.error,
+                });
+                return next;
+              });
+
+              // Update the deal in the local data if analysis was successful
+              if (event.status === 'success' && event.analysis) {
+                setData((prev) => {
+                  if (!prev) return prev;
+                  return {
+                    ...prev,
+                    deals: prev.deals.map((deal) => {
+                      if (deal.id === event.dealId) {
+                        return {
+                          ...deal,
+                          status: event.analysis.status === 'date_found' || event.analysis.status === 'date_inferred'
+                            ? 'compliant'
+                            : deal.status,
+                          analysis: {
+                            ...deal.analysis,
+                            lastAnalyzedAt: new Date().toISOString(),
+                            needsAnalysis: false,
+                            analysisStatus: event.analysis.status,
+                          },
+                        };
+                      }
+                      return deal;
+                    }),
+                  };
+                });
+              }
+            } else if (event.type === 'done') {
+              // Batch complete - clear selection
+              setSelectedDeals(new Set());
+            }
+          } catch {
+            console.error('Failed to parse SSE event:', jsonStr);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Batch analysis error:', err);
+      alert(err instanceof Error ? err.message : 'Batch analysis failed');
+    } finally {
+      setIsBatchAnalyzing(false);
+      setBatchProgress(null);
+      // Refresh data to get updated counts
+      fetchData();
+    }
+  };
+
   // Format dates
   const formatTaskDate = (dateStr: string) => {
     const date = new Date(dateStr);
@@ -419,9 +537,39 @@ export function NextStepQueueView() {
           </button>
         )}
 
-        <div className="ml-auto text-sm text-gray-500">
-          {filteredDeals.length} deal{filteredDeals.length !== 1 ? 's' : ''}
-          {selectedDeals.size > 0 && ` (${selectedDeals.size} selected)`}
+        <div className="ml-auto flex items-center gap-3">
+          <span className="text-sm text-gray-500">
+            {filteredDeals.length} deal{filteredDeals.length !== 1 ? 's' : ''}
+            {selectedDeals.size > 0 && ` (${selectedDeals.size} selected)`}
+          </span>
+
+          {/* Run Analysis button */}
+          {selectedDeals.size > 0 && (
+            <button
+              onClick={handleBatchAnalyze}
+              disabled={isBatchAnalyzing}
+              className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              {isBatchAnalyzing ? (
+                <>
+                  <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  <span>
+                    {batchProgress ? `${batchProgress.current}/${batchProgress.total}` : 'Starting...'}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                  </svg>
+                  <span>Run Analysis</span>
+                </>
+              )}
+            </button>
+          )}
         </div>
       </div>
 
@@ -470,6 +618,32 @@ export function NextStepQueueView() {
         </div>
       )}
 
+      {/* Batch Analysis Progress Banner */}
+      {isBatchAnalyzing && batchProgress && (
+        <div className="mb-4 bg-indigo-50 border border-indigo-200 rounded-lg p-4">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <svg className="animate-spin w-5 h-5 text-indigo-600" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              <span className="text-sm font-medium text-indigo-900">
+                Analyzing deal {batchProgress.current} of {batchProgress.total}
+              </span>
+            </div>
+            <span className="text-sm text-indigo-700 truncate max-w-[300px]" title={batchProgress.currentDealName}>
+              {batchProgress.currentDealName}
+            </span>
+          </div>
+          <div className="w-full bg-indigo-200 rounded-full h-2">
+            <div
+              className="bg-indigo-600 h-2 rounded-full transition-all duration-300"
+              style={{ width: `${(batchProgress.current / batchProgress.total) * 100}%` }}
+            />
+          </div>
+        </div>
+      )}
+
       {/* Deals Table */}
       {!loading && !error && filteredDeals.length > 0 && (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -482,7 +656,8 @@ export function NextStepQueueView() {
                       type="checkbox"
                       checked={selectedDeals.size === filteredDeals.length && filteredDeals.length > 0}
                       onChange={handleSelectAll}
-                      className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
+                      disabled={isBatchAnalyzing}
+                      className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500 disabled:opacity-50"
                     />
                   </th>
                   <th
@@ -539,20 +714,45 @@ export function NextStepQueueView() {
                   const hasTask = deal.existingTask !== null;
                   const statusBadge = getStatusBadge(deal.status);
 
+                  // Batch analysis state for this row
+                  const batchResult = batchResults.get(deal.id);
+                  const isBeingBatchAnalyzed = isBatchAnalyzing && selectedDeals.has(deal.id) && !batchResult;
+                  const batchAnalysisComplete = batchResult !== undefined;
+
                   return (
                     <tr
                       key={deal.id}
                       className={`hover:bg-slate-50 transition-colors ${
                         selectedDeals.has(deal.id) ? 'bg-indigo-50' : ''
-                      } ${deal.status === 'compliant' ? 'bg-green-50/30' : ''}`}
+                      } ${deal.status === 'compliant' ? 'bg-green-50/30' : ''} ${
+                        batchAnalysisComplete && batchResult.success ? 'bg-green-50' : ''
+                      } ${batchAnalysisComplete && !batchResult.success ? 'bg-red-50' : ''}`}
                     >
                       <td className="px-4 py-3">
-                        <input
-                          type="checkbox"
-                          checked={selectedDeals.has(deal.id)}
-                          onChange={() => handleSelectDeal(deal.id)}
-                          className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
-                        />
+                        <div className="flex items-center justify-center">
+                          {isBeingBatchAnalyzed ? (
+                            <svg className="animate-spin w-4 h-4 text-indigo-600" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                            </svg>
+                          ) : batchAnalysisComplete && batchResult.success ? (
+                            <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                          ) : batchAnalysisComplete && !batchResult.success ? (
+                            <svg className="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          ) : (
+                            <input
+                              type="checkbox"
+                              checked={selectedDeals.has(deal.id)}
+                              onChange={() => handleSelectDeal(deal.id)}
+                              disabled={isBatchAnalyzing}
+                              className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500 disabled:opacity-50"
+                            />
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-3">
                         <a
