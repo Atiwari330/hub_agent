@@ -152,6 +152,7 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
   const isOnNextStepQueue = pathname === '/dashboard/queues/next-step';
   const isOnOverdueTasksQueue = pathname === '/dashboard/queues/overdue-tasks';
   const isOnStalledDealsQueue = pathname === '/dashboard/queues/stalled-deals';
+  const isOnPplSequenceQueue = pathname === '/dashboard/queues/ppl-sequence';
   // Upsell Pipeline queues
   const isOnUpsellHygieneQueue = pathname === '/dashboard/queues/upsell-hygiene';
   const isOnStalledUpsellsQueue = pathname === '/dashboard/queues/stalled-upsells';
@@ -364,6 +365,29 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
                       </svg>
                     ) : (
                       <span>Stalled Deals</span>
+                    )}
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="/dashboard/queues/ppl-sequence"
+                    className={`flex items-center py-2 text-sm transition-colors ${
+                      isCollapsed
+                        ? 'px-0 justify-center'
+                        : 'px-4 pl-14'
+                    } ${
+                      isOnPplSequenceQueue
+                        ? 'bg-indigo-600 text-white'
+                        : 'text-slate-300 hover:bg-slate-800'
+                    }`}
+                    title={isCollapsed ? 'PPL Sequence' : undefined}
+                  >
+                    {isCollapsed ? (
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                      </svg>
+                    ) : (
+                      <span>PPL Sequence</span>
                     )}
                   </Link>
                 </li>
