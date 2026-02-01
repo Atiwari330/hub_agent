@@ -186,7 +186,7 @@ function ExpandedDealPanel({ deal }: { deal: PplSequenceDeal }) {
                 </p>
               </div>
               <div className="text-xs text-gray-500">
-                <span>Week 1 ends: {formatDate(analysis.week1EndDate.toISOString())}</span>
+                <span>Week 1 ends: {formatDate(analysis.week1EndDate)}</span>
                 {analysis.isInWeek1 && (
                   <span className="ml-2 text-indigo-600 font-medium">(In Progress)</span>
                 )}

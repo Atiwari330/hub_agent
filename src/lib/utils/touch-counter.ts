@@ -25,7 +25,7 @@ export interface Week1TouchAnalysis {
   target: number;
   gap: number;
   status: 'on_track' | 'behind' | 'critical';
-  week1EndDate: Date;
+  week1EndDate: string;
   isInWeek1: boolean;
 }
 
@@ -146,7 +146,7 @@ export function analyzeWeek1Touches(
     target,
     gap: Math.max(0, gap),
     status,
-    week1EndDate,
+    week1EndDate: week1EndDate.toISOString(),
     isInWeek1,
   };
 }
