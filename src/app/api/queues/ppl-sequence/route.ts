@@ -5,6 +5,8 @@ import { getAllPipelines } from '@/lib/hubspot/pipelines';
 import { getBusinessDaysSinceDate } from '@/lib/utils/business-days';
 import { getCallsByDealId, getEmailsByDealId } from '@/lib/hubspot/engagements';
 import { analyzeWeek1Touches, type Week1TouchAnalysis } from '@/lib/utils/touch-counter';
+import { checkApiAuth } from '@/lib/auth/api';
+import { RESOURCES } from '@/lib/auth';
 
 // Active stages (excludes MQL, Closed Won, Closed Lost)
 const ACTIVE_DEAL_STAGES = [
@@ -21,6 +23,7 @@ export interface PplSequenceDeal {
   dealName: string;
   amount: number | null;
   stageName: string;
+  stageId: string;
   ownerName: string;
   ownerId: string;
   closeDate: string | null;
@@ -43,6 +46,10 @@ interface QueueResponse {
 }
 
 export async function GET(request: NextRequest) {
+  // Check authorization
+  const authResult = await checkApiAuth(RESOURCES.QUEUE_PPL_SEQUENCE);
+  if (authResult instanceof NextResponse) return authResult;
+
   const supabase = await createServerSupabaseClient();
 
   const { searchParams } = new URL(request.url);
@@ -160,6 +167,7 @@ export async function GET(request: NextRequest) {
         dealName: deal.deal_name,
         amount: deal.amount,
         stageName: stageMap.get(deal.deal_stage || '') || deal.deal_stage || 'Unknown',
+        stageId: deal.deal_stage || '',
         ownerName: ownerInfo?.name || 'Unknown',
         ownerId: deal.owner_id || '',
         closeDate: deal.close_date,

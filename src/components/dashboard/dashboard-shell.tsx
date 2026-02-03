@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Sidebar } from './sidebar';
+import type { UserWithPermissions } from '@/lib/auth/types';
 
 interface Owner {
   id: string;
@@ -16,6 +17,7 @@ interface DashboardShellProps {
   quarterLabel: string;
   quarterProgress: number;
   children: React.ReactNode;
+  user: UserWithPermissions;
 }
 
 const SIDEBAR_COLLAPSED_KEY = 'sidebar-collapsed';
@@ -26,6 +28,7 @@ export function DashboardShell({
   quarterLabel,
   quarterProgress,
   children,
+  user,
 }: DashboardShellProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
 
@@ -49,6 +52,7 @@ export function DashboardShell({
         quarterLabel={quarterLabel}
         quarterProgress={quarterProgress}
         onCollapsedChange={handleCollapsedChange}
+        user={user}
       />
       <main className={`min-h-screen transition-all duration-300 ${isCollapsed ? 'ml-16' : 'ml-64'}`}>
         {children}

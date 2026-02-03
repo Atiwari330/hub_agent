@@ -2,12 +2,16 @@ import { createServerSupabaseClient } from '@/lib/supabase/client';
 import { DashboardShell } from '@/components/dashboard/dashboard-shell';
 import { getCurrentQuarter, getQuarterProgress } from '@/lib/utils/quarter';
 import { SYNC_CONFIG } from '@/lib/hubspot/sync-config';
+import { requireAuth } from '@/lib/auth';
 
 export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  // Require authentication for all dashboard pages
+  const user = await requireAuth();
+
   const supabase = await createServerSupabaseClient();
 
   // Target AEs to show in sidebar (from centralized sync config)
@@ -41,6 +45,7 @@ export default async function DashboardLayout({
       lastSync={lastSync}
       quarterLabel={quarter.label}
       quarterProgress={progress.percentComplete}
+      user={user}
     >
       {children}
     </DashboardShell>

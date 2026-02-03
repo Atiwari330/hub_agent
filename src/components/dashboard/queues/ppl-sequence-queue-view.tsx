@@ -13,6 +13,7 @@ interface PplSequenceDeal {
   dealName: string;
   amount: number | null;
   stageName: string;
+  stageId: string;
   ownerName: string;
   ownerId: string;
   closeDate: string | null;
@@ -46,6 +47,24 @@ const STATUS_COLORS = {
 };
 
 const TOTAL_COLUMNS = 9; // chevron + 8 data columns
+
+// Stage filter options (map stage IDs to readable names)
+const STAGE_OPTIONS = [
+  { value: 'all', label: 'All Stages' },
+  { value: '17915773', label: 'SQL' },
+  { value: '138092708', label: 'Discovery' },
+  { value: 'baedc188-ba76-4a41-8723-5bb99fe7c5bf', label: 'Demo Scheduled' },
+  { value: '963167283', label: 'Demo Completed' },
+  { value: '59865091', label: 'Proposal' },
+];
+
+// Created date filter options
+const DATE_OPTIONS = [
+  { value: 'all', label: 'All Time' },
+  { value: '7', label: 'Last 7 Days' },
+  { value: '14', label: 'Last 14 Days' },
+  { value: '30', label: 'Last 30 Days' },
+];
 
 // ===== Helpers =====
 
@@ -112,13 +131,13 @@ function TouchProgressBar({ touches, target }: { touches: number; target: number
 
   return (
     <div className="flex items-center gap-2">
-      <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden max-w-[100px]">
+      <div className="flex-1 h-3 bg-gray-200 rounded-full overflow-hidden max-w-[120px]">
         <div
           className={`h-full rounded-full transition-all ${isComplete ? 'bg-emerald-500' : 'bg-amber-500'}`}
           style={{ width: `${percentage}%` }}
         />
       </div>
-      <span className={`text-xs font-medium tabular-nums ${isComplete ? 'text-emerald-600' : 'text-gray-600'}`}>
+      <span className={`text-sm font-semibold tabular-nums ${isComplete ? 'text-emerald-600' : 'text-gray-700'}`}>
         {touches}/{target}
       </span>
     </div>
@@ -239,10 +258,12 @@ export function PplSequenceQueueView() {
   // Filters
   const [aeFilter, setAeFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [stageFilter, setStageFilter] = useState<string>('all');
+  const [dateFilter, setDateFilter] = useState<string>('all');
 
-  // Sorting
-  const [sortColumn, setSortColumn] = useState<SortColumn>('gap');
-  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  // Sorting - default to youngest deals first (Age ascending)
+  const [sortColumn, setSortColumn] = useState<SortColumn>('dealAgeDays');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
 
   // Expandable rows
   const [expandedDealId, setExpandedDealId] = useState<string | null>(null);
@@ -272,6 +293,23 @@ export function PplSequenceQueueView() {
     // Filter by status
     if (statusFilter !== 'all') {
       result = result.filter((d) => getStatusForDeal(d) === statusFilter);
+    }
+
+    // Filter by stage
+    if (stageFilter !== 'all') {
+      result = result.filter((d) => d.stageId === stageFilter);
+    }
+
+    // Filter by created date
+    if (dateFilter !== 'all') {
+      const days = parseInt(dateFilter, 10);
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - days);
+      result = result.filter((d) => {
+        if (!d.hubspotCreatedAt) return false;
+        const createdDate = new Date(d.hubspotCreatedAt);
+        return createdDate >= cutoffDate;
+      });
     }
 
     // Sort
@@ -307,7 +345,7 @@ export function PplSequenceQueueView() {
     });
 
     return result;
-  }, [allDeals, aeFilter, statusFilter, sortColumn, sortDirection]);
+  }, [allDeals, aeFilter, statusFilter, stageFilter, dateFilter, sortColumn, sortDirection]);
 
   // Fetch data
   const fetchData = useCallback(async () => {
@@ -345,11 +383,13 @@ export function PplSequenceQueueView() {
     setExpandedDealId((prev) => (prev === dealId ? null : dealId));
   };
 
-  const hasActiveFilters = aeFilter !== 'all' || statusFilter !== 'all';
+  const hasActiveFilters = aeFilter !== 'all' || statusFilter !== 'all' || stageFilter !== 'all' || dateFilter !== 'all';
 
   const clearFilters = () => {
     setAeFilter('all');
     setStatusFilter('all');
+    setStageFilter('all');
+    setDateFilter('all');
   };
 
   return (
@@ -391,6 +431,34 @@ export function PplSequenceQueueView() {
             <option value="on_track">On Track</option>
             <option value="behind">Behind</option>
             <option value="critical">Critical</option>
+          </select>
+        </div>
+
+        {/* Stage Filter */}
+        <div className="flex items-center gap-2">
+          <label className="text-sm text-gray-600">Stage:</label>
+          <select
+            value={stageFilter}
+            onChange={(e) => setStageFilter(e.target.value)}
+            className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          >
+            {STAGE_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Created Date Filter */}
+        <div className="flex items-center gap-2">
+          <label className="text-sm text-gray-600">Created:</label>
+          <select
+            value={dateFilter}
+            onChange={(e) => setDateFilter(e.target.value)}
+            className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          >
+            {DATE_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
           </select>
         </div>
 
@@ -621,6 +689,7 @@ export function PplSequenceQueueView() {
           </div>
         </div>
       )}
+
     </div>
   );
 }

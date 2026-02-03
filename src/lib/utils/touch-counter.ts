@@ -58,7 +58,12 @@ export function countTouchesInRange(
   const emailsInRange = emails.filter((email) => {
     if (!email.timestamp) return false;
     // Only count OUTBOUND emails (sent by AE to prospect)
-    if (email.direction !== 'OUTGOING_EMAIL') return false;
+    // Some HubSpot emails have direction 'EMAIL' instead of 'OUTGOING_EMAIL',
+    // so we also check if the sender is from our company domain
+    const isOutbound =
+      email.direction === 'OUTGOING_EMAIL' ||
+      (email.direction === 'EMAIL' && email.fromEmail?.endsWith('@opusbehavioral.com'));
+    if (!isOutbound) return false;
     const timestamp = new Date(email.timestamp).getTime();
     return timestamp >= startMs && timestamp <= endMs;
   });

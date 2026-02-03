@@ -1,20 +1,5 @@
-// IMPORTANT: This file should NOT be imported by client components
-// because it imports server-only code.
-//
-// For client components, use: import { createClient } from '@/lib/supabase/browser'
-// For server components/API routes, use this file or '@/lib/supabase/server'
-
-import { createBrowserClient, createServerClient } from '@supabase/ssr';
+import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
-
-// Browser client for client components
-// NOTE: Prefer importing from '@/lib/supabase/browser' in client components
-export function createClient() {
-  return createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
-}
 
 // Server client for server components and API routes
 export async function createServerSupabaseClient() {

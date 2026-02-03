@@ -1,7 +1,13 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { streamAgentWithMessages } from '@/lib/ai/agent';
+import { checkApiAuth } from '@/lib/auth/api';
+import { RESOURCES } from '@/lib/auth';
 
 export async function POST(request: NextRequest) {
+  // Check authorization
+  const authResult = await checkApiAuth(RESOURCES.API_AGENT);
+  if (authResult instanceof NextResponse) return authResult;
+
   try {
     const { messages, prompt } = await request.json();
 

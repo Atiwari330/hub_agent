@@ -11,6 +11,7 @@ import { TargetProgress } from '@/components/dashboard/target-progress';
 import { ForecastChart } from '@/components/dashboard/forecast-chart';
 import { WeeklyPipelineChart } from '@/components/dashboard/weekly-pipeline-chart';
 import { DealsTable } from '@/components/dashboard/deals-table';
+import { requirePermission, RESOURCES } from '@/lib/auth';
 
 interface PageProps {
   params: Promise<{ ownerId: string }>;
@@ -22,6 +23,8 @@ const CLOSED_LOST_PATTERNS = ['closedlost', 'closed lost', 'closed-lost'];
 const EXCLUDED_FROM_PIPELINE = ['mql', 'disqualified', 'qualified'];
 
 export default async function AEDetailPage({ params }: PageProps) {
+  await requirePermission(RESOURCES.AE_DETAIL);
+
   const { ownerId } = await params;
   const supabase = await createServerSupabaseClient();
 

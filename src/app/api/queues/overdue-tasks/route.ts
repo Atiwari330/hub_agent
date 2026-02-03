@@ -8,6 +8,8 @@ import {
   type TaskCheckInput,
   type OverdueTaskInfo,
 } from '@/lib/utils/queue-detection';
+import { checkApiAuth } from '@/lib/auth/api';
+import { RESOURCES } from '@/lib/auth';
 
 // Active stages (excludes MQL, Closed Won, Closed Lost)
 const ACTIVE_DEAL_STAGES = [
@@ -42,6 +44,10 @@ interface OverdueTasksQueueDeal {
 }
 
 export async function GET(request: NextRequest) {
+  // Check authorization
+  const authResult = await checkApiAuth(RESOURCES.QUEUE_OVERDUE_TASKS);
+  if (authResult instanceof NextResponse) return authResult;
+
   const supabase = await createServerSupabaseClient();
 
   const { searchParams } = new URL(request.url);

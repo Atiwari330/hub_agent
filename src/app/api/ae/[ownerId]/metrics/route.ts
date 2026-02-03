@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/client';
 import { getCurrentQuarter, getQuarterProgress, getQuarterInfo } from '@/lib/utils/quarter';
 import { getAllPipelines } from '@/lib/hubspot/pipelines';
+import { checkApiAuth } from '@/lib/auth/api';
+import { RESOURCES } from '@/lib/auth';
 
 interface RouteParams {
   params: Promise<{ ownerId: string }>;
@@ -15,6 +17,10 @@ const EXCLUDED_FROM_PIPELINE = ['mql', 'disqualified', 'qualified'];
 
 // GET - Get all metrics for an AE
 export async function GET(request: NextRequest, { params }: RouteParams) {
+  // Check authorization
+  const authResult = await checkApiAuth(RESOURCES.AE_DETAIL);
+  if (authResult instanceof NextResponse) return authResult;
+
   try {
     const { ownerId } = await params;
     const supabase = await createServerSupabaseClient();

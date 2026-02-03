@@ -4,6 +4,8 @@ import { UPSELL_PIPELINE_ID, UPSELL_ACTIVE_STAGES } from '@/lib/hubspot/upsell-c
 import { getAllPipelines } from '@/lib/hubspot/pipelines';
 import { checkUpsellDealHygiene } from '@/lib/utils/queue-detection';
 import { getBusinessDaysSinceDate } from '@/lib/utils/business-days';
+import { checkApiAuth } from '@/lib/auth/api';
+import { RESOURCES } from '@/lib/auth';
 
 interface ExistingTaskInfo {
   hubspotTaskId: string;
@@ -29,6 +31,10 @@ interface UpsellHygieneQueueDeal {
 }
 
 export async function GET(request: NextRequest) {
+  // Check authorization
+  const authResult = await checkApiAuth(RESOURCES.QUEUE_UPSELL_HYGIENE);
+  if (authResult instanceof NextResponse) return authResult;
+
   const supabase = await createServerSupabaseClient();
 
   const { searchParams } = new URL(request.url);
