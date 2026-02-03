@@ -26,7 +26,7 @@ function formatDate(date: Date): string {
 }
 
 // Get date range for a period
-function getDateRange(period: CallPeriod, year?: number, quarter?: number): { startDate: Date; endDate: Date; label: string } {
+function getDateRange(period: CallPeriod, year?: number, quarter?: number, customDate?: string): { startDate: Date; endDate: Date; label: string } {
   const now = new Date();
 
   switch (period) {
@@ -36,6 +36,30 @@ function getDateRange(period: CallPeriod, year?: number, quarter?: number): { st
       const end = new Date(now);
       end.setHours(23, 59, 59, 999);
       return { startDate: start, endDate: end, label: 'Today' };
+    }
+
+    case 'yesterday': {
+      const start = new Date(now);
+      start.setDate(start.getDate() - 1);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(start);
+      end.setHours(23, 59, 59, 999);
+      return { startDate: start, endDate: end, label: 'Yesterday' };
+    }
+
+    case 'custom': {
+      if (!customDate) {
+        throw new Error('Custom period requires a customDate parameter');
+      }
+      // Parse the date as local time (add T12:00:00 to avoid timezone issues)
+      const dateObj = new Date(customDate + 'T12:00:00');
+      const start = new Date(dateObj);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(dateObj);
+      end.setHours(23, 59, 59, 999);
+      // Format label as "Jan 15" style
+      const label = dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      return { startDate: start, endDate: end, label };
     }
 
     case 'this_week': {
@@ -101,6 +125,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const period = (searchParams.get('period') || 'today') as CallPeriod;
     const year = searchParams.get('year') ? parseInt(searchParams.get('year')!) : undefined;
     const quarter = searchParams.get('quarter') ? parseInt(searchParams.get('quarter')!) : undefined;
+    const customDate = searchParams.get('customDate'); // YYYY-MM-DD for custom period
 
     // Drill-down params
     const dateFilter = searchParams.get('date'); // YYYY-MM-DD
@@ -108,10 +133,18 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const includeAssociations = searchParams.get('includeAssociations') === 'true';
 
     // Validate period
-    const validPeriods: CallPeriod[] = ['today', 'this_week', 'last_week', 'this_month', 'quarter'];
+    const validPeriods: CallPeriod[] = ['today', 'yesterday', 'this_week', 'last_week', 'this_month', 'quarter', 'custom'];
     if (!validPeriods.includes(period)) {
       return NextResponse.json(
-        { error: 'Invalid period. Must be one of: today, this_week, this_month, quarter' },
+        { error: 'Invalid period. Must be one of: today, yesterday, this_week, last_week, this_month, quarter, custom' },
+        { status: 400 }
+      );
+    }
+
+    // Validate custom period has a date
+    if (period === 'custom' && !customDate) {
+      return NextResponse.json(
+        { error: 'Custom period requires a customDate parameter (YYYY-MM-DD)' },
         { status: 400 }
       );
     }
@@ -128,7 +161,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     // Get date range
-    const { startDate, endDate, label } = getDateRange(period, year, quarter);
+    const { startDate, endDate, label } = getDateRange(period, year, quarter, customDate || undefined);
 
     // Fetch calls from HubSpot
     const calls = await fetchCallsByOwner(owner.hubspot_owner_id, startDate, endDate);

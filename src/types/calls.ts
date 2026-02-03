@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 // Call period types
-export const CallPeriodSchema = z.enum(['today', 'this_week', 'last_week', 'this_month', 'quarter']);
+export const CallPeriodSchema = z.enum(['today', 'yesterday', 'this_week', 'last_week', 'this_month', 'quarter', 'custom']);
 export type CallPeriod = z.infer<typeof CallPeriodSchema>;
 
 // Raw call data from HubSpot

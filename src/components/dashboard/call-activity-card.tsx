@@ -16,6 +16,7 @@ interface DrillDownState {
 
 const PERIOD_OPTIONS: Array<{ value: CallPeriod; label: string }> = [
   { value: 'today', label: 'Today' },
+  { value: 'yesterday', label: 'Yesterday' },
   { value: 'this_week', label: 'This Week' },
   { value: 'last_week', label: 'Last Week' },
   { value: 'this_month', label: 'This Month' },
@@ -37,6 +38,9 @@ export function CallActivityCard({ ownerId }: CallActivityCardProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [period, setPeriod] = useState<CallPeriod>('today');
+  const [customDate, setCustomDate] = useState<string>(''); // YYYY-MM-DD format
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0); // Used to trigger re-fetch
   const [drillDown, setDrillDown] = useState<DrillDownState>({
     isOpen: false,
     filterType: 'date',
@@ -51,12 +55,33 @@ export function CallActivityCard({ ownerId }: CallActivityCardProps) {
     setDrillDown((prev) => ({ ...prev, isOpen: false }));
   };
 
+  const handleRefresh = () => {
+    setRefreshKey((prev) => prev + 1);
+  };
+
+  const handleCustomDateChange = (dateValue: string) => {
+    setCustomDate(dateValue);
+    setPeriod('custom');
+    setShowDatePicker(false);
+  };
+
+  const handlePeriodClick = (newPeriod: CallPeriod) => {
+    setPeriod(newPeriod);
+    if (newPeriod !== 'custom') {
+      setCustomDate('');
+    }
+  };
+
   useEffect(() => {
     async function fetchData() {
       try {
         setLoading(true);
         setError(null);
-        const response = await fetch(`/api/ae/${ownerId}/calls?period=${period}`);
+        let url = `/api/ae/${ownerId}/calls?period=${period}`;
+        if (period === 'custom' && customDate) {
+          url += `&customDate=${customDate}`;
+        }
+        const response = await fetch(url);
         if (!response.ok) {
           throw new Error('Failed to fetch call activity');
         }
@@ -69,8 +94,11 @@ export function CallActivityCard({ ownerId }: CallActivityCardProps) {
       }
     }
 
-    fetchData();
-  }, [ownerId, period]);
+    // Only fetch if we have a valid period (custom requires a date)
+    if (period !== 'custom' || customDate) {
+      fetchData();
+    }
+  }, [ownerId, period, customDate, refreshKey]);
 
   if (loading) {
     return (
@@ -125,12 +153,34 @@ export function CallActivityCard({ ownerId }: CallActivityCardProps) {
     <div className="bg-white rounded-xl border border-gray-200 p-6">
       {/* Header with period selector */}
       <div className="flex items-center justify-between mb-6">
-        <h3 className="text-lg font-semibold text-gray-900">Call Activity</h3>
-        <div className="flex gap-1">
+        <div className="flex items-center gap-2">
+          <h3 className="text-lg font-semibold text-gray-900">Call Activity</h3>
+          <button
+            onClick={handleRefresh}
+            disabled={loading}
+            className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition disabled:opacity-50"
+            title="Refresh call data"
+          >
+            <svg
+              className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+              />
+            </svg>
+          </button>
+        </div>
+        <div className="flex items-center gap-1">
           {PERIOD_OPTIONS.map((option) => (
             <button
               key={option.value}
-              onClick={() => setPeriod(option.value)}
+              onClick={() => handlePeriodClick(option.value)}
               className={`px-3 py-1.5 text-xs font-medium rounded-lg transition ${
                 period === option.value
                   ? 'bg-gray-900 text-white'
@@ -140,6 +190,48 @@ export function CallActivityCard({ ownerId }: CallActivityCardProps) {
               {option.label}
             </button>
           ))}
+          {/* Custom date display when selected */}
+          {period === 'custom' && customDate && (
+            <span className="px-3 py-1.5 text-xs font-medium rounded-lg bg-blue-600 text-white">
+              {new Date(customDate + 'T12:00:00').toLocaleDateString('en-US', {
+                month: 'short',
+                day: 'numeric',
+              })}
+            </span>
+          )}
+          {/* Date picker toggle */}
+          <div className="relative">
+            <button
+              onClick={() => setShowDatePicker(!showDatePicker)}
+              className={`p-1.5 rounded-lg transition ${
+                showDatePicker || period === 'custom'
+                  ? 'bg-blue-100 text-blue-600'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+              title="Pick a specific date"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                />
+              </svg>
+            </button>
+            {/* Date picker dropdown */}
+            {showDatePicker && (
+              <div className="absolute right-0 top-full mt-1 bg-white rounded-lg shadow-lg border border-gray-200 p-2 z-20">
+                <input
+                  type="date"
+                  value={customDate}
+                  onChange={(e) => handleCustomDateChange(e.target.value)}
+                  max={new Date().toISOString().split('T')[0]}
+                  className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
