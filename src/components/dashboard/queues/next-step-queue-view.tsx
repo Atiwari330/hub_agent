@@ -1,9 +1,36 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { formatCurrency } from '@/lib/utils/currency';
 import { getHubSpotDealUrl } from '@/lib/hubspot/urls';
 import { getCurrentQuarter, getQuarterInfo } from '@/lib/utils/quarter';
+
+// Tooltip component for hover information
+function Tooltip({ children, content }: { children: React.ReactNode; content: string }) {
+  const [show, setShow] = useState(false);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const handleMouseEnter = () => {
+    timeoutRef.current = setTimeout(() => setShow(true), 400);
+  };
+
+  const handleMouseLeave = () => {
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    setShow(false);
+  };
+
+  return (
+    <span className="relative inline-block" onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}>
+      {children}
+      {show && (
+        <span className="absolute z-50 px-2 py-1 text-xs text-white bg-gray-900 rounded shadow-lg whitespace-nowrap -top-8 left-1/2 -translate-x-1/2">
+          {content}
+          <span className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900" />
+        </span>
+      )}
+    </span>
+  );
+}
 
 interface ExistingTaskInfo {
   hubspotTaskId: string;
@@ -459,19 +486,24 @@ export function NextStepQueueView() {
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
-  // Get status badge styling
-  const getStatusBadge = (status: string) => {
+  // Get status badge styling - compact version
+  const getStatusBadge = (status: string, daysOverdue?: number | null) => {
     switch (status) {
       case 'overdue':
-        return { bg: 'bg-red-100', text: 'text-red-700', label: 'Overdue' };
+        return {
+          bg: 'bg-red-100',
+          text: 'text-red-700',
+          label: daysOverdue ? `${daysOverdue}d` : 'Late',
+          fullLabel: daysOverdue ? `${daysOverdue} days overdue` : 'Overdue'
+        };
       case 'missing':
-        return { bg: 'bg-amber-100', text: 'text-amber-700', label: 'Missing' };
+        return { bg: 'bg-amber-100', text: 'text-amber-700', label: 'Missing', fullLabel: 'Missing next step' };
       case 'needs_analysis':
-        return { bg: 'bg-blue-100', text: 'text-blue-700', label: 'Needs Analysis' };
+        return { bg: 'bg-blue-100', text: 'text-blue-700', label: 'Analyze', fullLabel: 'Needs analysis' };
       case 'compliant':
-        return { bg: 'bg-green-100', text: 'text-green-700', label: 'Compliant' };
+        return { bg: 'bg-green-100', text: 'text-green-700', label: 'OK', fullLabel: 'Compliant' };
       default:
-        return { bg: 'bg-gray-100', text: 'text-gray-700', label: status };
+        return { bg: 'bg-gray-100', text: 'text-gray-700', label: status, fullLabel: status };
     }
   };
 
@@ -515,60 +547,141 @@ export function NextStepQueueView() {
         </div>
       </div>
 
-      {/* Counts Summary */}
+      {/* Summary Banner - Simplified */}
       {data && (
-        <div className="flex gap-4 mb-4">
-          <div className="flex items-center gap-2 text-sm">
-            <span className="px-2 py-1 bg-red-100 text-red-700 rounded font-medium">{data.counts.overdue}</span>
-            <span className="text-gray-600">Overdue</span>
-          </div>
-          <div className="flex items-center gap-2 text-sm">
-            <span className="px-2 py-1 bg-amber-100 text-amber-700 rounded font-medium">{data.counts.missing}</span>
-            <span className="text-gray-600">Missing</span>
-          </div>
-          {viewMode === 'all' && (
-            <>
-              <div className="flex items-center gap-2 text-sm">
-                <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded font-medium">{data.counts.needsAnalysis}</span>
-                <span className="text-gray-600">Needs Analysis</span>
+        <div className="mb-6">
+          {/* Primary metric: deals needing attention */}
+          {(data.counts.overdue + data.counts.missing) > 0 ? (
+            <div className="flex items-center justify-between">
+              <div className="flex items-baseline gap-2">
+                <span className="text-2xl font-semibold text-gray-900">
+                  {data.counts.overdue + data.counts.missing}
+                </span>
+                <span className="text-gray-600">
+                  deal{(data.counts.overdue + data.counts.missing) !== 1 ? 's' : ''} need attention
+                </span>
+                {/* Subtle breakdown on hover */}
+                <span className="text-sm text-gray-400 ml-2">
+                  ({data.counts.overdue} overdue, {data.counts.missing} missing)
+                </span>
               </div>
-              <div className="flex items-center gap-2 text-sm">
-                <span className="px-2 py-1 bg-green-100 text-green-700 rounded font-medium">{data.counts.compliant}</span>
-                <span className="text-gray-600">Compliant</span>
+              {/* Compliance percentage */}
+              <div className="flex items-center gap-3">
+                <div className="w-32 h-2 bg-gray-200 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-emerald-500 rounded-full transition-all duration-500"
+                    style={{ width: `${data.counts.total > 0 ? ((data.counts.compliant / data.counts.total) * 100) : 0}%` }}
+                  />
+                </div>
+                <span className="text-sm text-gray-500">
+                  {data.counts.total > 0 ? Math.round((data.counts.compliant / data.counts.total) * 100) : 0}% compliant
+                </span>
               </div>
-            </>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 text-emerald-600">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+              <span className="font-medium">All deals have valid next steps</span>
+            </div>
           )}
-          <div className="flex items-center gap-2 text-sm">
-            <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded font-medium">{data.counts.total}</span>
-            <span className="text-gray-600">Total</span>
-          </div>
         </div>
       )}
 
-      {/* Filters Row */}
-      <div className="flex items-center gap-3 mb-4">
-        <div className="flex items-center gap-2">
-          <label className="text-sm text-gray-600">AE:</label>
+      {/* Filters Row - Compact design */}
+      <div className="flex items-center gap-2 mb-4 pb-4 border-b border-gray-100">
+        {/* Active filter pills */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Quarter pills */}
+          {quarterFilter.length > 0 && quarterFilter.map((q) => {
+            const option = quarterOptions.find((opt) => opt.value === q);
+            return (
+              <span
+                key={q}
+                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium bg-indigo-100 text-indigo-700 rounded-full"
+              >
+                {option?.label}
+                <button
+                  onClick={() => setQuarterFilter(quarterFilter.filter((qf) => qf !== q))}
+                  className="hover:text-indigo-900 transition-colors"
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </span>
+            );
+          })}
+
+          {/* Stage pills */}
+          {stageFilter.length > 0 && stageFilter.map((stage) => (
+            <span
+              key={stage}
+              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium bg-gray-100 text-gray-700 rounded-full"
+            >
+              {stage}
+              <button
+                onClick={() => setStageFilter(stageFilter.filter((s) => s !== stage))}
+                className="hover:text-gray-900 transition-colors"
+              >
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </span>
+          ))}
+
+          {/* AE pill */}
+          {aeFilter !== 'all' && (
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium bg-gray-100 text-gray-700 rounded-full">
+              {uniqueAEs.find((ae) => ae.id === aeFilter)?.name}
+              <button
+                onClick={() => setAeFilter('all')}
+                className="hover:text-gray-900 transition-colors"
+              >
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </span>
+          )}
+
+          {/* Status pill */}
+          {statusFilter !== 'all' && (
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium bg-gray-100 text-gray-700 rounded-full capitalize">
+              {statusFilter.replace('_', ' ')}
+              <button
+                onClick={() => setStatusFilter('all')}
+                className="hover:text-gray-900 transition-colors"
+              >
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </span>
+          )}
+        </div>
+
+        {/* Filter dropdowns - more subtle */}
+        <div className="flex items-center gap-2 ml-2">
           <select
             value={aeFilter}
             onChange={(e) => setAeFilter(e.target.value)}
-            className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="text-xs border border-gray-200 rounded-md px-2 py-1.5 bg-white text-gray-600 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
           >
             <option value="all">All AEs</option>
             {uniqueAEs.map((ae) => (
               <option key={ae.id} value={ae.id}>{ae.name}</option>
             ))}
           </select>
-        </div>
 
-        <div className="flex items-center gap-2">
-          <label className="text-sm text-gray-600">Status:</label>
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="text-xs border border-gray-200 rounded-md px-2 py-1.5 bg-white text-gray-600 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
           >
-            <option value="all">All Statuses</option>
+            <option value="all">All Status</option>
             <option value="overdue">Overdue</option>
             <option value="missing">Missing</option>
             {viewMode === 'all' && (
@@ -578,133 +691,135 @@ export function NextStepQueueView() {
               </>
             )}
           </select>
-        </div>
 
-        {/* Stage Filter */}
-        <div className="flex items-center gap-2 relative">
-          <label className="text-sm text-gray-600">Stage:</label>
-          <button
-            onClick={() => setStageDropdownOpen(!stageDropdownOpen)}
-            className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 flex items-center gap-2 min-w-[120px]"
-          >
-            <span>{stageFilter.length === 0 ? 'All Stages' : `${stageFilter.length} Stage${stageFilter.length > 1 ? 's' : ''}`}</span>
-            <svg className={`w-4 h-4 text-gray-400 transition-transform ${stageDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
-          {stageDropdownOpen && (
-            <>
-              <div
-                className="fixed inset-0 z-10"
-                onClick={() => setStageDropdownOpen(false)}
-              />
-              <div className="absolute top-full left-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-20 min-w-[200px] max-h-[300px] overflow-y-auto">
-                {uniqueStages.map((stage) => (
-                  <label
-                    key={stage}
-                    className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer text-sm"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={stageFilter.includes(stage)}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setStageFilter([...stageFilter, stage]);
-                        } else {
-                          setStageFilter(stageFilter.filter((s) => s !== stage));
-                        }
-                      }}
-                      className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
-                    />
-                    <span className="text-gray-700">{stage}</span>
-                  </label>
-                ))}
-                {stageFilter.length > 0 && (
-                  <button
-                    onClick={() => setStageFilter([])}
-                    className="w-full px-3 py-2 text-sm text-indigo-600 hover:bg-indigo-50 border-t border-gray-200 text-left"
-                  >
-                    Clear selection
-                  </button>
-                )}
-              </div>
-            </>
+          {/* Stage Filter Dropdown */}
+          <div className="relative">
+            <button
+              onClick={() => setStageDropdownOpen(!stageDropdownOpen)}
+              className="text-xs border border-gray-200 rounded-md px-2 py-1.5 bg-white text-gray-600 focus:outline-none focus:ring-1 focus:ring-indigo-500 flex items-center gap-1"
+            >
+              <span>Stage</span>
+              <svg className={`w-3 h-3 text-gray-400 transition-transform ${stageDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            {stageDropdownOpen && (
+              <>
+                <div
+                  className="fixed inset-0 z-10"
+                  onClick={() => setStageDropdownOpen(false)}
+                />
+                <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-20 min-w-[200px] max-h-[300px] overflow-y-auto">
+                  {uniqueStages.map((stage) => (
+                    <label
+                      key={stage}
+                      className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer text-xs"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={stageFilter.includes(stage)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setStageFilter([...stageFilter, stage]);
+                          } else {
+                            setStageFilter(stageFilter.filter((s) => s !== stage));
+                          }
+                        }}
+                        className="w-3.5 h-3.5 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
+                      />
+                      <span className="text-gray-700">{stage}</span>
+                    </label>
+                  ))}
+                  {stageFilter.length > 0 && (
+                    <button
+                      onClick={() => setStageFilter([])}
+                      className="w-full px-3 py-2 text-xs text-indigo-600 hover:bg-indigo-50 border-t border-gray-100 text-left"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Quarter Filter Dropdown */}
+          <div className="relative">
+            <button
+              onClick={() => setQuarterDropdownOpen(!quarterDropdownOpen)}
+              className="text-xs border border-gray-200 rounded-md px-2 py-1.5 bg-white text-gray-600 focus:outline-none focus:ring-1 focus:ring-indigo-500 flex items-center gap-1"
+            >
+              <span>Quarter</span>
+              <svg className={`w-3 h-3 text-gray-400 transition-transform ${quarterDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            {quarterDropdownOpen && (
+              <>
+                <div
+                  className="fixed inset-0 z-10"
+                  onClick={() => setQuarterDropdownOpen(false)}
+                />
+                <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-20 min-w-[130px]">
+                  {quarterOptions.map((option) => (
+                    <label
+                      key={option.value}
+                      className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer text-xs"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={quarterFilter.includes(option.value)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setQuarterFilter([...quarterFilter, option.value]);
+                          } else {
+                            setQuarterFilter(quarterFilter.filter((q) => q !== option.value));
+                          }
+                        }}
+                        className="w-3.5 h-3.5 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
+                      />
+                      <span className="text-gray-700">{option.label}</span>
+                    </label>
+                  ))}
+                  {quarterFilter.length > 0 && (
+                    <button
+                      onClick={() => setQuarterFilter([])}
+                      className="w-full px-3 py-2 text-xs text-indigo-600 hover:bg-indigo-50 border-t border-gray-100 text-left"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Reset to defaults */}
+          {(aeFilter !== 'all' ||
+            statusFilter !== 'all' ||
+            JSON.stringify([...stageFilter].sort()) !== JSON.stringify([...DEFAULT_STAGES].sort()) ||
+            JSON.stringify([...quarterFilter].sort()) !== JSON.stringify([...DEFAULT_QUARTERS].sort())) && (
+            <button
+              onClick={() => {
+                setAeFilter('all');
+                setStatusFilter('all');
+                setStageFilter([...DEFAULT_STAGES]);
+                setQuarterFilter([...DEFAULT_QUARTERS]);
+              }}
+              className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              Reset
+            </button>
           )}
         </div>
 
-        {/* Quarter Filter */}
-        <div className="flex items-center gap-2 relative">
-          <label className="text-sm text-gray-600">Quarter:</label>
-          <button
-            onClick={() => setQuarterDropdownOpen(!quarterDropdownOpen)}
-            className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 flex items-center gap-2 min-w-[120px]"
-          >
-            <span>{quarterFilter.length === 0 ? 'All Quarters' : `${quarterFilter.length} Quarter${quarterFilter.length > 1 ? 's' : ''}`}</span>
-            <svg className={`w-4 h-4 text-gray-400 transition-transform ${quarterDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
-          {quarterDropdownOpen && (
-            <>
-              <div
-                className="fixed inset-0 z-10"
-                onClick={() => setQuarterDropdownOpen(false)}
-              />
-              <div className="absolute top-full left-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-20 min-w-[150px]">
-                {quarterOptions.map((option) => (
-                  <label
-                    key={option.value}
-                    className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer text-sm"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={quarterFilter.includes(option.value)}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setQuarterFilter([...quarterFilter, option.value]);
-                        } else {
-                          setQuarterFilter(quarterFilter.filter((q) => q !== option.value));
-                        }
-                      }}
-                      className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
-                    />
-                    <span className="text-gray-700">{option.label}</span>
-                  </label>
-                ))}
-                {quarterFilter.length > 0 && (
-                  <button
-                    onClick={() => setQuarterFilter([])}
-                    className="w-full px-3 py-2 text-sm text-indigo-600 hover:bg-indigo-50 border-t border-gray-200 text-left"
-                  >
-                    Clear selection
-                  </button>
-                )}
-              </div>
-            </>
-          )}
-        </div>
-
-        {(aeFilter !== 'all' ||
-          statusFilter !== 'all' ||
-          JSON.stringify([...stageFilter].sort()) !== JSON.stringify([...DEFAULT_STAGES].sort()) ||
-          JSON.stringify([...quarterFilter].sort()) !== JSON.stringify([...DEFAULT_QUARTERS].sort())) && (
-          <button
-            onClick={() => {
-              setAeFilter('all');
-              setStatusFilter('all');
-              setStageFilter([...DEFAULT_STAGES]);
-              setQuarterFilter([...DEFAULT_QUARTERS]);
-            }}
-            className="text-sm text-gray-500 hover:text-gray-700"
-          >
-            Clear filters
-          </button>
-        )}
-
+        {/* Right side: count and batch action */}
         <div className="ml-auto flex items-center gap-3">
-          <span className="text-sm text-gray-500">
+          <span className="text-xs text-gray-500">
             {filteredDeals.length} deal{filteredDeals.length !== 1 ? 's' : ''}
-            {selectedDeals.size > 0 && ` (${selectedDeals.size} selected)`}
+            {selectedDeals.size > 0 && (
+              <span className="text-indigo-600 font-medium"> · {selectedDeals.size} selected</span>
+            )}
           </span>
 
           {/* Run Analysis button */}
@@ -712,24 +827,24 @@ export function NextStepQueueView() {
             <button
               onClick={handleBatchAnalyze}
               disabled={isBatchAnalyzing}
-              className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              className="px-3 py-1.5 text-xs font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 shadow-sm"
             >
               {isBatchAnalyzing ? (
                 <>
-                  <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                  <svg className="animate-spin w-3.5 h-3.5" fill="none" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                   </svg>
                   <span>
-                    {batchProgress ? `${batchProgress.current}/${batchProgress.total}` : 'Starting...'}
+                    {batchProgress ? `${batchProgress.current}/${batchProgress.total}` : '...'}
                   </span>
                 </>
               ) : (
                 <>
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                   </svg>
-                  <span>Run Analysis</span>
+                  <span>Analyze</span>
                 </>
               )}
             </button>
@@ -810,11 +925,11 @@ export function NextStepQueueView() {
 
       {/* Deals Table */}
       {!loading && !error && filteredDeals.length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="bg-slate-50 border-b border-gray-200">
+                <tr className="bg-gray-50/80 border-b border-gray-200">
                   <th className="w-10 px-4 py-3">
                     <input
                       type="checkbox"
@@ -825,16 +940,16 @@ export function NextStepQueueView() {
                     />
                   </th>
                   <th
-                    className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100 select-none"
+                    className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100/50 select-none transition-colors"
                     onClick={() => handleSort('dealName')}
                   >
                     <div className="flex items-center gap-1">
-                      <span>Deal Name</span>
+                      <span>Deal</span>
                       <SortIcon active={sortColumn === 'dealName'} direction={sortDirection} />
                     </div>
                   </th>
                   <th
-                    className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100 select-none whitespace-nowrap"
+                    className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100/50 select-none whitespace-nowrap transition-colors"
                     onClick={() => handleSort('ownerName')}
                   >
                     <div className="flex items-center gap-1">
@@ -843,31 +958,22 @@ export function NextStepQueueView() {
                     </div>
                   </th>
                   <th
-                    className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100 select-none whitespace-nowrap"
+                    className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100/50 select-none whitespace-nowrap transition-colors"
                     onClick={() => handleSort('amount')}
                   >
                     <div className="flex items-center gap-1">
-                      <span>Amount</span>
+                      <span>Value</span>
                       <SortIcon active={sortColumn === 'amount'} direction={sortDirection} />
                     </div>
                   </th>
-                  <th
-                    className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100 select-none whitespace-nowrap"
-                    onClick={() => handleSort('stageName')}
-                  >
-                    <div className="flex items-center gap-1">
-                      <span>Stage</span>
-                      <SortIcon active={sortColumn === 'stageName'} direction={sortDirection} />
-                    </div>
-                  </th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap w-20">
                     Status
                   </th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">
                     Next Step
                   </th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">
-                    Actions
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap w-28">
+                    Action
                   </th>
                 </tr>
               </thead>
@@ -876,23 +982,32 @@ export function NextStepQueueView() {
                   const isCreating = creatingTasks.has(deal.id);
                   const isAnalyzing = analyzingDeals.has(deal.id);
                   const hasTask = deal.existingTask !== null;
-                  const statusBadge = getStatusBadge(deal.status);
+                  const statusBadge = getStatusBadge(deal.status, deal.daysOverdue);
 
                   // Batch analysis state for this row
                   const batchResult = batchResults.get(deal.id);
                   const isBeingBatchAnalyzed = isBatchAnalyzing && selectedDeals.has(deal.id) && !batchResult;
                   const batchAnalysisComplete = batchResult !== undefined;
 
+                  // High-value deal styling (over $50k gets emphasis)
+                  const isHighValue = (deal.amount || 0) >= 50000;
+
                   return (
                     <tr
                       key={deal.id}
-                      className={`hover:bg-slate-50 transition-colors ${
-                        selectedDeals.has(deal.id) ? 'bg-indigo-50' : ''
-                      } ${deal.status === 'compliant' ? 'bg-green-50/30' : ''} ${
-                        batchAnalysisComplete && batchResult.success ? 'bg-green-50' : ''
-                      } ${batchAnalysisComplete && !batchResult.success ? 'bg-red-50' : ''}`}
+                      className={`group transition-colors ${
+                        selectedDeals.has(deal.id)
+                          ? 'bg-indigo-50/70'
+                          : batchAnalysisComplete && batchResult.success
+                          ? 'bg-emerald-50/50'
+                          : batchAnalysisComplete && !batchResult.success
+                          ? 'bg-red-50/50'
+                          : deal.status === 'compliant'
+                          ? 'bg-white hover:bg-gray-50/50'
+                          : 'bg-white hover:bg-gray-50'
+                      }`}
                     >
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-4">
                         <div className="flex items-center justify-center">
                           {isBeingBatchAnalyzed ? (
                             <svg className="animate-spin w-4 h-4 text-indigo-600" fill="none" viewBox="0 0 24 24">
@@ -900,7 +1015,7 @@ export function NextStepQueueView() {
                               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                             </svg>
                           ) : batchAnalysisComplete && batchResult.success ? (
-                            <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                             </svg>
                           ) : batchAnalysisComplete && !batchResult.success ? (
@@ -918,117 +1033,129 @@ export function NextStepQueueView() {
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-4">
                         <a
                           href={getHubSpotDealUrl(deal.hubspotDealId)}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-sm font-medium text-gray-900 hover:text-indigo-600 transition-colors"
+                          className={`text-sm hover:text-indigo-600 transition-colors ${
+                            isHighValue ? 'font-semibold text-gray-900' : 'font-medium text-gray-800'
+                          }`}
                         >
                           {deal.dealName}
                         </a>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-4">
                         <span className="text-sm text-gray-600">{deal.ownerName}</span>
                       </td>
-                      <td className="px-4 py-3">
-                        <span className="text-sm text-gray-900 whitespace-nowrap">
+                      <td className="px-4 py-4">
+                        <span className={`text-sm whitespace-nowrap ${isHighValue ? 'font-semibold text-gray-900' : 'text-gray-700'}`}>
                           {deal.amount ? formatCurrency(deal.amount) : '-'}
                         </span>
                       </td>
-                      <td className="px-4 py-3">
-                        <span className="text-sm text-gray-600 whitespace-nowrap">{deal.stageName}</span>
+                      <td className="px-4 py-4">
+                        <Tooltip content={statusBadge.fullLabel}>
+                          <span className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full ${statusBadge.bg} ${statusBadge.text}`}>
+                            {statusBadge.label}
+                          </span>
+                        </Tooltip>
                       </td>
-                      <td className="px-4 py-3">
-                        <span className={`px-2 py-1 text-xs font-medium rounded ${statusBadge.bg} ${statusBadge.text}`}>
-                          {statusBadge.label}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 max-w-[300px]">
+                      <td className="px-4 py-4 max-w-[320px]">
                         {deal.nextStep ? (
-                          <div className="flex flex-col gap-0.5">
-                            <span className="text-sm text-gray-700 truncate" title={deal.nextStep}>
+                          <div className="flex flex-col gap-1">
+                            {/* Primary: Next step text (clean, no date prefix) */}
+                            <span className="text-sm text-gray-700 line-clamp-2" title={deal.nextStep}>
                               {deal.nextStep}
                             </span>
-                            {deal.status === 'overdue' && deal.daysOverdue && (
-                              <span className="text-xs text-red-600 font-medium">
-                                {deal.daysOverdue} day{deal.daysOverdue !== 1 ? 's' : ''} overdue (Due: {formatDueDate(deal.nextStepDueDate)})
-                              </span>
+                            {/* Secondary: Due date info (smaller, muted) */}
+                            {deal.nextStepDueDate && (
+                              <Tooltip content={deal.analysis.lastAnalyzedAt ? `Analyzed ${formatTaskDate(deal.analysis.lastAnalyzedAt)}` : 'Not analyzed yet'}>
+                                <span className="text-xs text-gray-400">
+                                  Due {formatDueDate(deal.nextStepDueDate)}
+                                  {deal.status === 'overdue' && deal.daysOverdue && (
+                                    <span className="text-red-500 ml-1">· {deal.daysOverdue}d late</span>
+                                  )}
+                                </span>
+                              </Tooltip>
                             )}
-                            {deal.analysis.lastAnalyzedAt && (
-                              <span className="text-xs text-gray-400">
-                                Analyzed: {formatTaskDate(deal.analysis.lastAnalyzedAt)}
-                                {deal.analysis.needsAnalysis && ' (stale)'}
-                              </span>
-                            )}
-                            {!deal.analysis.lastAnalyzedAt && (
-                              <span className="text-xs text-blue-600">Not analyzed yet</span>
+                            {!deal.nextStepDueDate && !deal.analysis.lastAnalyzedAt && (
+                              <span className="text-xs text-blue-500">Not analyzed</span>
                             )}
                           </div>
                         ) : (
-                          <span className="text-sm text-gray-400 italic">No next step defined</span>
+                          <span className="text-sm text-gray-400 italic">No next step</span>
                         )}
                       </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          {/* Analyze button - show if deal has next step and needs analysis */}
-                          {deal.nextStep && deal.analysis.needsAnalysis && (
+                      <td className="px-4 py-4">
+                        <div className="flex items-center">
+                          {/* Priority 1: Analyze button if needs analysis */}
+                          {deal.nextStep && deal.analysis.needsAnalysis ? (
                             <button
                               onClick={() => handleAnalyze(deal)}
                               disabled={isAnalyzing}
-                              className="px-3 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 rounded hover:bg-blue-100 transition-colors whitespace-nowrap disabled:opacity-50"
+                              className="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors whitespace-nowrap disabled:opacity-50 shadow-sm"
                             >
                               {isAnalyzing ? (
-                                <span className="flex items-center gap-1">
+                                <span className="flex items-center gap-1.5">
                                   <svg className="animate-spin w-3 h-3" fill="none" viewBox="0 0 24 24">
                                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                                   </svg>
-                                  Analyzing...
+                                  <span>...</span>
                                 </span>
                               ) : (
                                 'Analyze'
                               )}
                             </button>
-                          )}
-
-                          {/* Create Task button - show for missing or overdue */}
-                          {(deal.status === 'missing' || deal.status === 'overdue') && (
-                            <>
-                              {hasTask ? (
-                                <div className="flex items-center gap-1">
-                                  <span className="text-xs text-emerald-600">
-                                    Task {formatTaskDate(deal.existingTask!.createdAt)}
-                                  </span>
-                                  <button
-                                    onClick={() => handleCreateTask(deal)}
-                                    disabled={isCreating}
-                                    className="text-xs text-gray-500 hover:text-gray-700 underline"
-                                  >
-                                    Re-create
-                                  </button>
-                                </div>
-                              ) : (
+                          ) : /* Priority 2: Create Task or show checkmark for missing/overdue */
+                          (deal.status === 'missing' || deal.status === 'overdue') ? (
+                            hasTask ? (
+                              /* Task exists: show subtle checkmark, Re-create on hover */
+                              <div className="flex items-center gap-1.5 group/task">
+                                <svg className="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                </svg>
+                                <span className="text-xs text-gray-500">{formatTaskDate(deal.existingTask!.createdAt)}</span>
                                 <button
                                   onClick={() => handleCreateTask(deal)}
                                   disabled={isCreating}
-                                  className="px-3 py-1.5 text-xs font-medium text-emerald-600 bg-emerald-50 rounded hover:bg-emerald-100 transition-colors whitespace-nowrap disabled:opacity-50"
+                                  className="text-xs text-gray-400 hover:text-indigo-600 opacity-0 group-hover/task:opacity-100 transition-opacity"
                                 >
-                                  {isCreating ? 'Creating...' : 'Create Task'}
+                                  {isCreating ? '...' : 'Redo'}
                                 </button>
-                              )}
-                            </>
-                          )}
-
-                          {/* Re-analyze button for analyzed compliant deals */}
-                          {deal.nextStep && !deal.analysis.needsAnalysis && deal.status === 'compliant' && (
+                              </div>
+                            ) : (
+                              /* No task: show Create Task button */
+                              <button
+                                onClick={() => handleCreateTask(deal)}
+                                disabled={isCreating}
+                                className="px-3 py-1.5 text-xs font-medium text-white bg-emerald-600 rounded-md hover:bg-emerald-700 transition-colors whitespace-nowrap disabled:opacity-50 shadow-sm"
+                              >
+                                {isCreating ? (
+                                  <span className="flex items-center gap-1.5">
+                                    <svg className="animate-spin w-3 h-3" fill="none" viewBox="0 0 24 24">
+                                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                    </svg>
+                                    <span>...</span>
+                                  </span>
+                                ) : (
+                                  'Create Task'
+                                )}
+                              </button>
+                            )
+                          ) : /* Priority 3: Compliant deals - subtle re-analyze option */
+                          deal.status === 'compliant' && deal.nextStep ? (
                             <button
                               onClick={() => handleAnalyze(deal)}
                               disabled={isAnalyzing}
-                              className="text-xs text-gray-500 hover:text-gray-700 underline"
+                              className="text-xs text-gray-400 hover:text-indigo-600 transition-colors opacity-0 group-hover:opacity-100"
                             >
-                              {isAnalyzing ? 'Analyzing...' : 'Re-analyze'}
+                              {isAnalyzing ? '...' : 'Re-analyze'}
                             </button>
+                          ) : (
+                            /* Nothing to show */
+                            <span className="text-gray-300">—</span>
                           )}
                         </div>
                       </td>
