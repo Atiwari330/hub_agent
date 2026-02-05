@@ -23,8 +23,19 @@ export const UPSELL_HYGIENE_REQUIRED_FIELDS = [
   { field: 'products', label: 'Products' },
 ] as const;
 
+// CS Hygiene required fields for companies (6 fields)
+export const CS_HYGIENE_REQUIRED_FIELDS = [
+  { field: 'sentiment', label: 'Sentiment' },
+  { field: 'auto_renew', label: 'Renewal' },
+  { field: 'contract_end', label: 'Contract End Date' },
+  { field: 'mrr', label: 'MRR' },
+  { field: 'contract_status', label: 'Contract Status' },
+  { field: 'qbr_notes', label: 'QBR Notes' },
+] as const;
+
 export type HygieneField = typeof HYGIENE_REQUIRED_FIELDS[number]['field'];
 export type UpsellHygieneField = typeof UPSELL_HYGIENE_REQUIRED_FIELDS[number]['field'];
+export type CSHygieneField = typeof CS_HYGIENE_REQUIRED_FIELDS[number]['field'];
 
 // Generic hygiene field configuration type
 export interface HygieneFieldConfig {
@@ -518,4 +529,58 @@ export function checkNextStepCompliance(deal: NextStepCheckInput): NextStepCheck
     daysOverdue: null,
     reason: '',
   };
+}
+
+// ===== CS HYGIENE QUEUE DETECTION =====
+
+export interface CSHygieneCheckInput {
+  id: string;
+  sentiment: string | null;
+  auto_renew: string | null;
+  contract_end: string | null;
+  mrr: number | null;
+  contract_status: string | null;
+  qbr_notes: string | null;
+}
+
+export interface CSHygieneMissingField {
+  field: CSHygieneField;
+  label: string;
+}
+
+export interface CSHygieneCheckResult {
+  isCompliant: boolean;
+  missingFields: CSHygieneMissingField[];
+}
+
+/**
+ * Check if a company has all required CS hygiene fields
+ */
+export function checkCompanyHygiene(company: CSHygieneCheckInput): CSHygieneCheckResult {
+  const missingFields: CSHygieneMissingField[] = [];
+
+  for (const { field, label } of CS_HYGIENE_REQUIRED_FIELDS) {
+    const value = company[field as keyof CSHygieneCheckInput];
+    // Check for null, undefined, empty string, or zero for numeric fields
+    const isEmpty = value === null || value === undefined || value === '';
+    // For MRR, also consider 0 as missing
+    const isEmptyMrr = field === 'mrr' && (isEmpty || value === 0);
+
+    if (isEmpty || isEmptyMrr) {
+      missingFields.push({ field: field as CSHygieneField, label });
+    }
+  }
+
+  return {
+    isCompliant: missingFields.length === 0,
+    missingFields,
+  };
+}
+
+/**
+ * Generate a human-readable reason for why a company is in the CS hygiene queue
+ */
+export function generateCSHygieneReason(missingFields: CSHygieneMissingField[]): string {
+  const fieldList = missingFields.map((f) => f.label).join(', ');
+  return `Missing required fields: ${fieldList}.`;
 }

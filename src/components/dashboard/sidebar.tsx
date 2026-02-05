@@ -168,6 +168,7 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
   const isOnStalledUpsellsQueue = pathname === '/dashboard/queues/stalled-upsells';
   // Customer Success queues
   const isOnAtRiskQueue = pathname === '/dashboard/queues/at-risk';
+  const isOnCSHygieneQueue = pathname === '/dashboard/queues/cs-hygiene';
 
   return (
     <aside className={`fixed left-0 top-0 h-screen bg-slate-900 text-slate-100 flex flex-col transition-all duration-300 ${isCollapsed ? 'w-16' : 'w-64'}`}>
@@ -280,7 +281,8 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
           hasPermission(user, RESOURCES.QUEUE_PPL_SEQUENCE) ||
           hasPermission(user, RESOURCES.QUEUE_UPSELL_HYGIENE) ||
           hasPermission(user, RESOURCES.QUEUE_STALLED_UPSELLS) ||
-          hasPermission(user, RESOURCES.QUEUE_AT_RISK)) && (
+          hasPermission(user, RESOURCES.QUEUE_AT_RISK) ||
+          hasPermission(user, RESOURCES.QUEUE_CS_HYGIENE)) && (
         <div className="mt-4">
           {!isCollapsed && (
             <button
@@ -502,7 +504,8 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
               )}
 
               {/* Customer Success Section */}
-              {hasPermission(user, RESOURCES.QUEUE_AT_RISK) && (
+              {(hasPermission(user, RESOURCES.QUEUE_AT_RISK) ||
+                hasPermission(user, RESOURCES.QUEUE_CS_HYGIENE)) && (
               <>
                 {!isCollapsed && (
                   <div className="px-4 pl-11 py-1.5 mt-2">
@@ -510,6 +513,7 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
                   </div>
                 )}
                 <ul className="space-y-0.5">
+                  {hasPermission(user, RESOURCES.QUEUE_AT_RISK) && (
                   <li>
                     <Link
                       href="/dashboard/queues/at-risk"
@@ -533,6 +537,32 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
                       )}
                     </Link>
                   </li>
+                  )}
+                  {hasPermission(user, RESOURCES.QUEUE_CS_HYGIENE) && (
+                  <li>
+                    <Link
+                      href="/dashboard/queues/cs-hygiene"
+                      className={`flex items-center py-2 text-sm transition-colors ${
+                        isCollapsed
+                          ? 'px-0 justify-center'
+                          : 'px-4 pl-14'
+                      } ${
+                        isOnCSHygieneQueue
+                          ? 'bg-indigo-600 text-white'
+                          : 'text-slate-300 hover:bg-slate-800'
+                      }`}
+                      title={isCollapsed ? 'CS Hygiene' : undefined}
+                    >
+                      {isCollapsed ? (
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                        </svg>
+                      ) : (
+                        <span>CS Hygiene</span>
+                      )}
+                    </Link>
+                  </li>
+                  )}
                 </ul>
               </>
               )}

@@ -21,6 +21,8 @@ const COMPANY_PROPERTIES = [
   'notes_last_updated',                             // → last_activity_date
   'notes_next_activity_date',                       // → next_activity_date
   'hs_latest_meeting_activity',                     // → latest_meeting_date
+  // CS Hygiene Properties
+  'cs__notes',                                      // → qbr_notes
 ];
 
 export interface HubSpotCompany {
@@ -41,6 +43,7 @@ export interface HubSpotCompany {
     last_activity_date: string | null;
     next_activity_date: string | null;
     latest_meeting_date: string | null;
+    qbr_notes: string | null;
   };
   createdAt?: string;
   updatedAt?: string;
@@ -68,6 +71,7 @@ function mapCompanyProperties(
     last_activity_date: rawProps['notes_last_updated'] || null,
     next_activity_date: rawProps['notes_next_activity_date'] || null,
     latest_meeting_date: rawProps['hs_latest_meeting_activity'] || null,
+    qbr_notes: rawProps['cs__notes'] || null,
   };
 }
 

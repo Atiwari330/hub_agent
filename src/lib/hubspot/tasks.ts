@@ -244,3 +244,59 @@ export async function createOverdueTaskReminder(params: CreateOverdueTaskReminde
     success: true,
   };
 }
+
+// Task to Company association type ID (HubSpot-defined)
+const TASK_TO_COMPANY_ASSOCIATION_TYPE_ID = 192;
+
+interface CreateCSHygieneTaskParams {
+  hubspotCompanyId: string;
+  hubspotOwnerId: string;
+  companyName: string;
+  missingFields: string[];
+}
+
+/**
+ * Creates a HubSpot task for CS hygiene and associates it with the company.
+ * The task will be assigned to the company's owner (per user specification).
+ */
+export async function createCSHygieneTask(params: CreateCSHygieneTaskParams): Promise<CreateTaskResult> {
+  const { hubspotCompanyId, hubspotOwnerId, companyName, missingFields } = params;
+  const client = getHubSpotClient();
+
+  // Resolve the actual task assignee (may be overridden)
+  const assigneeOwnerId = await resolveTaskAssignee(hubspotOwnerId);
+
+  // Build task body with missing fields
+  const missingFieldsList = missingFields.map((f) => `• ${f}`).join('\n');
+  const taskBody = `Please update the following missing CS hygiene fields for this account:\n\n${missingFieldsList}\n\nThis helps ensure accurate customer success tracking and reporting.`;
+
+  // Create the task
+  const taskResponse = await client.crm.objects.tasks.basicApi.create({
+    properties: {
+      hs_task_subject: `CS Hygiene: ${companyName}`,
+      hs_task_body: taskBody,
+      hs_task_status: 'NOT_STARTED',
+      hs_task_priority: 'MEDIUM',
+      hs_task_type: 'TODO',
+      hubspot_owner_id: assigneeOwnerId,
+      // Set due date to tomorrow
+      hs_timestamp: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+    },
+    associations: [
+      {
+        to: { id: hubspotCompanyId },
+        types: [
+          {
+            associationCategory: AssociationSpecAssociationCategoryEnum.HubspotDefined,
+            associationTypeId: TASK_TO_COMPANY_ASSOCIATION_TYPE_ID,
+          },
+        ],
+      },
+    ],
+  });
+
+  return {
+    taskId: taskResponse.id,
+    success: true,
+  };
+}

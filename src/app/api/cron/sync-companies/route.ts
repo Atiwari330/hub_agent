@@ -89,6 +89,8 @@ export async function GET(request: Request) {
       last_activity_date: toTimestamp(company.properties.last_activity_date),
       next_activity_date: toTimestamp(company.properties.next_activity_date),
       latest_meeting_date: toTimestamp(company.properties.latest_meeting_date),
+      // CS Hygiene Properties
+      qbr_notes: company.properties.qbr_notes,
       // Metadata
       synced_at: new Date().toISOString(),
     }));
