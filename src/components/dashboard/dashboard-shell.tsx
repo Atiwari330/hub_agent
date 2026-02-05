@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Sidebar } from './Sidebar';
+import { Sidebar } from './sidebar';
 import type { UserWithPermissions } from '@/lib/auth/types';
 
 interface Owner {
