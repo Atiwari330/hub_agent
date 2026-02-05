@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createCSHygieneTask } from '@/lib/hubspot/tasks';
-import { createServerSupabaseClient } from '@/lib/supabase/client';
+import { createServiceClient } from '@/lib/supabase/client';
 
 interface CreateCSTaskRequest {
   companyId: string;
@@ -37,8 +37,8 @@ export async function POST(request: NextRequest) {
       missingFields: body.missingFields,
     });
 
-    // Save record in Supabase for tracking
-    const supabase = await createServerSupabaseClient();
+    // Save record in Supabase for tracking (use service client to bypass RLS)
+    const supabase = createServiceClient();
     const { error: dbError } = await supabase.from('cs_hygiene_tasks').insert({
       company_id: body.companyId,
       hubspot_company_id: body.hubspotCompanyId,

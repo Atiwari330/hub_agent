@@ -20,6 +20,7 @@ interface SidebarProps {
   quarterProgress: number;
   onCollapsedChange?: (collapsed: boolean) => void;
   user: UserWithPermissions;
+  isStale?: boolean;
 }
 
 function ChevronIcon({ open }: { open: boolean }) {
@@ -117,7 +118,7 @@ function LogoutIcon() {
   );
 }
 
-export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCollapsedChange, user }: SidebarProps) {
+export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCollapsedChange, user, isStale }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [aeListOpen, setAeListOpen] = useState(true);
@@ -145,7 +146,11 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
   const handleSync = async () => {
     setSyncing(true);
     try {
-      await fetch('/api/cron/sync-hubspot');
+      // Sync all data sources in parallel
+      await Promise.all([
+        fetch('/api/cron/sync-hubspot'),
+        fetch('/api/cron/sync-companies'),
+      ]);
       router.refresh();
     } catch (err) {
       console.error('Sync failed:', err);
@@ -153,6 +158,14 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
       setSyncing(false);
     }
   };
+
+  // Auto-sync on mount if data is stale
+  useEffect(() => {
+    if (isStale && !syncing) {
+      handleSync();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Run once on mount
 
   // Extract current owner ID from pathname
   const currentOwnerId = pathname?.match(/\/dashboard\/ae\/([^/]+)/)?.[1];

@@ -36,6 +36,10 @@ export default async function DashboardLayout({
   const owners = ownersResult.data || [];
   const lastSync = lastSyncResult.data?.[0]?.completed_at || null;
 
+  // Check if data is stale (>1 hour since last sync)
+  const isStale = !lastSync ||
+    (Date.now() - new Date(lastSync).getTime() > 60 * 60 * 1000);
+
   const quarter = getCurrentQuarter();
   const progress = getQuarterProgress(quarter);
 
@@ -46,6 +50,7 @@ export default async function DashboardLayout({
       quarterLabel={quarter.label}
       quarterProgress={progress.percentComplete}
       user={user}
+      isStale={isStale}
     >
       {children}
     </DashboardShell>

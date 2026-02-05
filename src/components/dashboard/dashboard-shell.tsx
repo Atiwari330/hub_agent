@@ -18,6 +18,7 @@ interface DashboardShellProps {
   quarterProgress: number;
   children: React.ReactNode;
   user: UserWithPermissions;
+  isStale?: boolean;
 }
 
 const SIDEBAR_COLLAPSED_KEY = 'sidebar-collapsed';
@@ -29,6 +30,7 @@ export function DashboardShell({
   quarterProgress,
   children,
   user,
+  isStale,
 }: DashboardShellProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
 
@@ -53,6 +55,7 @@ export function DashboardShell({
         quarterProgress={quarterProgress}
         onCollapsedChange={handleCollapsedChange}
         user={user}
+        isStale={isStale}
       />
       <main className={`min-h-screen transition-all duration-300 ${isCollapsed ? 'ml-16' : 'ml-64'}`}>
         {children}

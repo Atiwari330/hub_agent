@@ -51,6 +51,9 @@ export function CSHygieneQueueView() {
   // Filters
   const [ownerFilter, setOwnerFilter] = useState<string>('all');
   const [missingFieldFilter, setMissingFieldFilter] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<string[]>([]);
+  const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
+  const [statusFilterInitialized, setStatusFilterInitialized] = useState(false);
 
   // Sorting - default to ARR descending
   const [sortColumn, setSortColumn] = useState<SortColumn>('arr');
@@ -61,6 +64,9 @@ export function CSHygieneQueueView() {
 
   // Task creation state
   const [creatingTasks, setCreatingTasks] = useState<Set<string>>(new Set());
+
+  // Success notification state
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
@@ -114,6 +120,27 @@ export function CSHygieneQueueView() {
     return Array.from(fields).sort();
   }, [data]);
 
+  // Extract unique statuses from data
+  const uniqueStatuses = useMemo(() => {
+    if (!data) return [];
+    const statuses = new Set<string>();
+    for (const company of data.companies) {
+      if (company.contractStatus) {
+        statuses.add(company.contractStatus);
+      }
+    }
+    return Array.from(statuses).sort();
+  }, [data]);
+
+  // Initialize status filter with all statuses except "Inactive"
+  useEffect(() => {
+    if (data && uniqueStatuses.length > 0 && !statusFilterInitialized) {
+      const defaultStatuses = uniqueStatuses.filter(s => s !== 'Inactive');
+      setStatusFilter(defaultStatuses);
+      setStatusFilterInitialized(true);
+    }
+  }, [data, uniqueStatuses, statusFilterInitialized]);
+
   // Filtered and sorted companies
   const processedCompanies = useMemo(() => {
     if (!data) return [];
@@ -123,6 +150,13 @@ export function CSHygieneQueueView() {
     // Apply owner filter
     if (ownerFilter !== 'all') {
       result = result.filter((c) => c.hubspotOwnerId === ownerFilter);
+    }
+
+    // Apply status filter (only if initialized and has selections)
+    if (statusFilterInitialized && statusFilter.length > 0) {
+      result = result.filter((c) =>
+        c.contractStatus && statusFilter.includes(c.contractStatus)
+      );
     }
 
     // Sort
@@ -152,7 +186,7 @@ export function CSHygieneQueueView() {
     });
 
     return result;
-  }, [data, ownerFilter, sortColumn, sortDirection]);
+  }, [data, ownerFilter, statusFilter, statusFilterInitialized, sortColumn, sortDirection]);
 
   const handleSort = (column: SortColumn) => {
     if (sortColumn === column) {
@@ -207,6 +241,9 @@ export function CSHygieneQueueView() {
         throw new Error(errorData.error || 'Failed to create task');
       }
 
+      // Show success message
+      setSuccessMessage(`Task created for ${company.name || 'company'}`);
+
       if (!skipRefresh) {
         await fetchData();
       }
@@ -231,15 +268,40 @@ export function CSHygieneQueueView() {
       await handleCreateTask(company, true);
     }
 
+    // Show success message for bulk creation
+    if (companiesToProcess.length > 0) {
+      setSuccessMessage(`Tasks created for ${companiesToProcess.length} ${companiesToProcess.length === 1 ? 'company' : 'companies'}`);
+    }
+
     await fetchData();
     setSelectedCompanies(new Set());
   };
 
-  const hasActiveFilters = ownerFilter !== 'all' || missingFieldFilter !== 'all';
+  // Auto-dismiss success message after 4 seconds
+  useEffect(() => {
+    if (successMessage) {
+      const timer = setTimeout(() => setSuccessMessage(null), 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [successMessage]);
+
+  // Check if status filter differs from default (all except Inactive)
+  const defaultStatuses = useMemo(() =>
+    uniqueStatuses.filter(s => s !== 'Inactive'),
+    [uniqueStatuses]
+  );
+
+  const statusFilterDiffersFromDefault = statusFilterInitialized && (
+    statusFilter.length !== defaultStatuses.length ||
+    !statusFilter.every(s => defaultStatuses.includes(s))
+  );
+
+  const hasActiveFilters = ownerFilter !== 'all' || missingFieldFilter !== 'all' || statusFilterDiffersFromDefault;
 
   const clearFilters = () => {
     setOwnerFilter('all');
     setMissingFieldFilter('all');
+    setStatusFilter(defaultStatuses);
   };
 
   return (
@@ -275,6 +337,24 @@ export function CSHygieneQueueView() {
         </div>
       </div>
 
+      {/* Success Notification */}
+      {successMessage && (
+        <div className="mb-4 flex items-center gap-2 px-4 py-3 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-700 animate-in fade-in slide-in-from-top-2 duration-300">
+          <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+          </svg>
+          <span className="text-sm font-medium">{successMessage}</span>
+          <button
+            onClick={() => setSuccessMessage(null)}
+            className="ml-auto text-emerald-500 hover:text-emerald-700"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      )}
+
       {/* Filters Row */}
       <div className="flex flex-wrap items-center gap-3 mb-4">
         {/* Owner Filter */}
@@ -305,6 +385,73 @@ export function CSHygieneQueueView() {
               <option key={field} value={field}>{field}</option>
             ))}
           </select>
+        </div>
+
+        {/* Status Filter (multi-select) */}
+        <div className="flex items-center gap-2 relative">
+          <label className="text-sm text-gray-600">Status:</label>
+          <button
+            onClick={() => setStatusDropdownOpen(!statusDropdownOpen)}
+            className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 flex items-center gap-2 min-w-[120px]"
+          >
+            <span>
+              {statusFilter.length === 0
+                ? 'None'
+                : statusFilter.length === uniqueStatuses.length
+                  ? 'All Statuses'
+                  : `${statusFilter.length} Status${statusFilter.length > 1 ? 'es' : ''}`}
+            </span>
+            <svg className={`w-4 h-4 text-gray-400 transition-transform ${statusDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          {statusDropdownOpen && (
+            <>
+              <div
+                className="fixed inset-0 z-10"
+                onClick={() => setStatusDropdownOpen(false)}
+              />
+              <div className="absolute top-full left-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-20 min-w-[200px] max-h-[300px] overflow-y-auto">
+                {uniqueStatuses.map((status) => (
+                  <label
+                    key={status}
+                    className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer text-sm"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={statusFilter.includes(status)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setStatusFilter([...statusFilter, status]);
+                        } else {
+                          setStatusFilter(statusFilter.filter((s) => s !== status));
+                        }
+                      }}
+                      className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
+                    />
+                    <span className="text-gray-700">{status}</span>
+                  </label>
+                ))}
+                <div className="border-t border-gray-200">
+                  {statusFilter.length === uniqueStatuses.length ? (
+                    <button
+                      onClick={() => setStatusFilter([])}
+                      className="w-full px-3 py-2 text-sm text-indigo-600 hover:bg-indigo-50 text-left"
+                    >
+                      Clear selection
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => setStatusFilter([...uniqueStatuses])}
+                      className="w-full px-3 py-2 text-sm text-indigo-600 hover:bg-indigo-50 text-left"
+                    >
+                      Select all
+                    </button>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Clear Filters */}
