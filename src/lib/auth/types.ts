@@ -19,6 +19,7 @@ export const RESOURCES = {
   QUEUE_STALLED_UPSELLS: 'queue:stalled-upsells',
   QUEUE_UPSELL_HYGIENE: 'queue:upsell-hygiene',
   QUEUE_PPL_SEQUENCE: 'queue:ppl-sequence',
+  QUEUE_AT_RISK: 'queue:at-risk',
   API_AGENT: 'api:agent',
 } as const;
 
@@ -61,6 +62,8 @@ export function getResourceFromPath(pathname: string): Resource | null {
     return RESOURCES.QUEUE_UPSELL_HYGIENE;
   if (pathname.includes('/queues/ppl-sequence'))
     return RESOURCES.QUEUE_PPL_SEQUENCE;
+  if (pathname.includes('/queues/at-risk'))
+    return RESOURCES.QUEUE_AT_RISK;
 
   // AE pages
   if (pathname.match(/\/dashboard\/ae\/[^/]+/)) return RESOURCES.AE_DETAIL;
@@ -84,6 +87,8 @@ export function getResourceFromPath(pathname: string): Resource | null {
     return RESOURCES.QUEUE_UPSELL_HYGIENE;
   if (pathname.includes('/api/queues/ppl-sequence'))
     return RESOURCES.QUEUE_PPL_SEQUENCE;
+  if (pathname.includes('/api/queues/at-risk'))
+    return RESOURCES.QUEUE_AT_RISK;
   if (pathname.match(/\/api\/ae\/[^/]+/)) return RESOURCES.AE_DETAIL;
 
   return null;

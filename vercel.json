@@ -6,6 +6,10 @@
       "schedule": "0 2 * * *"
     },
     {
+      "path": "/api/cron/sync-companies",
+      "schedule": "30 2 * * *"
+    },
+    {
       "path": "/api/cron/sentiment-analysis",
       "schedule": "0 3 * * *"
     }

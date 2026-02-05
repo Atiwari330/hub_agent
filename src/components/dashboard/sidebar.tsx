@@ -166,6 +166,8 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
   // Upsell Pipeline queues
   const isOnUpsellHygieneQueue = pathname === '/dashboard/queues/upsell-hygiene';
   const isOnStalledUpsellsQueue = pathname === '/dashboard/queues/stalled-upsells';
+  // Customer Success queues
+  const isOnAtRiskQueue = pathname === '/dashboard/queues/at-risk';
 
   return (
     <aside className={`fixed left-0 top-0 h-screen bg-slate-900 text-slate-100 flex flex-col transition-all duration-300 ${isCollapsed ? 'w-16' : 'w-64'}`}>
@@ -277,7 +279,8 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
           hasPermission(user, RESOURCES.QUEUE_STALLED_DEALS) ||
           hasPermission(user, RESOURCES.QUEUE_PPL_SEQUENCE) ||
           hasPermission(user, RESOURCES.QUEUE_UPSELL_HYGIENE) ||
-          hasPermission(user, RESOURCES.QUEUE_STALLED_UPSELLS)) && (
+          hasPermission(user, RESOURCES.QUEUE_STALLED_UPSELLS) ||
+          hasPermission(user, RESOURCES.QUEUE_AT_RISK)) && (
         <div className="mt-4">
           {!isCollapsed && (
             <button
@@ -494,6 +497,42 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
                     </Link>
                   </li>
                   )}
+                </ul>
+              </>
+              )}
+
+              {/* Customer Success Section */}
+              {hasPermission(user, RESOURCES.QUEUE_AT_RISK) && (
+              <>
+                {!isCollapsed && (
+                  <div className="px-4 pl-11 py-1.5 mt-2">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Customer Success</span>
+                  </div>
+                )}
+                <ul className="space-y-0.5">
+                  <li>
+                    <Link
+                      href="/dashboard/queues/at-risk"
+                      className={`flex items-center py-2 text-sm transition-colors ${
+                        isCollapsed
+                          ? 'px-0 justify-center'
+                          : 'px-4 pl-14'
+                      } ${
+                        isOnAtRiskQueue
+                          ? 'bg-indigo-600 text-white'
+                          : 'text-slate-300 hover:bg-slate-800'
+                      }`}
+                      title={isCollapsed ? 'At-Risk Accounts' : undefined}
+                    >
+                      {isCollapsed ? (
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                      ) : (
+                        <span>At-Risk Accounts</span>
+                      )}
+                    </Link>
+                  </li>
                 </ul>
               </>
               )}
