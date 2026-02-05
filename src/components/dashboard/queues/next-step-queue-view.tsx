@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { formatCurrency } from '@/lib/utils/currency';
 import { getHubSpotDealUrl } from '@/lib/hubspot/urls';
+import { getCurrentQuarter, getQuarterInfo } from '@/lib/utils/quarter';
 
 interface ExistingTaskInfo {
   hubspotTaskId: string;
@@ -35,6 +36,7 @@ interface NextStepQueueDeal {
   reason: string;
   existingTask: ExistingTaskInfo | null;
   analysis: AnalysisInfo;
+  closeDate: string | null;
 }
 
 interface NextStepQueueResponse {
@@ -51,6 +53,10 @@ interface NextStepQueueResponse {
 type SortColumn = 'dealName' | 'ownerName' | 'amount' | 'stageName' | 'daysOverdue';
 type SortDirection = 'asc' | 'desc';
 type ViewMode = 'issues' | 'all';
+type QuarterFilter = 'q1' | 'q2' | 'q3' | 'q4';
+
+const DEFAULT_STAGES = ['Proposal/Evaluating', 'Demo - Completed'];
+const DEFAULT_QUARTERS: QuarterFilter[] = ['q1'];
 
 function SortIcon({ active, direction }: { active: boolean; direction: SortDirection }) {
   if (!active) {
@@ -82,6 +88,14 @@ export function NextStepQueueView() {
   // Filters
   const [aeFilter, setAeFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+
+  // Stage multiselect
+  const [stageFilter, setStageFilter] = useState<string[]>(DEFAULT_STAGES);
+  const [stageDropdownOpen, setStageDropdownOpen] = useState(false);
+
+  // Quarter multiselect
+  const [quarterFilter, setQuarterFilter] = useState<QuarterFilter[]>(DEFAULT_QUARTERS);
+  const [quarterDropdownOpen, setQuarterDropdownOpen] = useState(false);
 
   // Sorting
   const [sortColumn, setSortColumn] = useState<SortColumn>('amount');
@@ -119,6 +133,29 @@ export function NextStepQueueView() {
     return Array.from(aes.entries()).map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
   }, [data]);
 
+  // Extract unique stages
+  const uniqueStages = useMemo(() => {
+    if (!data) return [];
+    const stages = new Set<string>();
+    for (const deal of data.deals) {
+      if (deal.stageName) stages.add(deal.stageName);
+    }
+    return Array.from(stages).sort();
+  }, [data]);
+
+  // Quarter options
+  const quarterOptions = useMemo(() => {
+    const currentQ = getCurrentQuarter();
+    return [
+      { value: 'q1' as QuarterFilter, label: `Q1 ${currentQ.year}`, year: currentQ.year },
+      { value: 'q2' as QuarterFilter, label: `Q2 ${currentQ.year}`, year: currentQ.year },
+      { value: 'q3' as QuarterFilter, label: `Q3 ${currentQ.year}`, year: currentQ.year },
+      { value: 'q4' as QuarterFilter, label: `Q4 ${currentQ.year}`, year: currentQ.year },
+    ];
+  }, []);
+
+  const currentYear = quarterOptions[0]?.year || new Date().getFullYear();
+
   // Filtered and sorted deals
   const filteredDeals = useMemo(() => {
     if (!data) return [];
@@ -133,6 +170,24 @@ export function NextStepQueueView() {
     // Apply status filter
     if (statusFilter !== 'all') {
       result = result.filter((d) => d.status === statusFilter);
+    }
+
+    // Stage filter
+    if (stageFilter.length > 0) {
+      result = result.filter((d) => stageFilter.includes(d.stageName));
+    }
+
+    // Quarter filter
+    if (quarterFilter.length > 0) {
+      result = result.filter((deal) => {
+        if (!deal.closeDate) return false;
+        const closeTime = new Date(deal.closeDate).getTime();
+        return quarterFilter.some((qf) => {
+          const quarterNum = parseInt(qf.replace('q', ''), 10);
+          const qi = getQuarterInfo(currentYear, quarterNum);
+          return closeTime >= qi.startDate.getTime() && closeTime <= qi.endDate.getTime();
+        });
+      });
     }
 
     // Sort
@@ -159,7 +214,7 @@ export function NextStepQueueView() {
     });
 
     return result;
-  }, [data, aeFilter, statusFilter, sortColumn, sortDirection]);
+  }, [data, aeFilter, statusFilter, stageFilter, quarterFilter, currentYear, sortColumn, sortDirection]);
 
   const fetchData = useCallback(async () => {
     try {
@@ -525,11 +580,120 @@ export function NextStepQueueView() {
           </select>
         </div>
 
-        {(aeFilter !== 'all' || statusFilter !== 'all') && (
+        {/* Stage Filter */}
+        <div className="flex items-center gap-2 relative">
+          <label className="text-sm text-gray-600">Stage:</label>
+          <button
+            onClick={() => setStageDropdownOpen(!stageDropdownOpen)}
+            className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 flex items-center gap-2 min-w-[120px]"
+          >
+            <span>{stageFilter.length === 0 ? 'All Stages' : `${stageFilter.length} Stage${stageFilter.length > 1 ? 's' : ''}`}</span>
+            <svg className={`w-4 h-4 text-gray-400 transition-transform ${stageDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          {stageDropdownOpen && (
+            <>
+              <div
+                className="fixed inset-0 z-10"
+                onClick={() => setStageDropdownOpen(false)}
+              />
+              <div className="absolute top-full left-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-20 min-w-[200px] max-h-[300px] overflow-y-auto">
+                {uniqueStages.map((stage) => (
+                  <label
+                    key={stage}
+                    className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer text-sm"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={stageFilter.includes(stage)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setStageFilter([...stageFilter, stage]);
+                        } else {
+                          setStageFilter(stageFilter.filter((s) => s !== stage));
+                        }
+                      }}
+                      className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
+                    />
+                    <span className="text-gray-700">{stage}</span>
+                  </label>
+                ))}
+                {stageFilter.length > 0 && (
+                  <button
+                    onClick={() => setStageFilter([])}
+                    className="w-full px-3 py-2 text-sm text-indigo-600 hover:bg-indigo-50 border-t border-gray-200 text-left"
+                  >
+                    Clear selection
+                  </button>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Quarter Filter */}
+        <div className="flex items-center gap-2 relative">
+          <label className="text-sm text-gray-600">Quarter:</label>
+          <button
+            onClick={() => setQuarterDropdownOpen(!quarterDropdownOpen)}
+            className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 flex items-center gap-2 min-w-[120px]"
+          >
+            <span>{quarterFilter.length === 0 ? 'All Quarters' : `${quarterFilter.length} Quarter${quarterFilter.length > 1 ? 's' : ''}`}</span>
+            <svg className={`w-4 h-4 text-gray-400 transition-transform ${quarterDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          {quarterDropdownOpen && (
+            <>
+              <div
+                className="fixed inset-0 z-10"
+                onClick={() => setQuarterDropdownOpen(false)}
+              />
+              <div className="absolute top-full left-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-20 min-w-[150px]">
+                {quarterOptions.map((option) => (
+                  <label
+                    key={option.value}
+                    className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer text-sm"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={quarterFilter.includes(option.value)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setQuarterFilter([...quarterFilter, option.value]);
+                        } else {
+                          setQuarterFilter(quarterFilter.filter((q) => q !== option.value));
+                        }
+                      }}
+                      className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
+                    />
+                    <span className="text-gray-700">{option.label}</span>
+                  </label>
+                ))}
+                {quarterFilter.length > 0 && (
+                  <button
+                    onClick={() => setQuarterFilter([])}
+                    className="w-full px-3 py-2 text-sm text-indigo-600 hover:bg-indigo-50 border-t border-gray-200 text-left"
+                  >
+                    Clear selection
+                  </button>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+
+        {(aeFilter !== 'all' ||
+          statusFilter !== 'all' ||
+          JSON.stringify([...stageFilter].sort()) !== JSON.stringify([...DEFAULT_STAGES].sort()) ||
+          JSON.stringify([...quarterFilter].sort()) !== JSON.stringify([...DEFAULT_QUARTERS].sort())) && (
           <button
             onClick={() => {
               setAeFilter('all');
               setStatusFilter('all');
+              setStageFilter([...DEFAULT_STAGES]);
+              setQuarterFilter([...DEFAULT_QUARTERS]);
             }}
             className="text-sm text-gray-500 hover:text-gray-700"
           >

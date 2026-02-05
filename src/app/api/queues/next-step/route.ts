@@ -50,6 +50,7 @@ interface NextStepQueueDeal {
   reason: string;
   existingTask: ExistingTaskInfo | null;
   analysis: AnalysisInfo;
+  closeDate: string | null;
 }
 
 export async function GET(request: NextRequest) {
@@ -112,7 +113,8 @@ export async function GET(request: NextRequest) {
         next_step_due_date,
         next_step_status,
         next_step_analyzed_at,
-        next_step_analyzed_value
+        next_step_analyzed_value,
+        close_date
       `)
       .in('owner_id', ownerIds)
       .eq('pipeline', SYNC_CONFIG.TARGET_PIPELINE_ID)
@@ -254,6 +256,7 @@ export async function GET(request: NextRequest) {
         reason: effectiveReason,
         existingTask,
         analysis: analysisInfo,
+        closeDate: deal.close_date,
       });
     }
 
