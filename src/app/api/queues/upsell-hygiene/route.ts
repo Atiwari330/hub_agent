@@ -14,6 +14,13 @@ interface ExistingTaskInfo {
   coversAllCurrentFields: boolean;
 }
 
+interface SmartTaskInfo {
+  taskId: string;
+  title: string;
+  createdAt: string;
+  priority: string;
+}
+
 interface UpsellHygieneQueueDeal {
   id: string;
   hubspotDealId: string;
@@ -28,6 +35,7 @@ interface UpsellHygieneQueueDeal {
   missingFields: { field: string; label: string }[];
   reason: string;
   existingTask: ExistingTaskInfo | null;
+  smartTasks: SmartTaskInfo[];
 }
 
 export async function GET(request: NextRequest) {
@@ -119,6 +127,26 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Get smart tasks for these deals
+    const { data: smartTasksData } = await supabase
+      .from('smart_tasks')
+      .select('deal_id, hubspot_task_id, title, priority, created_at')
+      .in('deal_id', dealIds)
+      .order('created_at', { ascending: false });
+
+    // Build a map of deal_id -> smart tasks array
+    const smartTasksMap = new Map<string, SmartTaskInfo[]>();
+    for (const task of smartTasksData || []) {
+      const dealSmartTasks = smartTasksMap.get(task.deal_id) || [];
+      dealSmartTasks.push({
+        taskId: task.hubspot_task_id,
+        title: task.title,
+        createdAt: task.created_at,
+        priority: task.priority,
+      });
+      smartTasksMap.set(task.deal_id, dealSmartTasks);
+    }
+
     // Get stage names for upsell pipeline
     const pipelines = await getAllPipelines();
     const upsellPipeline = pipelines.find((p) => p.id === UPSELL_PIPELINE_ID);
@@ -185,6 +213,7 @@ export async function GET(request: NextRequest) {
         missingFields: hygieneCheck.missingFields,
         reason,
         existingTask,
+        smartTasks: smartTasksMap.get(deal.id) || [],
       });
     }
 
