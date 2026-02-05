@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { formatCurrency } from '@/lib/utils/currency';
 import { getHubSpotDealUrl } from '@/lib/hubspot/urls';
 import { SlackMessageModal } from './slack-message-modal';
@@ -11,6 +11,13 @@ interface ExistingTaskInfo {
   createdAt: string;
   fieldsTaskedFor: string[];
   coversAllCurrentFields: boolean;
+}
+
+interface SmartTaskInfo {
+  taskId: string;
+  title: string;
+  createdAt: string;
+  priority: string;
 }
 
 interface HygieneQueueDeal {
@@ -27,6 +34,7 @@ interface HygieneQueueDeal {
   missingFields: { field: string; label: string }[];
   reason: string;
   existingTask: ExistingTaskInfo | null;
+  smartTasks?: SmartTaskInfo[];
 }
 
 interface HygieneQueueResponse {
@@ -68,6 +76,19 @@ function SortIcon({ active, direction }: { active: boolean; direction: SortDirec
   );
 }
 
+function ChevronIcon({ open }: { open: boolean }) {
+  return (
+    <svg
+      className={`w-4 h-4 transition-transform ${open ? 'rotate-90' : ''}`}
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+    >
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+    </svg>
+  );
+}
+
 export interface BaseHygieneQueueViewProps {
   title: string;
   subtitle: string;
@@ -102,6 +123,12 @@ export function BaseHygieneQueueView({
 
   // Task creation state
   const [creatingTasks, setCreatingTasks] = useState<Set<string>>(new Set());
+
+  // Success notification state
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  // Expanded rows (for showing smart tasks)
+  const [expandedDeals, setExpandedDeals] = useState<Set<string>>(new Set());
 
   // Modals
   const [slackModalOpen, setSlackModalOpen] = useState(false);
@@ -210,6 +237,29 @@ export function BaseHygieneQueueView({
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Auto-dismiss success message after 4 seconds
+  useEffect(() => {
+    if (successMessage) {
+      const timer = setTimeout(() => setSuccessMessage(null), 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [successMessage]);
+
+  const toggleExpanded = (dealId: string) => {
+    const newExpanded = new Set(expandedDeals);
+    if (newExpanded.has(dealId)) {
+      newExpanded.delete(dealId);
+    } else {
+      newExpanded.add(dealId);
+    }
+    setExpandedDeals(newExpanded);
+  };
+
+  const handleSmartTaskCreated = (taskTitle: string, dealName: string) => {
+    setSuccessMessage(`Task "${taskTitle}" created for ${dealName}`);
+    fetchData();
+  };
 
   const handleSort = (column: SortColumn) => {
     if (sortColumn === column) {
@@ -334,6 +384,24 @@ export function BaseHygieneQueueView({
           )}
         </div>
       </div>
+
+      {/* Success Notification */}
+      {successMessage && (
+        <div className="mb-4 flex items-center gap-2 px-4 py-3 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-700 animate-in fade-in slide-in-from-top-2 duration-300">
+          <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+          </svg>
+          <span className="text-sm font-medium">{successMessage}</span>
+          <button
+            onClick={() => setSuccessMessage(null)}
+            className="ml-auto text-emerald-500 hover:text-emerald-700"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      )}
 
       {/* Filters Row */}
       <div className="flex items-center gap-3 mb-4">
@@ -493,6 +561,7 @@ export function BaseHygieneQueueView({
                       className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
                     />
                   </th>
+                  <th className="w-8 px-2 py-3"></th>
                   <th
                     className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100 select-none"
                     onClick={() => handleSort('dealName')}
@@ -541,72 +610,141 @@ export function BaseHygieneQueueView({
                 {filteredDeals.map((deal) => {
                   const hasTask = deal.existingTask !== null;
                   const taskCoversAll = deal.existingTask?.coversAllCurrentFields ?? false;
+                  const isExpanded = expandedDeals.has(deal.id);
+                  const hasSmartTasks = deal.smartTasks && deal.smartTasks.length > 0;
 
                   const formatTaskDate = (dateStr: string) => {
                     const date = new Date(dateStr);
                     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
                   };
 
+                  const getPriorityBadge = (priority: string) => {
+                    switch (priority) {
+                      case 'HIGH':
+                        return 'bg-red-100 text-red-700';
+                      case 'LOW':
+                        return 'bg-green-100 text-green-700';
+                      default:
+                        return 'bg-yellow-100 text-yellow-700';
+                    }
+                  };
+
                   return (
-                    <tr
-                      key={deal.id}
-                      className={`hover:bg-slate-50 transition-colors ${
-                        selectedDeals.has(deal.id) ? 'bg-indigo-50' : ''
-                      } ${hasTask && taskCoversAll ? 'bg-emerald-50/50' : ''}`}
-                    >
-                      <td className="px-4 py-3">
-                        <input
-                          type="checkbox"
-                          checked={selectedDeals.has(deal.id)}
-                          onChange={() => handleSelectDeal(deal.id)}
-                          className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
-                        />
-                      </td>
-                      <td className="px-4 py-3">
-                        <a
-                          href={getHubSpotDealUrl(deal.hubspotDealId)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-sm font-medium text-gray-900 hover:text-indigo-600 transition-colors"
-                        >
-                          {deal.dealName}
-                        </a>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="text-sm text-gray-600">{deal.ownerName}</span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="text-sm text-gray-900 whitespace-nowrap">
-                          {deal.amount ? formatCurrency(deal.amount) : '-'}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="text-sm text-gray-600 whitespace-nowrap">{deal.stageName}</span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex flex-wrap gap-1">
-                          {deal.missingFields.map((field) => (
-                            <span
-                              key={field.field}
-                              className={`px-2 py-0.5 text-xs font-medium rounded ${
-                                missingFieldColors[field.label] || 'bg-gray-100 text-gray-600'
-                              }`}
-                            >
-                              {field.label}
-                            </span>
-                          ))}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex flex-col gap-1">
-                          {hasTask && taskCoversAll ? (
-                            <div className="flex items-center gap-2">
-                              <span className="flex items-center gap-1 text-xs font-medium text-emerald-600">
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                </svg>
-                                Task Created {formatTaskDate(deal.existingTask!.createdAt)}
+                    <React.Fragment key={deal.id}>
+                      <tr
+                        className={`hover:bg-slate-50 transition-colors ${
+                          selectedDeals.has(deal.id) ? 'bg-indigo-50' : ''
+                        } ${hasTask && taskCoversAll ? 'bg-emerald-50/50' : ''}`}
+                      >
+                        <td className="px-4 py-3">
+                          <input
+                            type="checkbox"
+                            checked={selectedDeals.has(deal.id)}
+                            onChange={() => handleSelectDeal(deal.id)}
+                            className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
+                          />
+                        </td>
+                        <td className="px-2 py-3">
+                          <button
+                            onClick={() => toggleExpanded(deal.id)}
+                            className={`p-1 transition-colors ${hasSmartTasks ? 'text-gray-600 hover:text-gray-800' : 'text-gray-300'}`}
+                            disabled={!hasSmartTasks}
+                            title={hasSmartTasks ? `${deal.smartTasks!.length} smart task${deal.smartTasks!.length > 1 ? 's' : ''}` : 'No smart tasks'}
+                          >
+                            <ChevronIcon open={isExpanded} />
+                          </button>
+                        </td>
+                        <td className="px-4 py-3">
+                          <a
+                            href={getHubSpotDealUrl(deal.hubspotDealId)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-sm font-medium text-gray-900 hover:text-indigo-600 transition-colors"
+                          >
+                            {deal.dealName}
+                          </a>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="text-sm text-gray-600">{deal.ownerName}</span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="text-sm text-gray-900 whitespace-nowrap">
+                            {deal.amount ? formatCurrency(deal.amount) : '-'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="text-sm text-gray-600 whitespace-nowrap">{deal.stageName}</span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex flex-wrap gap-1">
+                            {deal.missingFields.map((field) => (
+                              <span
+                                key={field.field}
+                                className={`px-2 py-0.5 text-xs font-medium rounded ${
+                                  missingFieldColors[field.label] || 'bg-gray-100 text-gray-600'
+                                }`}
+                              >
+                                {field.label}
                               </span>
+                            ))}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex flex-col gap-1">
+                            {hasTask && taskCoversAll ? (
+                              <div className="flex items-center gap-2">
+                                <span className="flex items-center gap-1 text-xs font-medium text-emerald-600">
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                  </svg>
+                                  Task Created {formatTaskDate(deal.existingTask!.createdAt)}
+                                </span>
+                                <SmartTaskPopover
+                                  context={{
+                                    type: 'deal',
+                                    hubspotDealId: deal.hubspotDealId,
+                                    hubspotOwnerId: deal.hubspotOwnerId,
+                                    dealName: deal.dealName,
+                                    ownerName: deal.ownerName,
+                                    stageName: deal.stageName,
+                                    missingFields: deal.missingFields.map((f) => f.label),
+                                  }}
+                                  queueType={queueType}
+                                  dealId={deal.id}
+                                  onTaskCreated={(title) => handleSmartTaskCreated(title, deal.dealName)}
+                                  trigger={
+                                    <button className="text-xs text-gray-500 hover:text-gray-700 underline">
+                                      Re-create
+                                    </button>
+                                  }
+                                />
+                              </div>
+                            ) : hasTask && !taskCoversAll ? (
+                              <div className="flex flex-col gap-1">
+                                <span className="text-xs text-amber-600">
+                                  Task created {formatTaskDate(deal.existingTask!.createdAt)} for other fields
+                                </span>
+                                <SmartTaskPopover
+                                  context={{
+                                    type: 'deal',
+                                    hubspotDealId: deal.hubspotDealId,
+                                    hubspotOwnerId: deal.hubspotOwnerId,
+                                    dealName: deal.dealName,
+                                    ownerName: deal.ownerName,
+                                    stageName: deal.stageName,
+                                    missingFields: deal.missingFields.map((f) => f.label),
+                                  }}
+                                  queueType={queueType}
+                                  dealId={deal.id}
+                                  onTaskCreated={(title) => handleSmartTaskCreated(title, deal.dealName)}
+                                  trigger={
+                                    <button className="px-3 py-1.5 text-xs font-medium text-emerald-600 bg-emerald-50 rounded hover:bg-emerald-100 transition-colors whitespace-nowrap w-fit">
+                                      Create Task for New Fields
+                                    </button>
+                                  }
+                                />
+                              </div>
+                            ) : (
                               <SmartTaskPopover
                                 context={{
                                   type: 'deal',
@@ -618,63 +756,42 @@ export function BaseHygieneQueueView({
                                   missingFields: deal.missingFields.map((f) => f.label),
                                 }}
                                 queueType={queueType}
-                                onTaskCreated={fetchData}
+                                dealId={deal.id}
+                                onTaskCreated={(title) => handleSmartTaskCreated(title, deal.dealName)}
                                 trigger={
-                                  <button className="text-xs text-gray-500 hover:text-gray-700 underline">
-                                    Re-create
+                                  <button
+                                    className="px-3 py-1.5 text-xs font-medium text-emerald-600 bg-emerald-50 rounded hover:bg-emerald-100 transition-colors whitespace-nowrap"
+                                  >
+                                    Create Task
                                   </button>
                                 }
                               />
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                      {/* Expanded row showing smart tasks */}
+                      {isExpanded && hasSmartTasks && (
+                        <tr className="bg-slate-50">
+                          <td colSpan={8} className="px-4 py-3">
+                            <div className="ml-12">
+                              <h4 className="text-sm font-medium text-gray-700 mb-2">Smart Tasks:</h4>
+                              <ul className="space-y-1">
+                                {deal.smartTasks!.map((task) => (
+                                  <li key={task.taskId} className="flex items-center gap-3 text-sm">
+                                    <span className={`px-1.5 py-0.5 text-xs rounded font-medium ${getPriorityBadge(task.priority)}`}>
+                                      {task.priority}
+                                    </span>
+                                    <span className="text-gray-700">{task.title}</span>
+                                    <span className="text-gray-400">Created: {formatTaskDate(task.createdAt)}</span>
+                                  </li>
+                                ))}
+                              </ul>
                             </div>
-                          ) : hasTask && !taskCoversAll ? (
-                            <div className="flex flex-col gap-1">
-                              <span className="text-xs text-amber-600">
-                                Task created {formatTaskDate(deal.existingTask!.createdAt)} for other fields
-                              </span>
-                              <SmartTaskPopover
-                                context={{
-                                  type: 'deal',
-                                  hubspotDealId: deal.hubspotDealId,
-                                  hubspotOwnerId: deal.hubspotOwnerId,
-                                  dealName: deal.dealName,
-                                  ownerName: deal.ownerName,
-                                  stageName: deal.stageName,
-                                  missingFields: deal.missingFields.map((f) => f.label),
-                                }}
-                                queueType={queueType}
-                                onTaskCreated={fetchData}
-                                trigger={
-                                  <button className="px-3 py-1.5 text-xs font-medium text-emerald-600 bg-emerald-50 rounded hover:bg-emerald-100 transition-colors whitespace-nowrap w-fit">
-                                    Create Task for New Fields
-                                  </button>
-                                }
-                              />
-                            </div>
-                          ) : (
-                            <SmartTaskPopover
-                              context={{
-                                type: 'deal',
-                                hubspotDealId: deal.hubspotDealId,
-                                hubspotOwnerId: deal.hubspotOwnerId,
-                                dealName: deal.dealName,
-                                ownerName: deal.ownerName,
-                                stageName: deal.stageName,
-                                missingFields: deal.missingFields.map((f) => f.label),
-                              }}
-                              queueType={queueType}
-                              onTaskCreated={fetchData}
-                              trigger={
-                                <button
-                                  className="px-3 py-1.5 text-xs font-medium text-emerald-600 bg-emerald-50 rounded hover:bg-emerald-100 transition-colors whitespace-nowrap"
-                                >
-                                  Create Task
-                                </button>
-                              }
-                            />
-                          )}
-                        </div>
-                      </td>
-                    </tr>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
                   );
                 })}
               </tbody>
