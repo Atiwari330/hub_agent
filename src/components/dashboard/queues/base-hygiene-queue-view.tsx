@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { formatCurrency } from '@/lib/utils/currency';
 import { getHubSpotDealUrl } from '@/lib/hubspot/urls';
 import { SlackMessageModal } from './slack-message-modal';
+import { SmartTaskPopover } from './smart-task-popover';
 
 interface ExistingTaskInfo {
   hubspotTaskId: string;
@@ -72,6 +73,7 @@ export interface BaseHygieneQueueViewProps {
   subtitle: string;
   apiEndpoint: string;
   missingFieldColors?: Record<string, string>;
+  queueType?: 'hygiene' | 'next-step' | 'cs-hygiene' | 'other';
 }
 
 export function BaseHygieneQueueView({
@@ -79,6 +81,7 @@ export function BaseHygieneQueueView({
   subtitle,
   apiEndpoint,
   missingFieldColors = DEFAULT_MISSING_FIELD_COLORS,
+  queueType = 'hygiene',
 }: BaseHygieneQueueViewProps) {
   const [data, setData] = useState<HygieneQueueResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -536,7 +539,6 @@ export function BaseHygieneQueueView({
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {filteredDeals.map((deal) => {
-                  const isCreating = creatingTasks.has(deal.id);
                   const hasTask = deal.existingTask !== null;
                   const taskCoversAll = deal.existingTask?.coversAllCurrentFields ?? false;
 
@@ -605,55 +607,70 @@ export function BaseHygieneQueueView({
                                 </svg>
                                 Task Created {formatTaskDate(deal.existingTask!.createdAt)}
                               </span>
-                              <button
-                                onClick={() => handleCreateTask(deal)}
-                                disabled={isCreating}
-                                className="text-xs text-gray-500 hover:text-gray-700 underline"
-                              >
-                                Re-create
-                              </button>
+                              <SmartTaskPopover
+                                context={{
+                                  type: 'deal',
+                                  hubspotDealId: deal.hubspotDealId,
+                                  hubspotOwnerId: deal.hubspotOwnerId,
+                                  dealName: deal.dealName,
+                                  ownerName: deal.ownerName,
+                                  stageName: deal.stageName,
+                                  missingFields: deal.missingFields.map((f) => f.label),
+                                }}
+                                queueType={queueType}
+                                onTaskCreated={fetchData}
+                                trigger={
+                                  <button className="text-xs text-gray-500 hover:text-gray-700 underline">
+                                    Re-create
+                                  </button>
+                                }
+                              />
                             </div>
                           ) : hasTask && !taskCoversAll ? (
                             <div className="flex flex-col gap-1">
                               <span className="text-xs text-amber-600">
                                 Task created {formatTaskDate(deal.existingTask!.createdAt)} for other fields
                               </span>
-                              <button
-                                onClick={() => handleCreateTask(deal)}
-                                disabled={isCreating}
-                                className="px-3 py-1.5 text-xs font-medium text-emerald-600 bg-emerald-50 rounded hover:bg-emerald-100 transition-colors whitespace-nowrap disabled:opacity-50 w-fit"
-                              >
-                                {isCreating ? (
-                                  <span className="flex items-center gap-1">
-                                    <svg className="animate-spin w-3 h-3" fill="none" viewBox="0 0 24 24">
-                                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                                    </svg>
-                                    Creating...
-                                  </span>
-                                ) : (
-                                  'Create Task for New Fields'
-                                )}
-                              </button>
+                              <SmartTaskPopover
+                                context={{
+                                  type: 'deal',
+                                  hubspotDealId: deal.hubspotDealId,
+                                  hubspotOwnerId: deal.hubspotOwnerId,
+                                  dealName: deal.dealName,
+                                  ownerName: deal.ownerName,
+                                  stageName: deal.stageName,
+                                  missingFields: deal.missingFields.map((f) => f.label),
+                                }}
+                                queueType={queueType}
+                                onTaskCreated={fetchData}
+                                trigger={
+                                  <button className="px-3 py-1.5 text-xs font-medium text-emerald-600 bg-emerald-50 rounded hover:bg-emerald-100 transition-colors whitespace-nowrap w-fit">
+                                    Create Task for New Fields
+                                  </button>
+                                }
+                              />
                             </div>
                           ) : (
-                            <button
-                              onClick={() => handleCreateTask(deal)}
-                              disabled={isCreating}
-                              className="px-3 py-1.5 text-xs font-medium text-emerald-600 bg-emerald-50 rounded hover:bg-emerald-100 transition-colors whitespace-nowrap disabled:opacity-50"
-                            >
-                              {isCreating ? (
-                                <span className="flex items-center gap-1">
-                                  <svg className="animate-spin w-3 h-3" fill="none" viewBox="0 0 24 24">
-                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                                  </svg>
-                                  Creating...
-                                </span>
-                              ) : (
-                                'Create Task'
-                              )}
-                            </button>
+                            <SmartTaskPopover
+                              context={{
+                                type: 'deal',
+                                hubspotDealId: deal.hubspotDealId,
+                                hubspotOwnerId: deal.hubspotOwnerId,
+                                dealName: deal.dealName,
+                                ownerName: deal.ownerName,
+                                stageName: deal.stageName,
+                                missingFields: deal.missingFields.map((f) => f.label),
+                              }}
+                              queueType={queueType}
+                              onTaskCreated={fetchData}
+                              trigger={
+                                <button
+                                  className="px-3 py-1.5 text-xs font-medium text-emerald-600 bg-emerald-50 rounded hover:bg-emerald-100 transition-colors whitespace-nowrap"
+                                >
+                                  Create Task
+                                </button>
+                              }
+                            />
                           )}
                         </div>
                       </td>
