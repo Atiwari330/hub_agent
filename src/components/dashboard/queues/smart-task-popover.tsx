@@ -45,8 +45,10 @@ type EntityContext = (DealContext & { type: 'deal' }) | (CompanyContext & { type
 interface SmartTaskPopoverProps {
   context: EntityContext;
   queueType: 'hygiene' | 'next-step' | 'cs-hygiene' | 'other';
-  onTaskCreated: () => void;
+  onTaskCreated: (taskTitle: string) => void;
   trigger: React.ReactNode;
+  dealId?: string;  // Supabase deal UUID for tracking
+  companyId?: string;  // Supabase company UUID for tracking
 }
 
 interface GeneratedTask {
@@ -60,6 +62,8 @@ export function SmartTaskPopover({
   queueType,
   onTaskCreated,
   trigger,
+  dealId,
+  companyId,
 }: SmartTaskPopoverProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [prompt, setPrompt] = useState('');
@@ -172,6 +176,9 @@ export function SmartTaskPopover({
           title: editedTitle.trim(),
           description: editedDescription.trim(),
           priority: editedPriority,
+          dealId: dealId,
+          companyId: companyId,
+          queueType: queueType,
         }),
       });
 
@@ -180,9 +187,10 @@ export function SmartTaskPopover({
         throw new Error(errorData.error || 'Failed to create task');
       }
 
-      // Success - close and notify parent
+      // Success - close and notify parent with task title
+      const taskTitle = editedTitle.trim();
       setIsOpen(false);
-      onTaskCreated();
+      onTaskCreated(taskTitle);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create task');
     } finally {
