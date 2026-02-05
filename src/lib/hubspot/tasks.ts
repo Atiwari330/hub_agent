@@ -184,6 +184,81 @@ export async function createNextStepTask(params: CreateNextStepTaskParams): Prom
   };
 }
 
+interface CreateSmartTaskParams {
+  hubspotDealId?: string;
+  hubspotCompanyId?: string;
+  hubspotOwnerId: string;
+  title: string;
+  description: string;
+  priority?: 'LOW' | 'MEDIUM' | 'HIGH';
+}
+
+/**
+ * Creates a HubSpot task with custom title and description.
+ * Can associate with either a deal or a company (or both).
+ * The task will be assigned based on override configuration.
+ */
+export async function createSmartTask(params: CreateSmartTaskParams): Promise<CreateTaskResult> {
+  const { hubspotDealId, hubspotCompanyId, hubspotOwnerId, title, description, priority = 'MEDIUM' } = params;
+  const client = getHubSpotClient();
+
+  // Resolve the actual task assignee (may be overridden)
+  const assigneeOwnerId = await resolveTaskAssignee(hubspotOwnerId);
+
+  // Build associations array based on what's provided
+  const associations: Array<{
+    to: { id: string };
+    types: Array<{
+      associationCategory: AssociationSpecAssociationCategoryEnum;
+      associationTypeId: number;
+    }>;
+  }> = [];
+
+  if (hubspotDealId) {
+    associations.push({
+      to: { id: hubspotDealId },
+      types: [
+        {
+          associationCategory: AssociationSpecAssociationCategoryEnum.HubspotDefined,
+          associationTypeId: TASK_TO_DEAL_ASSOCIATION_TYPE_ID,
+        },
+      ],
+    });
+  }
+
+  if (hubspotCompanyId) {
+    associations.push({
+      to: { id: hubspotCompanyId },
+      types: [
+        {
+          associationCategory: AssociationSpecAssociationCategoryEnum.HubspotDefined,
+          associationTypeId: TASK_TO_COMPANY_ASSOCIATION_TYPE_ID,
+        },
+      ],
+    });
+  }
+
+  // Create the task
+  const taskResponse = await client.crm.objects.tasks.basicApi.create({
+    properties: {
+      hs_task_subject: title,
+      hs_task_body: description,
+      hs_task_status: 'NOT_STARTED',
+      hs_task_priority: priority,
+      hs_task_type: 'TODO',
+      hubspot_owner_id: assigneeOwnerId,
+      // Set due date to 24 hours from now
+      hs_timestamp: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+    },
+    associations,
+  });
+
+  return {
+    taskId: taskResponse.id,
+    success: true,
+  };
+}
+
 interface OverdueTaskDetail {
   subject: string;
   daysOverdue: number;
