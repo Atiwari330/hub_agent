@@ -599,7 +599,7 @@ export function NextStepQueueView() {
             return (
               <span
                 key={q}
-                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium bg-indigo-100 text-indigo-700 rounded-full"
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 text-sm font-medium bg-indigo-100 text-indigo-700 rounded-full"
               >
                 {option?.label}
                 <button
@@ -618,7 +618,7 @@ export function NextStepQueueView() {
           {stageFilter.length > 0 && stageFilter.map((stage) => (
             <span
               key={stage}
-              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium bg-gray-100 text-gray-700 rounded-full"
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-sm font-medium bg-gray-100 text-gray-700 rounded-full"
             >
               {stage}
               <button
@@ -634,7 +634,7 @@ export function NextStepQueueView() {
 
           {/* AE pill */}
           {aeFilter !== 'all' && (
-            <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium bg-gray-100 text-gray-700 rounded-full">
+            <span className="inline-flex items-center gap-1 px-2.5 py-1.5 text-sm font-medium bg-gray-100 text-gray-700 rounded-full">
               {uniqueAEs.find((ae) => ae.id === aeFilter)?.name}
               <button
                 onClick={() => setAeFilter('all')}
@@ -649,7 +649,7 @@ export function NextStepQueueView() {
 
           {/* Status pill */}
           {statusFilter !== 'all' && (
-            <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium bg-gray-100 text-gray-700 rounded-full capitalize">
+            <span className="inline-flex items-center gap-1 px-2.5 py-1.5 text-sm font-medium bg-gray-100 text-gray-700 rounded-full capitalize">
               {statusFilter.replace('_', ' ')}
               <button
                 onClick={() => setStatusFilter('all')}
@@ -668,7 +668,7 @@ export function NextStepQueueView() {
           <select
             value={aeFilter}
             onChange={(e) => setAeFilter(e.target.value)}
-            className="text-xs border border-gray-200 rounded-md px-2 py-1.5 bg-white text-gray-600 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+            className="text-sm border border-gray-200 rounded-md px-2.5 py-1.5 bg-white text-gray-600 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
           >
             <option value="all">All AEs</option>
             {uniqueAEs.map((ae) => (
@@ -679,7 +679,7 @@ export function NextStepQueueView() {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="text-xs border border-gray-200 rounded-md px-2 py-1.5 bg-white text-gray-600 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+            className="text-sm border border-gray-200 rounded-md px-2.5 py-1.5 bg-white text-gray-600 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
           >
             <option value="all">All Status</option>
             <option value="overdue">Overdue</option>
@@ -696,7 +696,7 @@ export function NextStepQueueView() {
           <div className="relative">
             <button
               onClick={() => setStageDropdownOpen(!stageDropdownOpen)}
-              className="text-xs border border-gray-200 rounded-md px-2 py-1.5 bg-white text-gray-600 focus:outline-none focus:ring-1 focus:ring-indigo-500 flex items-center gap-1"
+              className="text-sm border border-gray-200 rounded-md px-2.5 py-1.5 bg-white text-gray-600 focus:outline-none focus:ring-1 focus:ring-indigo-500 flex items-center gap-1"
             >
               <span>Stage</span>
               <svg className={`w-3 h-3 text-gray-400 transition-transform ${stageDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -713,7 +713,7 @@ export function NextStepQueueView() {
                   {uniqueStages.map((stage) => (
                     <label
                       key={stage}
-                      className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer text-xs"
+                      className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer text-sm"
                     >
                       <input
                         type="checkbox"
@@ -733,7 +733,7 @@ export function NextStepQueueView() {
                   {stageFilter.length > 0 && (
                     <button
                       onClick={() => setStageFilter([])}
-                      className="w-full px-3 py-2 text-xs text-indigo-600 hover:bg-indigo-50 border-t border-gray-100 text-left"
+                      className="w-full px-3 py-2 text-sm text-indigo-600 hover:bg-indigo-50 border-t border-gray-100 text-left"
                     >
                       Clear
                     </button>
@@ -747,7 +747,7 @@ export function NextStepQueueView() {
           <div className="relative">
             <button
               onClick={() => setQuarterDropdownOpen(!quarterDropdownOpen)}
-              className="text-xs border border-gray-200 rounded-md px-2 py-1.5 bg-white text-gray-600 focus:outline-none focus:ring-1 focus:ring-indigo-500 flex items-center gap-1"
+              className="text-sm border border-gray-200 rounded-md px-2.5 py-1.5 bg-white text-gray-600 focus:outline-none focus:ring-1 focus:ring-indigo-500 flex items-center gap-1"
             >
               <span>Quarter</span>
               <svg className={`w-3 h-3 text-gray-400 transition-transform ${quarterDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -764,7 +764,7 @@ export function NextStepQueueView() {
                   {quarterOptions.map((option) => (
                     <label
                       key={option.value}
-                      className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer text-xs"
+                      className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer text-sm"
                     >
                       <input
                         type="checkbox"
@@ -784,7 +784,7 @@ export function NextStepQueueView() {
                   {quarterFilter.length > 0 && (
                     <button
                       onClick={() => setQuarterFilter([])}
-                      className="w-full px-3 py-2 text-xs text-indigo-600 hover:bg-indigo-50 border-t border-gray-100 text-left"
+                      className="w-full px-3 py-2 text-sm text-indigo-600 hover:bg-indigo-50 border-t border-gray-100 text-left"
                     >
                       Clear
                     </button>
@@ -940,7 +940,7 @@ export function NextStepQueueView() {
                     />
                   </th>
                   <th
-                    className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100/50 select-none transition-colors"
+                    className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100/50 select-none transition-colors w-[22%] max-w-[260px]"
                     onClick={() => handleSort('dealName')}
                   >
                     <div className="flex items-center gap-1">
@@ -949,7 +949,7 @@ export function NextStepQueueView() {
                     </div>
                   </th>
                   <th
-                    className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100/50 select-none whitespace-nowrap transition-colors"
+                    className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100/50 select-none whitespace-nowrap transition-colors w-[10%] max-w-[110px]"
                     onClick={() => handleSort('ownerName')}
                   >
                     <div className="flex items-center gap-1">
@@ -958,7 +958,7 @@ export function NextStepQueueView() {
                     </div>
                   </th>
                   <th
-                    className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100/50 select-none whitespace-nowrap transition-colors"
+                    className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100/50 select-none whitespace-nowrap transition-colors w-[8%]"
                     onClick={() => handleSort('amount')}
                   >
                     <div className="flex items-center gap-1">
@@ -966,13 +966,13 @@ export function NextStepQueueView() {
                       <SortIcon active={sortColumn === 'amount'} direction={sortDirection} />
                     </div>
                   </th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap w-20">
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap w-[70px]">
                     Status
                   </th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap min-w-[200px]">
                     Next Step
                   </th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap w-28">
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap w-[90px]">
                     Action
                   </th>
                 </tr>
@@ -1033,20 +1033,21 @@ export function NextStepQueueView() {
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-4">
+                      <td className="px-4 py-4 max-w-[260px]">
                         <a
                           href={getHubSpotDealUrl(deal.hubspotDealId)}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className={`text-sm hover:text-indigo-600 transition-colors ${
+                          className={`text-sm hover:text-indigo-600 transition-colors block truncate ${
                             isHighValue ? 'font-semibold text-gray-900' : 'font-medium text-gray-800'
                           }`}
+                          title={deal.dealName}
                         >
                           {deal.dealName}
                         </a>
                       </td>
-                      <td className="px-4 py-4">
-                        <span className="text-sm text-gray-600">{deal.ownerName}</span>
+                      <td className="px-4 py-4 max-w-[110px]">
+                        <span className="text-sm text-gray-600 block truncate" title={deal.ownerName}>{deal.ownerName}</span>
                       </td>
                       <td className="px-4 py-4">
                         <span className={`text-sm whitespace-nowrap ${isHighValue ? 'font-semibold text-gray-900' : 'text-gray-700'}`}>
@@ -1060,7 +1061,7 @@ export function NextStepQueueView() {
                           </span>
                         </Tooltip>
                       </td>
-                      <td className="px-4 py-4 max-w-[320px]">
+                      <td className="px-4 py-4 min-w-[200px]">
                         {deal.nextStep ? (
                           <div className="flex flex-col gap-1">
                             {/* Primary: Next step text (clean, no date prefix) */}
