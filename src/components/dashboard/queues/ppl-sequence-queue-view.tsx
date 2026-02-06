@@ -1,9 +1,29 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { formatCurrency } from '@/lib/utils/currency';
 import { getHubSpotDealUrl } from '@/lib/hubspot/urls';
 import type { Week1TouchAnalysis } from '@/lib/utils/touch-counter';
+
+// ===== Utility =====
+
+function formatRelativeTime(dateString: string | null): string {
+  if (!dateString) return 'Never';
+
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / (1000 * 60));
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffMins < 1) return 'Just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays < 7) return `${diffDays}d ago`;
+
+  return date.toLocaleDateString();
+}
 
 // ===== Types =====
 
@@ -247,6 +267,185 @@ function ExpandedDealPanel({ deal }: { deal: PplSequenceDeal }) {
   );
 }
 
+// ===== Methodology Panel =====
+
+function MethodologyPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
+  if (!open) return null;
+
+  return (
+    <div className="mb-6 bg-blue-50 border border-blue-200 rounded-xl overflow-hidden">
+      <div className="px-6 py-4">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-base font-semibold text-gray-900">How This Report Works</h3>
+          <button
+            onClick={onClose}
+            className="p-1 text-gray-400 hover:text-gray-600 rounded-md hover:bg-blue-100 transition-colors"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <p className="text-sm text-gray-700 mb-4">
+          This report tracks outreach activity for Paid Per Lead (PPL) deals during their first week in the pipeline.
+        </p>
+
+        {/* What counts as a touch */}
+        <div className="mb-4">
+          <h4 className="text-sm font-semibold text-gray-800 mb-2">What counts as a &quot;touch&quot;?</h4>
+          <ul className="text-sm text-gray-700 space-y-1 ml-4 list-disc">
+            <li>Calls logged in HubSpot (including attempted calls, voicemails, and no-answers)</li>
+            <li>Outbound emails sent by the AE through HubSpot</li>
+          </ul>
+          <p className="text-sm text-gray-500 mt-1.5 ml-4 italic">
+            Inbound emails (replies from prospects) are not counted.
+          </p>
+        </div>
+
+        {/* Column definitions */}
+        <div className="mb-4">
+          <h4 className="text-sm font-semibold text-gray-800 mb-2">Column definitions</h4>
+          <div className="overflow-x-auto">
+            <table className="text-sm w-full">
+              <thead>
+                <tr className="border-b border-blue-200">
+                  <th className="text-left py-1.5 pr-4 font-medium text-gray-800">Column</th>
+                  <th className="text-left py-1.5 font-medium text-gray-800">Meaning</th>
+                </tr>
+              </thead>
+              <tbody className="text-gray-700">
+                <tr className="border-b border-blue-100">
+                  <td className="py-1.5 pr-4 font-medium whitespace-nowrap">Age</td>
+                  <td className="py-1.5">Business days since the deal was created in HubSpot (excludes weekends)</td>
+                </tr>
+                <tr className="border-b border-blue-100">
+                  <td className="py-1.5 pr-4 font-medium whitespace-nowrap">Week 1 Touches</td>
+                  <td className="py-1.5">Total calls + outbound emails during the first 5 business days after deal creation</td>
+                </tr>
+                <tr className="border-b border-blue-100">
+                  <td className="py-1.5 pr-4 font-medium whitespace-nowrap">Wk 1 Calls</td>
+                  <td className="py-1.5">Calls logged in HubSpot within the first 5 business days</td>
+                </tr>
+                <tr className="border-b border-blue-100">
+                  <td className="py-1.5 pr-4 font-medium whitespace-nowrap">Wk 1 Emails</td>
+                  <td className="py-1.5">Outbound emails sent within the first 5 business days</td>
+                </tr>
+                <tr className="border-b border-blue-100">
+                  <td className="py-1.5 pr-4 font-medium whitespace-nowrap">Total Touches</td>
+                  <td className="py-1.5">All calls + outbound emails for the deal&apos;s entire lifetime (not limited to Week 1)</td>
+                </tr>
+                <tr className="border-b border-blue-100">
+                  <td className="py-1.5 pr-4 font-medium whitespace-nowrap">Gap</td>
+                  <td className="py-1.5">How many more Week 1 touches are needed to hit the target of 6</td>
+                </tr>
+                <tr>
+                  <td className="py-1.5 pr-4 font-medium whitespace-nowrap">Status</td>
+                  <td className="py-1.5">On Track (met target), Behind (close to target), or Critical (far from target)</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Data source */}
+        <div>
+          <h4 className="text-sm font-semibold text-gray-800 mb-2">Where does this data come from?</h4>
+          <ul className="text-sm text-gray-700 space-y-1 ml-4 list-disc">
+            <li>Activities are pulled from HubSpot — both activities logged directly on the deal and activities logged on the deal&apos;s associated contacts</li>
+            <li>Deal data syncs from HubSpot periodically. See the sync timestamp at the top of the page for freshness.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ===== Sync Status Bar =====
+
+function SyncStatusBar({ onSyncComplete }: { onSyncComplete: () => void }) {
+  const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [displayTime, setDisplayTime] = useState<string>('');
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Fetch sync status on mount
+  useEffect(() => {
+    const fetchSyncStatus = async () => {
+      try {
+        const response = await fetch('/api/cron/sync-hubspot/status');
+        if (response.ok) {
+          const data = await response.json();
+          if (data.lastRun) {
+            setLastSyncTime(data.lastRun);
+          }
+        }
+      } catch {
+        // Silently fail - we'll just show "Never" for sync time
+      }
+    };
+    fetchSyncStatus();
+  }, []);
+
+  // Update display time every 30 seconds
+  useEffect(() => {
+    const update = () => setDisplayTime(formatRelativeTime(lastSyncTime));
+    update();
+    intervalRef.current = setInterval(update, 30000);
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [lastSyncTime]);
+
+  const handleSync = async () => {
+    setSyncing(true);
+    try {
+      await Promise.all([
+        fetch('/api/cron/sync-hubspot'),
+        fetch('/api/cron/sync-companies'),
+      ]);
+      setLastSyncTime(new Date().toISOString());
+      onSyncComplete();
+    } catch (err) {
+      console.error('Sync failed:', err);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-2 mb-4 text-sm text-gray-500">
+      <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+      <span>
+        {syncing ? 'Syncing deal data...' : `Data synced ${displayTime}`}
+      </span>
+      <button
+        onClick={handleSync}
+        disabled={syncing}
+        className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors disabled:opacity-50"
+        title="Refresh deal data from HubSpot"
+      >
+        <svg
+          className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`}
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+          />
+        </svg>
+        {syncing ? 'Syncing...' : 'Refresh'}
+      </button>
+    </div>
+  );
+}
+
 // ===== Main Component =====
 
 export function PplSequenceQueueView() {
@@ -255,6 +454,9 @@ export function PplSequenceQueueView() {
   const [counts, setCounts] = useState({ on_track: 0, behind: 0, critical: 0, pending: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Methodology panel
+  const [showMethodology, setShowMethodology] = useState(false);
 
   // Filters
   const [aeFilter, setAeFilter] = useState<string>('all');
@@ -397,11 +599,32 @@ export function PplSequenceQueueView() {
     <div className="p-6">
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">PPL Sequence Compliance</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-gray-900">PPL Sequence Compliance</h1>
+          <button
+            onClick={() => setShowMethodology(!showMethodology)}
+            className={`p-1 rounded-full transition-colors ${
+              showMethodology
+                ? 'text-blue-600 bg-blue-100'
+                : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
+            }`}
+            title="How this report works"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </button>
+        </div>
         <p className="text-sm text-gray-600 mt-1">
           Track Week 1 touch compliance for Paid Per Lead deals. Target: 6 touches in first 5 business days.
         </p>
       </div>
+
+      {/* Methodology Panel */}
+      <MethodologyPanel open={showMethodology} onClose={() => setShowMethodology(false)} />
+
+      {/* Sync Status Bar */}
+      <SyncStatusBar onSyncComplete={fetchData} />
 
       {/* Filters Row */}
       <div className="flex flex-wrap items-center gap-3 mb-4">
