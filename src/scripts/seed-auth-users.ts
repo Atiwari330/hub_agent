@@ -41,13 +41,13 @@ const USERS = [
   },
   {
     email: 'eric@opusbehavioral.com',
-    displayName: 'Eric',
+    displayName: 'Eric Brandman',
     role: 'cmo',
     permissions: ['queue:ppl-sequence'],
   },
   {
     email: 'hbuniotto@opusbehavioral.com',
-    displayName: 'Hank Buniotto',
+    displayName: 'Humberto Buniotto',
     role: 'ceo',
     permissions: ['queue:ppl-sequence'],
   },
