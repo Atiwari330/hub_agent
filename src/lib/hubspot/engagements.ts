@@ -149,29 +149,51 @@ export interface HubSpotCall {
 }
 
 /**
- * Fetch calls associated with a deal
+ * Fetch calls associated with a deal (via direct deal→calls AND deal→contacts→calls)
  */
 export async function getCallsByDealId(dealId: string): Promise<HubSpotCall[]> {
   const client = getHubSpotClient();
-  const calls: HubSpotCall[] = [];
+  const callIds = new Set<string>();
 
   try {
-    // Get associations using v4 API: deals -> calls
-    const associations = await client.crm.associations.v4.basicApi.getPage(
-      'deals',
-      dealId,
-      'calls',
-      undefined,
-      15 // Limit to 15 calls
-    );
+    // Fetch deal→calls and deal→contacts associations in parallel
+    const [dealCallAssocs, contactAssocs] = await Promise.all([
+      client.crm.associations.v4.basicApi
+        .getPage('deals', dealId, 'calls', undefined, 15)
+        .catch(() => ({ results: [] as { toObjectId: string }[] })),
+      client.crm.associations.v4.basicApi
+        .getPage('deals', dealId, 'contacts', undefined, 50)
+        .catch(() => ({ results: [] as { toObjectId: string }[] })),
+    ]);
 
-    if (associations.results.length === 0) {
-      return calls;
+    // Collect direct deal call IDs
+    for (const a of dealCallAssocs.results) {
+      callIds.add(a.toObjectId);
     }
 
-    const callIds = associations.results.map((a) => a.toObjectId);
+    // Fetch contact→calls associations in parallel
+    if (contactAssocs.results.length > 0) {
+      const contactCallResults = await Promise.all(
+        contactAssocs.results.map((c) =>
+          client.crm.associations.v4.basicApi
+            .getPage('contacts', c.toObjectId, 'calls', undefined, 15)
+            .catch(() => ({ results: [] as { toObjectId: string }[] }))
+        )
+      );
+      for (const result of contactCallResults) {
+        for (const a of result.results) {
+          callIds.add(a.toObjectId);
+        }
+      }
+    }
 
-    for (const callId of callIds) {
+    if (callIds.size === 0) return [];
+
+    // Fetch call details (limit to 15 most relevant)
+    const idsToFetch = Array.from(callIds).slice(0, 15);
+    const calls: HubSpotCall[] = [];
+
+    for (const callId of idsToFetch) {
       try {
         const call = await client.crm.objects.calls.basicApi.getById(
           callId,
@@ -199,11 +221,12 @@ export async function getCallsByDealId(dealId: string): Promise<HubSpotCall[]> {
       const timeB = b.properties.hs_timestamp ? new Date(b.properties.hs_timestamp).getTime() : 0;
       return timeB - timeA;
     });
+
+    return calls;
   } catch (error) {
     console.warn(`Failed to get call associations for deal ${dealId}:`, error);
+    return [];
   }
-
-  return calls;
 }
 
 /**

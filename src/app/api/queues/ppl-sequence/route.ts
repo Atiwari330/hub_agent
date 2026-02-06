@@ -4,7 +4,7 @@ import { SYNC_CONFIG } from '@/lib/hubspot/sync-config';
 import { getAllPipelines } from '@/lib/hubspot/pipelines';
 import { getBusinessDaysSinceDate } from '@/lib/utils/business-days';
 import { getCallsByDealId, getEmailsByDealId } from '@/lib/hubspot/engagements';
-import { analyzeWeek1Touches, type Week1TouchAnalysis } from '@/lib/utils/touch-counter';
+import { analyzeWeek1Touches, countTouchesInRange, type Week1TouchAnalysis } from '@/lib/utils/touch-counter';
 import { checkApiAuth } from '@/lib/auth/api';
 import { RESOURCES } from '@/lib/auth';
 
@@ -31,6 +31,7 @@ export interface PplSequenceDeal {
   // PPL sequence specific
   dealAgeDays: number;
   week1Analysis: Week1TouchAnalysis | null;
+  totalTouches: number | null;
   // Flags
   needsActivityCheck: boolean;
 }
@@ -136,6 +137,7 @@ export async function GET(request: NextRequest) {
         : 0;
 
       let week1Analysis: Week1TouchAnalysis | null = null;
+      let totalTouches: number | null = null;
       let needsActivityCheck = false;
 
       // Only fetch activity data if we have a HubSpot ID and creation date
@@ -148,6 +150,15 @@ export async function GET(request: NextRequest) {
           ]);
 
           week1Analysis = analyzeWeek1Touches(calls, emails, deal.hubspot_created_at, target);
+
+          // Count all touches (no date filter) for total column
+          const allTimeTouches = countTouchesInRange(
+            calls,
+            emails,
+            new Date('2020-01-01'),
+            new Date('2030-12-31')
+          );
+          totalTouches = allTimeTouches.total;
 
           // Count statuses
           counts[week1Analysis.status]++;
@@ -174,6 +185,7 @@ export async function GET(request: NextRequest) {
         hubspotCreatedAt: deal.hubspot_created_at,
         dealAgeDays,
         week1Analysis,
+        totalTouches,
         needsActivityCheck,
       });
     }

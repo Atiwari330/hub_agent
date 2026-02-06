@@ -20,6 +20,7 @@ interface PplSequenceDeal {
   hubspotCreatedAt: string | null;
   dealAgeDays: number;
   week1Analysis: Week1TouchAnalysis | null;
+  totalTouches: number | null;
   needsActivityCheck: boolean;
 }
 
@@ -46,7 +47,7 @@ const STATUS_COLORS = {
   pending: { bg: 'bg-gray-100', text: 'text-gray-500', dot: 'bg-gray-400', label: 'Pending' },
 };
 
-const TOTAL_COLUMNS = 9; // chevron + 8 data columns
+const TOTAL_COLUMNS = 10; // chevron + 9 data columns
 
 // Stage filter options (map stage IDs to readable names)
 const STAGE_OPTIONS = [
@@ -586,10 +587,13 @@ export function PplSequenceQueueView() {
                     </div>
                   </th>
                   <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">
-                    Calls
+                    Wk 1 Calls
                   </th>
                   <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">
-                    Emails
+                    Wk 1 Emails
+                  </th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                    Total Touches
                   </th>
                   <th
                     className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100 select-none whitespace-nowrap"
@@ -655,6 +659,11 @@ export function PplSequenceQueueView() {
                         <td className="px-4 py-3">
                           <span className="text-sm text-gray-600 tabular-nums">
                             {analysis?.touches.emails ?? '-'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="text-sm text-gray-600 tabular-nums font-medium">
+                            {deal.totalTouches ?? '-'}
                           </span>
                         </td>
                         <td className="px-4 py-3">
