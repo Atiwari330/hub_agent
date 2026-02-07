@@ -12,6 +12,14 @@
     {
       "path": "/api/cron/sentiment-analysis",
       "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/cron/daily-scorecard",
+      "schedule": "0 12 * * 1-5"
+    },
+    {
+      "path": "/api/cron/weekly-scorecard",
+      "schedule": "0 13 * * 1"
     }
   ]
 }
