@@ -1,4 +1,4 @@
-export type UserRole = 'vp_revops' | 'cmo' | 'ceo';
+export type UserRole = 'vp_revops' | 'cmo' | 'ceo' | 'account_executive';
 
 export interface UserWithPermissions {
   id: string;
@@ -6,6 +6,7 @@ export interface UserWithPermissions {
   displayName: string | null;
   role: UserRole;
   permissions: string[];
+  hubspotOwnerId?: string;
 }
 
 // Resource keys for permission checks
@@ -22,6 +23,7 @@ export const RESOURCES = {
   QUEUE_AT_RISK: 'queue:at-risk',
   QUEUE_CS_HYGIENE: 'queue:cs-hygiene',
   API_AGENT: 'api:agent',
+  PORTAL: 'portal',
 } as const;
 
 export type Resource = (typeof RESOURCES)[keyof typeof RESOURCES];
@@ -50,6 +52,9 @@ export function hasPermission(
  * Map URL pathname to resource key for permission checks
  */
 export function getResourceFromPath(pathname: string): Resource | null {
+  // Portal pages
+  if (pathname.startsWith('/portal')) return RESOURCES.PORTAL;
+
   // Queue pages
   if (pathname.includes('/queues/hygiene')) return RESOURCES.QUEUE_HYGIENE;
   if (pathname.includes('/queues/next-step')) return RESOURCES.QUEUE_NEXT_STEP;
@@ -76,6 +81,7 @@ export function getResourceFromPath(pathname: string): Resource | null {
     return RESOURCES.DASHBOARD;
 
   // API routes
+  if (pathname.includes('/api/portal')) return RESOURCES.PORTAL;
   if (pathname.includes('/api/agent')) return RESOURCES.API_AGENT;
   if (pathname.includes('/api/queues/hygiene')) return RESOURCES.QUEUE_HYGIENE;
   if (pathname.includes('/api/queues/next-step'))
@@ -108,6 +114,11 @@ export function getDefaultLandingPage(user: UserWithPermissions): string {
   // VP of RevOps goes to main dashboard
   if (user.role === 'vp_revops') {
     return '/dashboard';
+  }
+
+  // Account Executives go to their portal
+  if (user.role === 'account_executive') {
+    return '/portal';
   }
 
   // CMO and CEO go to PPL Sequence Queue

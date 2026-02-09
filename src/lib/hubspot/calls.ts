@@ -157,8 +157,23 @@ export async function fetchAllCallsByOwner(
   }
 }
 
+// HubSpot batch API limit
+const BATCH_CHUNK_SIZE = 100;
+
 /**
- * Fetch associations (contacts and deals) for a batch of call IDs
+ * Helper to chunk an array into batches of a given size
+ */
+function chunk<T>(arr: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) {
+    chunks.push(arr.slice(i, i + size));
+  }
+  return chunks;
+}
+
+/**
+ * Fetch associations (contacts and deals) for a batch of call IDs.
+ * Automatically chunks requests for >100 calls.
  */
 export async function fetchCallAssociations(
   callIds: string[]
@@ -174,43 +189,46 @@ export async function fetchCallAssociations(
   if (callIds.length === 0) return result;
 
   try {
-    // Batch fetch associations for contacts
-    const contactAssociations = await client.crm.associations.batchApi.read(
-      'calls',
-      'contacts',
-      { inputs: callIds.map((id) => ({ id })) }
-    );
-
-    // Collect all contact IDs to fetch
+    // Batch fetch associations for contacts (chunked)
     const contactIds = new Set<string>();
     const callContactMap = new Map<string, string[]>();
 
-    for (const assoc of contactAssociations.results) {
-      const callId = assoc._from.id;
-      const associatedContactIds = assoc.to.map((t) => t.id);
-      callContactMap.set(callId, associatedContactIds);
-      for (const cid of associatedContactIds) {
-        contactIds.add(cid);
+    for (const idChunk of chunk(callIds, BATCH_CHUNK_SIZE)) {
+      const contactAssociations = await client.crm.associations.batchApi.read(
+        'calls',
+        'contacts',
+        { inputs: idChunk.map((id) => ({ id })) }
+      );
+
+      for (const assoc of contactAssociations.results) {
+        const callId = assoc._from.id;
+        const associatedContactIds = assoc.to.map((t) => t.id);
+        callContactMap.set(callId, associatedContactIds);
+        for (const cid of associatedContactIds) {
+          contactIds.add(cid);
+        }
       }
     }
 
-    // Fetch contact details if we have any
+    // Fetch contact details if we have any (chunked)
     const contactDetails = new Map<string, { name: string | null; email: string | null }>();
     if (contactIds.size > 0) {
-      const contactBatch = await client.crm.contacts.batchApi.read({
-        inputs: Array.from(contactIds).map((id) => ({ id })),
-        properties: ['firstname', 'lastname', 'email'],
-        propertiesWithHistory: [],
-      });
-
-      for (const contact of contactBatch.results) {
-        const firstName = contact.properties.firstname || '';
-        const lastName = contact.properties.lastname || '';
-        const name = [firstName, lastName].filter(Boolean).join(' ') || null;
-        contactDetails.set(contact.id, {
-          name,
-          email: contact.properties.email || null,
+      for (const idChunk of chunk(Array.from(contactIds), BATCH_CHUNK_SIZE)) {
+        const contactBatch = await client.crm.contacts.batchApi.read({
+          inputs: idChunk.map((id) => ({ id })),
+          properties: ['firstname', 'lastname', 'email'],
+          propertiesWithHistory: [],
         });
+
+        for (const contact of contactBatch.results) {
+          const firstName = contact.properties.firstname || '';
+          const lastName = contact.properties.lastname || '';
+          const name = [firstName, lastName].filter(Boolean).join(' ') || null;
+          contactDetails.set(contact.id, {
+            name,
+            email: contact.properties.email || null,
+          });
+        }
       }
     }
 
@@ -230,40 +248,43 @@ export async function fetchCallAssociations(
       }
     }
 
-    // Batch fetch associations for deals
-    const dealAssociations = await client.crm.associations.batchApi.read(
-      'calls',
-      'deals',
-      { inputs: callIds.map((id) => ({ id })) }
-    );
-
-    // Collect all deal IDs to fetch
+    // Batch fetch associations for deals (chunked)
     const dealIds = new Set<string>();
     const callDealMap = new Map<string, string[]>();
 
-    for (const assoc of dealAssociations.results) {
-      const callId = assoc._from.id;
-      const associatedDealIds = assoc.to.map((t) => t.id);
-      callDealMap.set(callId, associatedDealIds);
-      for (const did of associatedDealIds) {
-        dealIds.add(did);
+    for (const idChunk of chunk(callIds, BATCH_CHUNK_SIZE)) {
+      const dealAssociations = await client.crm.associations.batchApi.read(
+        'calls',
+        'deals',
+        { inputs: idChunk.map((id) => ({ id })) }
+      );
+
+      for (const assoc of dealAssociations.results) {
+        const callId = assoc._from.id;
+        const associatedDealIds = assoc.to.map((t) => t.id);
+        callDealMap.set(callId, associatedDealIds);
+        for (const did of associatedDealIds) {
+          dealIds.add(did);
+        }
       }
     }
 
-    // Fetch deal details if we have any
+    // Fetch deal details if we have any (chunked)
     const dealDetails = new Map<string, { name: string; amount: number | null }>();
     if (dealIds.size > 0) {
-      const dealBatch = await client.crm.deals.batchApi.read({
-        inputs: Array.from(dealIds).map((id) => ({ id })),
-        properties: ['dealname', 'amount'],
-        propertiesWithHistory: [],
-      });
-
-      for (const deal of dealBatch.results) {
-        dealDetails.set(deal.id, {
-          name: deal.properties.dealname || 'Unnamed Deal',
-          amount: deal.properties.amount ? parseFloat(deal.properties.amount) : null,
+      for (const idChunk of chunk(Array.from(dealIds), BATCH_CHUNK_SIZE)) {
+        const dealBatch = await client.crm.deals.batchApi.read({
+          inputs: idChunk.map((id) => ({ id })),
+          properties: ['dealname', 'amount'],
+          propertiesWithHistory: [],
         });
+
+        for (const deal of dealBatch.results) {
+          dealDetails.set(deal.id, {
+            name: deal.properties.dealname || 'Unnamed Deal',
+            amount: deal.properties.amount ? parseFloat(deal.properties.amount) : null,
+          });
+        }
       }
     }
 
@@ -288,4 +309,138 @@ export async function fetchCallAssociations(
   }
 
   return result;
+}
+
+/**
+ * The 5 AEs whose contacts are included in the HubSpot dashboard call filter.
+ * Calls are only counted if the associated contact is owned by one of these AEs.
+ */
+export const DASHBOARD_AE_EMAILS = [
+  'esoruco@opusbehavioral.com',
+  'zclaussen@opusbehavioral.com',
+  'aboyd@opusbehavioral.com',
+  'jrice@opusbehavioral.com',
+  'cgarraffa@opusbehavioral.com',
+];
+
+/**
+ * Fetch contact associations for calls (just contact IDs, no details).
+ * Chunks automatically for >100 calls.
+ */
+async function fetchCallContactIds(
+  callIds: string[]
+): Promise<Map<string, string[]>> {
+  const client = getHubSpotClient();
+  const result = new Map<string, string[]>();
+
+  for (const id of callIds) {
+    result.set(id, []);
+  }
+
+  if (callIds.length === 0) return result;
+
+  for (const idChunk of chunk(callIds, BATCH_CHUNK_SIZE)) {
+    const response = await client.crm.associations.batchApi.read(
+      'calls',
+      'contacts',
+      { inputs: idChunk.map((id) => ({ id })) }
+    );
+
+    for (const assoc of response.results) {
+      result.set(assoc._from.id, assoc.to.map((t) => t.id));
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Batch fetch contact properties (phone, hubspot_owner_id).
+ * Chunks automatically for >100 contacts.
+ */
+async function fetchContactFilterProps(
+  contactIds: string[]
+): Promise<Map<string, { phone: string | null; ownerId: string | null }>> {
+  const client = getHubSpotClient();
+  const result = new Map<string, { phone: string | null; ownerId: string | null }>();
+
+  if (contactIds.length === 0) return result;
+
+  for (const idChunk of chunk(contactIds, BATCH_CHUNK_SIZE)) {
+    const response = await client.crm.contacts.batchApi.read({
+      inputs: idChunk.map((id) => ({ id })),
+      properties: ['phone', 'hubspot_owner_id'],
+      propertiesWithHistory: [],
+    });
+
+    for (const contact of response.results) {
+      result.set(contact.id, {
+        phone: contact.properties.phone || null,
+        ownerId: contact.properties.hubspot_owner_id || null,
+      });
+    }
+  }
+
+  return result;
+}
+
+export interface ContactFilterOptions {
+  requirePhone: boolean;
+  validOwnerIds: Set<string>;
+}
+
+/**
+ * Fetch calls for an owner within a date range, then filter to match the
+ * HubSpot dashboard criteria:
+ * - Call must have an associated contact
+ * - Contact must have a phone number (if requirePhone is true)
+ * - Contact must be owned by one of the valid AE owner IDs
+ *
+ * Returns only calls that pass all contact-based filters.
+ */
+export async function fetchFilteredCallsByOwner(
+  hubspotOwnerId: string,
+  startDate: Date,
+  endDate: Date,
+  contactFilter: ContactFilterOptions
+): Promise<CallData[]> {
+  // 1. Fetch all calls for the owner in the date range
+  const allCalls = await fetchCallsByOwner(hubspotOwnerId, startDate, endDate);
+
+  if (allCalls.length === 0) return [];
+
+  // 2. Fetch contact associations for all calls
+  const callContactMap = await fetchCallContactIds(allCalls.map((c) => c.id));
+
+  // 3. Collect all unique contact IDs and fetch their properties
+  const allContactIds = new Set<string>();
+  for (const contactIds of callContactMap.values()) {
+    for (const cid of contactIds) allContactIds.add(cid);
+  }
+
+  const contactProps = await fetchContactFilterProps(Array.from(allContactIds));
+
+  // 4. Filter calls
+  return allCalls.filter((call) => {
+    const contactIds = callContactMap.get(call.id) || [];
+
+    // Must have at least one associated contact
+    if (contactIds.length === 0) return false;
+
+    // At least one contact must pass the filters
+    return contactIds.some((cid) => {
+      const props = contactProps.get(cid);
+      if (!props) return false;
+
+      if (contactFilter.requirePhone) {
+        if (!props.phone || props.phone.trim() === '') return false;
+      }
+
+      if (contactFilter.validOwnerIds.size > 0) {
+        if (!props.ownerId || !contactFilter.validOwnerIds.has(props.ownerId)) return false;
+      }
+
+      return true;
+    });
+  });
 }

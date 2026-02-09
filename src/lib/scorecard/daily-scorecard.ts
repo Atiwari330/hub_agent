@@ -5,7 +5,11 @@
  * (from Supabase) for each tracked AE to build the daily scorecard.
  */
 
-import { fetchCallsByOwner } from '@/lib/hubspot/calls';
+import {
+  fetchFilteredCallsByOwner,
+  DASHBOARD_AE_EMAILS,
+  type ContactFilterOptions,
+} from '@/lib/hubspot/calls';
 import { createServiceClient } from '@/lib/supabase/client';
 import { SALES_PIPELINE_ID } from '@/lib/hubspot/stage-mappings';
 
@@ -83,6 +87,23 @@ export function getPreviousBusinessDay(today: Date = new Date()): Date {
 }
 
 /**
+ * Resolve HubSpot owner IDs for all dashboard AEs.
+ * These are the valid contact owners for the call filter.
+ */
+async function getDashboardAeOwnerIds(
+  supabase: ReturnType<typeof createServiceClient>
+): Promise<Set<string>> {
+  const { data: dashboardOwners } = await supabase
+    .from('owners')
+    .select('hubspot_owner_id')
+    .in('email', DASHBOARD_AE_EMAILS);
+
+  return new Set(
+    (dashboardOwners || []).map((o) => o.hubspot_owner_id)
+  );
+}
+
+/**
  * Fetch scorecard data for a given reporting date
  */
 export async function getDailyScorecardData(
@@ -112,22 +133,28 @@ export async function getDailyScorecardData(
     timeZone: 'America/New_York',
   });
 
-  // 3. Fetch data for each AE in parallel
+  // 3. Resolve valid contact owner IDs (the 5 dashboard AEs)
+  const validOwnerIds = await getDashboardAeOwnerIds(supabase);
+
+  const contactFilter: ContactFilterOptions = {
+    requirePhone: true,
+    validOwnerIds,
+  };
+
+  // 4. Fetch data for each AE in parallel
   const aeResults = await Promise.all(
     owners.map(async (owner) => {
       const name = [owner.first_name, owner.last_name]
         .filter(Boolean)
         .join(' ');
 
-      // Fetch calls from HubSpot
-      const calls = await fetchCallsByOwner(
+      // Fetch filtered calls from HubSpot (matching dashboard criteria)
+      const calls = await fetchFilteredCallsByOwner(
         owner.hubspot_owner_id,
         start,
-        end
+        end,
+        contactFilter
       );
-
-      // Count all calls (manually-logged calls have no duration data)
-      const qualifiedCalls = calls;
 
       // Query demos completed yesterday from Supabase
       const { count: demosYesterday } = await supabase
@@ -142,9 +169,9 @@ export async function getDailyScorecardData(
         name,
         email: owner.email,
         hubspotOwnerId: owner.hubspot_owner_id,
-        qualifiedCalls: qualifiedCalls.length,
+        qualifiedCalls: calls.length,
         totalCalls: calls.length,
-        callTier: getCallTier(qualifiedCalls.length),
+        callTier: getCallTier(calls.length),
         demosYesterday: demosYesterday ?? 0,
       };
     })

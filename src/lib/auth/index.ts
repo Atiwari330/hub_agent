@@ -47,6 +47,7 @@ export async function getCurrentUser(): Promise<UserWithPermissions | null> {
     displayName: profile.display_name,
     role: profile.role,
     permissions: permissions?.map((p) => p.resource) || [],
+    hubspotOwnerId: profile.hubspot_owner_id || undefined,
   };
 }
 

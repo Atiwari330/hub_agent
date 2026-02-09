@@ -1,12 +1,16 @@
+import { config } from 'dotenv';
+config({ path: '.env.local' });
+
 /**
  * Seed script to create auth users and their permissions
  *
  * Run with: npx tsx src/scripts/seed-auth-users.ts
  *
- * This script creates three users:
+ * This script creates users:
  * - VP of RevOps (full access)
  * - CMO (PPL Sequence only)
  * - CEO (PPL Sequence only)
+ * - 3 Account Executives (portal only, linked to HubSpot owner)
  *
  * NOTE: You can also create users manually in the Supabase Dashboard:
  * Authentication > Users > Add user
@@ -50,6 +54,24 @@ const USERS = [
     displayName: 'Humberto Buniotto',
     role: 'ceo',
     permissions: ['queue:ppl-sequence'],
+  },
+  {
+    email: 'aboyd@opusbehavioral.com',
+    displayName: 'Amos Boyd',
+    role: 'account_executive',
+    permissions: ['portal'],
+  },
+  {
+    email: 'cgarraffa@opusbehavioral.com',
+    displayName: 'Chris Garraffa',
+    role: 'account_executive',
+    permissions: ['portal'],
+  },
+  {
+    email: 'jrice@opusbehavioral.com',
+    displayName: 'Jack Rice',
+    role: 'account_executive',
+    permissions: ['portal'],
   },
 ];
 
@@ -151,6 +173,30 @@ async function createUser(
     console.log(`  No explicit permissions (role-based access)`);
   }
 
+  // For AEs, link their hubspot_owner_id from the owners table
+  if (role === 'account_executive') {
+    const { data: owner } = await supabase
+      .from('owners')
+      .select('hubspot_owner_id')
+      .eq('email', email)
+      .single();
+
+    if (owner?.hubspot_owner_id) {
+      const { error: linkError } = await supabase
+        .from('user_profiles')
+        .update({ hubspot_owner_id: owner.hubspot_owner_id })
+        .eq('id', userId);
+
+      if (linkError) {
+        console.error(`  Failed to link HubSpot owner: ${linkError.message}`);
+      } else {
+        console.log(`  Linked to HubSpot owner: ${owner.hubspot_owner_id}`);
+      }
+    } else {
+      console.warn(`  Warning: No HubSpot owner found for ${email}`);
+    }
+  }
+
   console.log(`  Done!`);
 }
 
@@ -184,6 +230,9 @@ async function main() {
   console.log('- VP of RevOps (atiwari@): Full access to everything');
   console.log('- CMO (eric@): PPL Sequence Queue only');
   console.log('- CEO (hbuniotto@): PPL Sequence Queue only');
+  console.log('- AE (aboyd@): Portal only');
+  console.log('- AE (cgarraffa@): Portal only');
+  console.log('- AE (jrice@): Portal only');
 }
 
 main().catch(console.error);

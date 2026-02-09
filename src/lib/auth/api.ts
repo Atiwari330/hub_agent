@@ -46,6 +46,7 @@ export async function checkApiAuth(
     displayName: profile.display_name,
     role: profile.role,
     permissions: permissions?.map((p) => p.resource) || [],
+    hubspotOwnerId: profile.hubspot_owner_id || undefined,
   };
 
   // Check permission if resource is specified

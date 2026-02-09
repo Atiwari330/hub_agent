@@ -2,16 +2,40 @@ import { Suspense } from 'react';
 import { redirect } from 'next/navigation';
 import { createServerSupabaseClient } from '@/lib/supabase/client';
 import { LoginForm } from '@/components/auth/login-form';
+import { getDefaultLandingPage, type UserRole, type UserWithPermissions } from '@/lib/auth/types';
 
 export default async function LoginPage() {
-  // If already authenticated, redirect to dashboard
+  // If already authenticated, redirect to appropriate landing page
   const supabase = await createServerSupabaseClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   if (user) {
-    redirect('/dashboard');
+    // Fetch profile to determine correct landing page
+    const { data: profile } = await supabase
+      .from('user_profiles')
+      .select('*')
+      .eq('id', user.id)
+      .single();
+
+    if (profile) {
+      const { data: permissions } = await supabase
+        .from('user_permissions')
+        .select('resource')
+        .eq('user_id', user.id);
+
+      const userWithPermissions: UserWithPermissions = {
+        id: user.id,
+        email: profile.email,
+        displayName: profile.display_name,
+        role: profile.role as UserRole,
+        permissions: permissions?.map((p) => p.resource) || [],
+      };
+      redirect(getDefaultLandingPage(userWithPermissions));
+    } else {
+      redirect('/dashboard');
+    }
   }
 
   return (

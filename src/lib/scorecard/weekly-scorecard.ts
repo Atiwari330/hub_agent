@@ -5,7 +5,11 @@
  * for each tracked AE to build the weekly scorecard.
  */
 
-import { fetchCallsByOwner } from '@/lib/hubspot/calls';
+import {
+  fetchFilteredCallsByOwner,
+  DASHBOARD_AE_EMAILS,
+  type ContactFilterOptions,
+} from '@/lib/hubspot/calls';
 import { createServiceClient } from '@/lib/supabase/client';
 import { SALES_PIPELINE_ID } from '@/lib/hubspot/stage-mappings';
 import {
@@ -68,15 +72,6 @@ export function getWeekBounds(sundayDate: Date): { monday: Date; sunday: Date } 
 }
 
 /**
- * Get the start/end of a single day in ET
- */
-function getDayBoundsET(dateStr: string): { start: Date; end: Date } {
-  const start = new Date(`${dateStr}T00:00:00-05:00`);
-  const end = new Date(`${dateStr}T23:59:59.999-05:00`);
-  return { start, end };
-}
-
-/**
  * Determine the demo tier label based on count
  */
 export function getDemoTier(count: number): string {
@@ -110,7 +105,22 @@ export async function getWeeklyScorecardData(
     throw new Error('No matching AE owners found in database');
   }
 
-  // 2. Build the 7 day date strings (Mon–Sun) in ET
+  // 2. Resolve valid contact owner IDs (the 5 dashboard AEs)
+  const { data: dashboardOwners } = await supabase
+    .from('owners')
+    .select('hubspot_owner_id')
+    .in('email', DASHBOARD_AE_EMAILS);
+
+  const validOwnerIds = new Set(
+    (dashboardOwners || []).map((o) => o.hubspot_owner_id)
+  );
+
+  const contactFilter: ContactFilterOptions = {
+    requirePhone: true,
+    validOwnerIds,
+  };
+
+  // 3. Build the 7 day date strings (Mon–Sun) in ET
   const mondayStr = monday.toLocaleDateString('en-CA', {
     timeZone: 'America/New_York',
   });
@@ -125,32 +135,47 @@ export async function getWeeklyScorecardData(
   const weekStartStr = dayDates[0];
   const weekEndStr = dayDates[6];
 
-  // 3. Fetch data for each AE in parallel
+  // 4. Fetch data for each AE in parallel
+  //    Optimization: fetch the full week of calls at once, then split by day
   const aeResults = await Promise.all(
     owners.map(async (owner) => {
       const name = [owner.first_name, owner.last_name]
         .filter(Boolean)
         .join(' ');
 
-      // Fetch calls for each day (Mon–Sun)
-      const dailyCalls: DailyCallEntry[] = await Promise.all(
-        dayDates.map(async (dateStr, idx) => {
-          const { start, end } = getDayBoundsET(dateStr);
-          const calls = await fetchCallsByOwner(
-            owner.hubspot_owner_id,
-            start,
-            end
-          );
-          return {
-            date: new Date(dateStr + 'T12:00:00-05:00'),
-            dayLabel: DAY_LABELS[idx],
-            calls: calls.length,
-            tier: getCallTier(calls.length),
-          };
-        })
+      // Fetch all filtered calls for the full week at once
+      const weekCalls = await fetchFilteredCallsByOwner(
+        owner.hubspot_owner_id,
+        monday,
+        sunday,
+        contactFilter
       );
 
-      const weeklyTotalCalls = dailyCalls.reduce((sum, d) => sum + d.calls, 0);
+      // Split calls by day in ET
+      const callsByDay = new Map<string, number>();
+      for (const dateStr of dayDates) {
+        callsByDay.set(dateStr, 0);
+      }
+      for (const call of weekCalls) {
+        const callDate = call.timestamp.toLocaleDateString('en-CA', {
+          timeZone: 'America/New_York',
+        });
+        if (callsByDay.has(callDate)) {
+          callsByDay.set(callDate, callsByDay.get(callDate)! + 1);
+        }
+      }
+
+      const dailyCalls: DailyCallEntry[] = dayDates.map((dateStr, idx) => {
+        const count = callsByDay.get(dateStr) || 0;
+        return {
+          date: new Date(dateStr + 'T12:00:00-05:00'),
+          dayLabel: DAY_LABELS[idx],
+          calls: count,
+          tier: getCallTier(count),
+        };
+      });
+
+      const weeklyTotalCalls = weekCalls.length;
 
       // Query demos completed during the full week from Supabase
       const { count: weeklyDemos } = await supabase
