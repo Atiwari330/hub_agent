@@ -11,6 +11,12 @@ export const TRACKED_STAGES = {
     property: 'hs_v2_date_entered_17915773',
     dbColumn: 'sql_entered_at',
   },
+  DISCOVERY: {
+    id: '138092708',
+    label: 'Discovery',
+    property: 'hs_v2_date_entered_138092708',
+    dbColumn: 'discovery_entered_at',
+  },
   DEMO_SCHEDULED: {
     id: 'baedc188-ba76-4a41-8723-5bb99fe7c5bf',
     label: 'Demo - Scheduled',

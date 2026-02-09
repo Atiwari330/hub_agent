@@ -72,6 +72,7 @@ export async function getDealsByOwnerId(ownerId: string): Promise<HubSpotDeal[]>
           hs_all_collaborator_owner_ids: deal.properties.hs_all_collaborator_owner_ids,
           // Stage entry timestamps
           [TRACKED_STAGES.SQL.property]: deal.properties[TRACKED_STAGES.SQL.property],
+          [TRACKED_STAGES.DISCOVERY.property]: deal.properties[TRACKED_STAGES.DISCOVERY.property],
           [TRACKED_STAGES.DEMO_SCHEDULED.property]: deal.properties[TRACKED_STAGES.DEMO_SCHEDULED.property],
           [TRACKED_STAGES.DEMO_COMPLETED.property]: deal.properties[TRACKED_STAGES.DEMO_COMPLETED.property],
           [TRACKED_STAGES.CLOSED_WON.property]: deal.properties[TRACKED_STAGES.CLOSED_WON.property],
@@ -118,6 +119,7 @@ export async function getDealById(dealId: string): Promise<HubSpotDeal | null> {
         hs_all_collaborator_owner_ids: deal.properties.hs_all_collaborator_owner_ids,
         // Stage entry timestamps
         [TRACKED_STAGES.SQL.property]: deal.properties[TRACKED_STAGES.SQL.property],
+        [TRACKED_STAGES.DISCOVERY.property]: deal.properties[TRACKED_STAGES.DISCOVERY.property],
         [TRACKED_STAGES.DEMO_SCHEDULED.property]: deal.properties[TRACKED_STAGES.DEMO_SCHEDULED.property],
         [TRACKED_STAGES.DEMO_COMPLETED.property]: deal.properties[TRACKED_STAGES.DEMO_COMPLETED.property],
         [TRACKED_STAGES.CLOSED_WON.property]: deal.properties[TRACKED_STAGES.CLOSED_WON.property],
@@ -165,6 +167,7 @@ export async function getAllDeals(): Promise<HubSpotDeal[]> {
           hs_all_collaborator_owner_ids: deal.properties.hs_all_collaborator_owner_ids,
           // Stage entry timestamps
           [TRACKED_STAGES.SQL.property]: deal.properties[TRACKED_STAGES.SQL.property],
+          [TRACKED_STAGES.DISCOVERY.property]: deal.properties[TRACKED_STAGES.DISCOVERY.property],
           [TRACKED_STAGES.DEMO_SCHEDULED.property]: deal.properties[TRACKED_STAGES.DEMO_SCHEDULED.property],
           [TRACKED_STAGES.DEMO_COMPLETED.property]: deal.properties[TRACKED_STAGES.DEMO_COMPLETED.property],
           [TRACKED_STAGES.CLOSED_WON.property]: deal.properties[TRACKED_STAGES.CLOSED_WON.property],
@@ -269,6 +272,8 @@ export async function getFilteredDealsForSync(
             hs_all_collaborator_owner_ids: deal.properties.hs_all_collaborator_owner_ids,
             [TRACKED_STAGES.SQL.property]:
               deal.properties[TRACKED_STAGES.SQL.property],
+            [TRACKED_STAGES.DISCOVERY.property]:
+              deal.properties[TRACKED_STAGES.DISCOVERY.property],
             [TRACKED_STAGES.DEMO_SCHEDULED.property]:
               deal.properties[TRACKED_STAGES.DEMO_SCHEDULED.property],
             [TRACKED_STAGES.DEMO_COMPLETED.property]:

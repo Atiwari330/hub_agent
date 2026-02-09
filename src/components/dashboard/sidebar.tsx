@@ -175,6 +175,7 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
   const isOnNextStepQueue = pathname === '/dashboard/queues/next-step';
   const isOnOverdueTasksQueue = pathname === '/dashboard/queues/overdue-tasks';
   const isOnStalledDealsQueue = pathname === '/dashboard/queues/stalled-deals';
+  const isOnPreDemoPipelineQueue = pathname === '/dashboard/queues/pre-demo-pipeline';
   const isOnPplSequenceQueue = pathname === '/dashboard/queues/ppl-sequence';
   // Upsell Pipeline queues
   const isOnUpsellHygieneQueue = pathname === '/dashboard/queues/upsell-hygiene';
@@ -291,6 +292,7 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
           hasPermission(user, RESOURCES.QUEUE_NEXT_STEP) ||
           hasPermission(user, RESOURCES.QUEUE_OVERDUE_TASKS) ||
           hasPermission(user, RESOURCES.QUEUE_STALLED_DEALS) ||
+          hasPermission(user, RESOURCES.QUEUE_PRE_DEMO_PIPELINE) ||
           hasPermission(user, RESOURCES.QUEUE_PPL_SEQUENCE) ||
           hasPermission(user, RESOURCES.QUEUE_UPSELL_HYGIENE) ||
           hasPermission(user, RESOURCES.QUEUE_STALLED_UPSELLS) ||
@@ -317,6 +319,7 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
                 hasPermission(user, RESOURCES.QUEUE_NEXT_STEP) ||
                 hasPermission(user, RESOURCES.QUEUE_OVERDUE_TASKS) ||
                 hasPermission(user, RESOURCES.QUEUE_STALLED_DEALS) ||
+                hasPermission(user, RESOURCES.QUEUE_PRE_DEMO_PIPELINE) ||
                 hasPermission(user, RESOURCES.QUEUE_PPL_SEQUENCE)) && (
               <>
                 {!isCollapsed && (
@@ -419,6 +422,31 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
                         </svg>
                       ) : (
                         <span>Stalled Deals</span>
+                      )}
+                    </Link>
+                  </li>
+                  )}
+                  {hasPermission(user, RESOURCES.QUEUE_PRE_DEMO_PIPELINE) && (
+                  <li>
+                    <Link
+                      href="/dashboard/queues/pre-demo-pipeline"
+                      className={`flex items-center py-2 text-sm transition-colors ${
+                        isCollapsed
+                          ? 'px-0 justify-center'
+                          : 'px-4 pl-14'
+                      } ${
+                        isOnPreDemoPipelineQueue
+                          ? 'bg-indigo-600 text-white'
+                          : 'text-slate-300 hover:bg-slate-800'
+                      }`}
+                      title={isCollapsed ? 'Pre-Demo Pipeline' : undefined}
+                    >
+                      {isCollapsed ? (
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                        </svg>
+                      ) : (
+                        <span>Pre-Demo Pipeline</span>
                       )}
                     </Link>
                   </li>

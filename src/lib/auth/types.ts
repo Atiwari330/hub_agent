@@ -22,6 +22,7 @@ export const RESOURCES = {
   QUEUE_PPL_SEQUENCE: 'queue:ppl-sequence',
   QUEUE_AT_RISK: 'queue:at-risk',
   QUEUE_CS_HYGIENE: 'queue:cs-hygiene',
+  QUEUE_PRE_DEMO_PIPELINE: 'queue:pre-demo-pipeline',
   API_AGENT: 'api:agent',
   PORTAL: 'portal',
 } as const;
@@ -72,6 +73,8 @@ export function getResourceFromPath(pathname: string): Resource | null {
     return RESOURCES.QUEUE_AT_RISK;
   if (pathname.includes('/queues/cs-hygiene'))
     return RESOURCES.QUEUE_CS_HYGIENE;
+  if (pathname.includes('/queues/pre-demo-pipeline'))
+    return RESOURCES.QUEUE_PRE_DEMO_PIPELINE;
 
   // AE pages
   if (pathname.match(/\/dashboard\/ae\/[^/]+/)) return RESOURCES.AE_DETAIL;
@@ -100,6 +103,8 @@ export function getResourceFromPath(pathname: string): Resource | null {
     return RESOURCES.QUEUE_AT_RISK;
   if (pathname.includes('/api/queues/cs-hygiene'))
     return RESOURCES.QUEUE_CS_HYGIENE;
+  if (pathname.includes('/api/queues/pre-demo-pipeline'))
+    return RESOURCES.QUEUE_PRE_DEMO_PIPELINE;
   if (pathname.includes('/api/queues/create-cs-task'))
     return RESOURCES.QUEUE_CS_HYGIENE;
   if (pathname.match(/\/api\/ae\/[^/]+/)) return RESOURCES.AE_DETAIL;
