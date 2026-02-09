@@ -8,8 +8,8 @@ import { RESOURCES } from '@/lib/auth';
 
 // Active stages (excludes MQL, Closed Won, Closed Lost)
 const ACTIVE_DEAL_STAGES = [
-  '17915773',                                  // SQL
-  '138092708',                                 // Discovery
+  '17915773',                                  // SQL (legacy)
+  '138092708',                                 // SQL/Discovery
   'baedc188-ba76-4a41-8723-5bb99fe7c5bf',     // Demo - Scheduled
   '963167283',                                 // Demo - Completed
   '59865091',                                  // Proposal

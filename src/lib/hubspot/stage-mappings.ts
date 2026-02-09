@@ -5,15 +5,21 @@ export const SALES_PIPELINE_ID = '1c27e5a3-5e5e-4403-ab0f-d356bf268cf3';
 
 // Stage IDs we want to track for leading indicators
 export const TRACKED_STAGES = {
+  MQL: {
+    id: '2030251',
+    label: 'MQL',
+    property: 'hs_v2_date_entered_2030251',
+    dbColumn: 'mql_entered_at',
+  },
   SQL: {
     id: '17915773',
-    label: 'SQL',
+    label: 'SQL (legacy)',
     property: 'hs_v2_date_entered_17915773',
     dbColumn: 'sql_entered_at',
   },
   DISCOVERY: {
     id: '138092708',
-    label: 'Discovery',
+    label: 'SQL/Discovery',
     property: 'hs_v2_date_entered_138092708',
     dbColumn: 'discovery_entered_at',
   },

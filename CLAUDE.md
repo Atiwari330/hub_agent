@@ -187,7 +187,9 @@ The dashboard now tracks when deals entered key pipeline stages to identify lead
 ### Tracked Stages (Sales Pipeline)
 | Stage | HubSpot Stage ID | DB Column |
 |-------|------------------|-----------|
-| SQL | `17915773` | `sql_entered_at` |
+| MQL | `2030251` | `mql_entered_at` |
+| SQL (legacy) | `17915773` | `sql_entered_at` |
+| SQL/Discovery | `138092708` | `discovery_entered_at` |
 | Demo Scheduled | `baedc188-ba76-4a41-8723-5bb99fe7c5bf` | `demo_scheduled_entered_at` |
 | Demo Completed | `963167283` | `demo_completed_entered_at` |
 | Closed Won | `97b2bcc6-fb34-4b56-8e6e-c349c88ef3d5` | `closed_won_entered_at` |

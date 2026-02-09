@@ -9,8 +9,8 @@ import { SYNC_CONFIG } from '@/lib/hubspot/sync-config';
 
 // Active stages for exception deal notes sync (excludes MQL, Closed Won, Closed Lost)
 const ACTIVE_DEAL_STAGES = [
-  '17915773',                                  // SQL
-  '138092708',                                 // Discovery
+  '17915773',                                  // SQL (legacy)
+  '138092708',                                 // SQL/Discovery
   'baedc188-ba76-4a41-8723-5bb99fe7c5bf',     // Demo - Scheduled
   '963167283',                                 // Demo - Completed
   '59865091',                                  // Proposal
@@ -120,6 +120,7 @@ export async function GET(request: Request) {
       products: deal.properties.product_s,
       deal_substage: deal.properties.proposal_stage,
       deal_collaborator: deal.properties.hs_all_collaborator_owner_ids,
+      mql_entered_at: toTimestamp(deal.properties[TRACKED_STAGES.MQL.property]),
       sql_entered_at: toTimestamp(deal.properties[TRACKED_STAGES.SQL.property]),
       discovery_entered_at: toTimestamp(deal.properties[TRACKED_STAGES.DISCOVERY.property]),
       demo_scheduled_entered_at: toTimestamp(deal.properties[TRACKED_STAGES.DEMO_SCHEDULED.property]),
@@ -211,6 +212,7 @@ export async function GET(request: Request) {
       products: deal.properties.product_s,
       deal_substage: deal.properties.proposal_stage,
       deal_collaborator: deal.properties.hs_all_collaborator_owner_ids,
+      mql_entered_at: toTimestamp(deal.properties[TRACKED_STAGES.MQL.property]),
       sql_entered_at: toTimestamp(deal.properties[TRACKED_STAGES.SQL.property]),
       discovery_entered_at: toTimestamp(deal.properties[TRACKED_STAGES.DISCOVERY.property]),
       demo_scheduled_entered_at: toTimestamp(deal.properties[TRACKED_STAGES.DEMO_SCHEDULED.property]),

@@ -22,6 +22,7 @@ interface PreDemoDealWithMetadata {
   nextActivityDate: string | null;
   nextStep: string | null;
   hubspotCreatedAt: string | null;
+  mqlEnteredAt: string | null;
   sqlEnteredAt: string | null;
   discoveryEnteredAt: string | null;
   demoScheduledEnteredAt: string | null;
@@ -284,10 +285,18 @@ function StageDiagnosisFactors({ deal }: { deal: ProcessedDeal }) {
   });
 
   // Stage-specific diagnosis
-  if (stageId === '17915773') {
-    // SQL stage
+  if (stageId === '2030251') {
+    // MQL stage
+    if (!deal.sqlEnteredAt && !deal.discoveryEnteredAt) {
+      factors.push({ label: 'Never progressed past MQL', severity: 'warning' });
+    }
+    if (!deal.hasFutureActivity) {
+      factors.push({ label: 'No qualifying activity scheduled', severity: 'warning' });
+    }
+  } else if (stageId === '17915773') {
+    // SQL (legacy) stage
     if (!deal.discoveryEnteredAt) {
-      factors.push({ label: 'Never entered Discovery', severity: 'warning' });
+      factors.push({ label: 'Never entered SQL/Discovery', severity: 'warning' });
     }
     if (!deal.hasFutureActivity) {
       factors.push({ label: 'No discovery call scheduled', severity: 'warning' });
@@ -662,7 +671,7 @@ export function PreDemoPipelineQueueView() {
   const [thresholdsOpen, setThresholdsOpen] = useState(false);
 
   // Quarter filter
-  const [quarterFilter, setQuarterFilter] = useState<QuarterFilter>(getCurrentQuarterFilter());
+  const [quarterFilter, setQuarterFilter] = useState<QuarterFilter>('all');
   const quarterOptions = useMemo(() => getQuarterOptions(), []);
   const currentYear = quarterOptions[0]?.year || new Date().getFullYear();
 
@@ -932,7 +941,7 @@ export function PreDemoPipelineQueueView() {
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Pre-Demo Pipeline</h1>
         <p className="text-sm text-gray-600 mt-1">
-          Deals in early stages (SQL, Discovery, Demo Scheduled) that aren&apos;t progressing toward Demo Completed.
+          Deals in early stages (MQL, SQL/Discovery, Demo Scheduled) that aren&apos;t progressing toward Demo Completed.
         </p>
       </div>
 

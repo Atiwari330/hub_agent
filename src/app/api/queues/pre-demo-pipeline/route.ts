@@ -6,10 +6,11 @@ import { getBusinessDaysSinceDate, getDaysUntil, isDateInPast } from '@/lib/util
 import { checkApiAuth } from '@/lib/auth/api';
 import { RESOURCES } from '@/lib/auth';
 
-// Pre-demo stages only (SQL, Discovery, Demo Scheduled)
+// Pre-demo stages only (MQL, SQL (legacy), SQL/Discovery, Demo Scheduled)
 const PRE_DEMO_STAGES = [
-  '17915773',                                  // SQL
-  '138092708',                                 // Discovery
+  '2030251',                                   // MQL
+  '17915773',                                  // SQL (legacy)
+  '138092708',                                 // SQL/Discovery
   'baedc188-ba76-4a41-8723-5bb99fe7c5bf',     // Demo - Scheduled
 ];
 
@@ -28,6 +29,7 @@ export interface PreDemoDealWithMetadata {
   nextStep: string | null;
   hubspotCreatedAt: string | null;
   // Stage entry timestamps
+  mqlEnteredAt: string | null;
   sqlEnteredAt: string | null;
   discoveryEnteredAt: string | null;
   demoScheduledEnteredAt: string | null;
@@ -105,6 +107,7 @@ export async function GET(request: NextRequest) {
         last_activity_date,
         next_activity_date,
         next_step,
+        mql_entered_at,
         sql_entered_at,
         discovery_entered_at,
         demo_scheduled_entered_at,
@@ -149,7 +152,9 @@ export async function GET(request: NextRequest) {
 
       // Calculate days in current stage from the entry timestamp
       let currentStageEnteredAt: string | null = null;
-      if (stageId === '17915773') {
+      if (stageId === '2030251') {
+        currentStageEnteredAt = deal.mql_entered_at;
+      } else if (stageId === '17915773') {
         currentStageEnteredAt = deal.sql_entered_at;
       } else if (stageId === '138092708') {
         currentStageEnteredAt = deal.discovery_entered_at;
@@ -199,6 +204,7 @@ export async function GET(request: NextRequest) {
         nextActivityDate: deal.next_activity_date,
         nextStep: deal.next_step,
         hubspotCreatedAt: deal.hubspot_created_at,
+        mqlEnteredAt: deal.mql_entered_at,
         sqlEnteredAt: deal.sql_entered_at,
         discoveryEnteredAt: deal.discovery_entered_at,
         demoScheduledEnteredAt: deal.demo_scheduled_entered_at,
