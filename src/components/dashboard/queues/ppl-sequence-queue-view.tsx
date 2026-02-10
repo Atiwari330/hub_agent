@@ -41,6 +41,8 @@ interface PplSequenceDeal {
   dealAgeDays: number;
   week1Analysis: Week1TouchAnalysis | null;
   totalTouches: number | null;
+  meetingBooked: boolean;
+  meetingBookedDate: string | null;
   needsActivityCheck: boolean;
 }
 
@@ -51,17 +53,20 @@ interface QueueResponse {
     behind: number;
     critical: number;
     pending: number;
+    meeting_booked: number;
   };
+  avgTouchesExcludingMeetings: number | null;
 }
 
 type SortColumn = 'dealName' | 'ownerName' | 'amount' | 'dealAgeDays' | 'touches' | 'gap';
 type SortDirection = 'asc' | 'desc';
-type StatusFilter = 'all' | 'on_track' | 'behind' | 'critical' | 'pending';
+type StatusFilter = 'all' | 'on_track' | 'behind' | 'critical' | 'meeting_booked' | 'pending';
 
 // ===== Constants =====
 
 const STATUS_COLORS = {
   on_track: { bg: 'bg-emerald-100', text: 'text-emerald-700', dot: 'bg-emerald-500', label: 'On Track' },
+  meeting_booked: { bg: 'bg-blue-100', text: 'text-blue-700', dot: 'bg-blue-500', label: 'Meeting Booked' },
   behind: { bg: 'bg-amber-100', text: 'text-amber-700', dot: 'bg-amber-500', label: 'Behind' },
   critical: { bg: 'bg-red-100', text: 'text-red-700', dot: 'bg-red-500', label: 'Critical' },
   pending: { bg: 'bg-gray-100', text: 'text-gray-500', dot: 'bg-gray-400', label: 'Pending' },
@@ -95,8 +100,9 @@ function formatDate(dateStr: string | null): string {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-function getStatusForDeal(deal: PplSequenceDeal): 'on_track' | 'behind' | 'critical' | 'pending' {
+function getStatusForDeal(deal: PplSequenceDeal): 'on_track' | 'behind' | 'critical' | 'meeting_booked' | 'pending' {
   if (deal.needsActivityCheck || !deal.week1Analysis) return 'pending';
+  if (deal.meetingBooked) return 'meeting_booked';
   return deal.week1Analysis.status;
 }
 
@@ -136,7 +142,7 @@ function ChevronIcon({ expanded }: { expanded: boolean }) {
   );
 }
 
-function StatusBadge({ status }: { status: 'on_track' | 'behind' | 'critical' | 'pending' }) {
+function StatusBadge({ status }: { status: 'on_track' | 'behind' | 'critical' | 'meeting_booked' | 'pending' }) {
   const config = STATUS_COLORS[status];
   return (
     <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 text-xs font-medium rounded-full ${config.bg} ${config.text}`}>
@@ -209,22 +215,36 @@ function ExpandedDealPanel({ deal }: { deal: PplSequenceDeal }) {
           </h4>
           {analysis ? (
             <div className="space-y-3">
-              <div className={`p-3 rounded-lg ${
-                analysis.status === 'on_track' ? 'bg-emerald-50 border border-emerald-200' :
-                analysis.status === 'behind' ? 'bg-amber-50 border border-amber-200' :
-                'bg-red-50 border border-red-200'
-              }`}>
-                <div className="flex items-center gap-2 mb-1">
-                  <StatusBadge status={analysis.status} />
+              {deal.meetingBooked ? (
+                <div className="p-3 rounded-lg bg-blue-50 border border-blue-200">
+                  <div className="flex items-center gap-2 mb-1">
+                    <StatusBadge status="meeting_booked" />
+                  </div>
+                  <p className="text-sm text-gray-700">
+                    Meeting booked on {formatDate(deal.meetingBookedDate)} — auto-compliant
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {analysis.touches.total} touch{analysis.touches.total !== 1 ? 'es' : ''} before meeting was booked
+                  </p>
                 </div>
-                <p className="text-sm text-gray-700">
-                  {analysis.status === 'on_track'
-                    ? 'Meeting target touch cadence for Week 1'
-                    : analysis.isInWeek1
-                    ? `Need ${analysis.gap} more touches to meet target`
-                    : `Missed target by ${analysis.gap} touches`}
-                </p>
-              </div>
+              ) : (
+                <div className={`p-3 rounded-lg ${
+                  analysis.status === 'on_track' ? 'bg-emerald-50 border border-emerald-200' :
+                  analysis.status === 'behind' ? 'bg-amber-50 border border-amber-200' :
+                  'bg-red-50 border border-red-200'
+                }`}>
+                  <div className="flex items-center gap-2 mb-1">
+                    <StatusBadge status={analysis.status} />
+                  </div>
+                  <p className="text-sm text-gray-700">
+                    {analysis.status === 'on_track'
+                      ? 'Meeting target touch cadence for Week 1'
+                      : analysis.isInWeek1
+                      ? `Need ${analysis.gap} more touches to meet target`
+                      : `Missed target by ${analysis.gap} touches`}
+                  </p>
+                </div>
+              )}
               <div className="text-xs text-gray-500">
                 <span>Week 1 ends: {formatDate(analysis.week1EndDate)}</span>
                 {analysis.isInWeek1 && (
@@ -341,11 +361,36 @@ function MethodologyPanel({ open, onClose }: { open: boolean; onClose: () => voi
                 </tr>
                 <tr>
                   <td className="py-1.5 pr-4 font-medium whitespace-nowrap">Status</td>
-                  <td className="py-1.5">On Track (met target), Behind (close to target), or Critical (far from target)</td>
+                  <td className="py-1.5">On Track (met target), Meeting Booked (auto-compliant), Behind (close to target), or Critical (far from target)</td>
                 </tr>
               </tbody>
             </table>
           </div>
+        </div>
+
+        {/* Meeting = Auto-Compliance */}
+        <div className="mb-4">
+          <h4 className="text-sm font-semibold text-gray-800 mb-2">Meeting Booked = Auto-Compliance</h4>
+          <p className="text-sm text-gray-700">
+            The purpose of 6 touches in Week 1 is to get a meeting booked. If a meeting is booked during Week 1,
+            the deal is automatically marked compliant — mission accomplished. These deals show a blue
+            &quot;Meeting Booked&quot; status regardless of touch count.
+          </p>
+        </div>
+
+        {/* Avg Touches KPI */}
+        <div className="mb-4">
+          <h4 className="text-sm font-semibold text-gray-800 mb-2">Avg Week 1 Touches KPI</h4>
+          <p className="text-sm text-gray-700">
+            Shows the average number of Week 1 touches across PPL deals, excluding deals where a meeting was booked
+            (since those stopped the sequence early on success, which would skew the average down). This tells you:
+            for deals that went through the full sequence without getting a meeting, how hard are AEs working them?
+          </p>
+          <ul className="text-sm text-gray-700 space-y-1 ml-4 list-disc mt-1">
+            <li>Green: Average &ge; 6.0 (meeting target)</li>
+            <li>Amber: Average &ge; 4.0 but &lt; 6.0</li>
+            <li>Red: Average &lt; 4.0</li>
+          </ul>
         </div>
 
         {/* Data source */}
@@ -355,6 +400,49 @@ function MethodologyPanel({ open, onClose }: { open: boolean; onClose: () => voi
             <li>Activities are pulled from HubSpot — both activities logged directly on the deal and activities logged on the deal&apos;s associated contacts</li>
             <li>Deal data syncs from HubSpot periodically. See the sync timestamp at the top of the page for freshness.</li>
           </ul>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ===== Avg Touches KPI Card =====
+
+function AvgTouchesKpiCard({ deals }: { deals: PplSequenceDeal[] }) {
+  const { avg, sampleSize } = useMemo(() => {
+    // Exclude meeting-booked deals and pending deals
+    const eligible = deals.filter(
+      (d) => !d.meetingBooked && !d.needsActivityCheck && d.week1Analysis
+    );
+    if (eligible.length === 0) return { avg: null, sampleSize: 0 };
+
+    const total = eligible.reduce((sum, d) => sum + (d.week1Analysis?.touches.total ?? 0), 0);
+    return {
+      avg: total / eligible.length,
+      sampleSize: eligible.length,
+    };
+  }, [deals]);
+
+  if (avg === null) return null;
+
+  const TARGET = 6.0;
+  const colorClass = avg >= TARGET ? 'text-emerald-600' : avg >= 4 ? 'text-amber-600' : 'text-red-600';
+  const bgClass = avg >= TARGET ? 'bg-emerald-50 border-emerald-200' : avg >= 4 ? 'bg-amber-50 border-amber-200' : 'bg-red-50 border-red-200';
+
+  return (
+    <div className={`inline-flex items-center gap-4 px-4 py-3 rounded-lg border mb-4 ${bgClass}`}>
+      <div>
+        <div className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+          Avg Week 1 Touches <span className="normal-case">(excl. meeting-booked)</span>
+        </div>
+        <div className="flex items-baseline gap-2 mt-0.5">
+          <span className={`text-2xl font-bold tabular-nums ${colorClass}`}>
+            {avg.toFixed(1)}
+          </span>
+          <span className="text-sm text-gray-400">/ {TARGET.toFixed(1)} target</span>
+        </div>
+        <div className="text-xs text-gray-400 mt-0.5">
+          Based on {sampleSize} deal{sampleSize !== 1 ? 's' : ''}
         </div>
       </div>
     </div>
@@ -451,7 +539,7 @@ function SyncStatusBar({ onSyncComplete }: { onSyncComplete: () => void }) {
 export function PplSequenceQueueView() {
   // State
   const [allDeals, setAllDeals] = useState<PplSequenceDeal[]>([]);
-  const [counts, setCounts] = useState({ on_track: 0, behind: 0, critical: 0, pending: 0 });
+  const [counts, setCounts] = useState({ on_track: 0, behind: 0, critical: 0, pending: 0, meeting_booked: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -560,7 +648,7 @@ export function PplSequenceQueueView() {
       }
       const json: QueueResponse = await response.json();
       setAllDeals(json.deals || []);
-      setCounts(json.counts || { on_track: 0, behind: 0, critical: 0, pending: 0 });
+      setCounts(json.counts || { on_track: 0, behind: 0, critical: 0, pending: 0, meeting_booked: 0 });
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
@@ -653,6 +741,7 @@ export function PplSequenceQueueView() {
           >
             <option value="all">All</option>
             <option value="on_track">On Track</option>
+            <option value="meeting_booked">Meeting Booked</option>
             <option value="behind">Behind</option>
             <option value="critical">Critical</option>
           </select>
@@ -704,6 +793,10 @@ export function PplSequenceQueueView() {
             <span className="w-2 h-2 rounded-full bg-emerald-500" />
             {counts.on_track} On Track
           </span>
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full bg-blue-100 text-blue-700">
+            <span className="w-2 h-2 rounded-full bg-blue-500" />
+            {counts.meeting_booked} Meeting Booked
+          </span>
           <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full bg-amber-100 text-amber-700">
             <span className="w-2 h-2 rounded-full bg-amber-500" />
             {counts.behind} Behind
@@ -716,6 +809,11 @@ export function PplSequenceQueueView() {
             {allDeals.length} PPL deals total
           </span>
         </div>
+      )}
+
+      {/* Avg Touches KPI Card */}
+      {!loading && allDeals.length > 0 && (
+        <AvgTouchesKpiCard deals={filteredDeals} />
       )}
 
       {/* Loading State */}
@@ -869,7 +967,16 @@ export function PplSequenceQueueView() {
                         </td>
                         <td className="px-4 py-3">
                           {analysis ? (
-                            <TouchProgressBar touches={analysis.touches.total} target={analysis.target} />
+                            deal.meetingBooked ? (
+                              <div className="flex items-center gap-1.5">
+                                <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                </svg>
+                                <span className="text-sm font-medium text-blue-700">Meeting Booked</span>
+                              </div>
+                            ) : (
+                              <TouchProgressBar touches={analysis.touches.total} target={analysis.target} />
+                            )
                           ) : (
                             <span className="text-xs text-gray-400 italic">-</span>
                           )}

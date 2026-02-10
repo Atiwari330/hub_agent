@@ -310,6 +310,96 @@ export async function getNotesByDealIdWithAuthor(
   return notes;
 }
 
+// ===== HubSpot Meeting Types =====
+
+export interface HubSpotMeeting {
+  id: string;
+  properties: {
+    hs_meeting_title: string | null;
+    hs_timestamp: string | null;     // When the meeting occurs
+    hs_createdate: string | null;    // When it was BOOKED (compliance-relevant date)
+  };
+}
+
+/**
+ * Fetch meetings associated with a deal (via direct deal→meetings AND deal→contacts→meetings)
+ */
+export async function getMeetingsByDealId(dealId: string): Promise<HubSpotMeeting[]> {
+  const client = getHubSpotClient();
+  const meetingIds = new Set<string>();
+
+  try {
+    // Fetch deal→meetings and deal→contacts associations in parallel
+    const [dealMeetingAssocs, contactAssocs] = await Promise.all([
+      client.crm.associations.v4.basicApi
+        .getPage('deals', dealId, 'meetings', undefined, 15)
+        .catch(() => ({ results: [] as { toObjectId: string }[] })),
+      client.crm.associations.v4.basicApi
+        .getPage('deals', dealId, 'contacts', undefined, 50)
+        .catch(() => ({ results: [] as { toObjectId: string }[] })),
+    ]);
+
+    // Collect direct deal meeting IDs
+    for (const a of dealMeetingAssocs.results) {
+      meetingIds.add(a.toObjectId);
+    }
+
+    // Fetch contact→meetings associations in parallel
+    if (contactAssocs.results.length > 0) {
+      const contactMeetingResults = await Promise.all(
+        contactAssocs.results.map((c) =>
+          client.crm.associations.v4.basicApi
+            .getPage('contacts', c.toObjectId, 'meetings', undefined, 15)
+            .catch(() => ({ results: [] as { toObjectId: string }[] }))
+        )
+      );
+      for (const result of contactMeetingResults) {
+        for (const a of result.results) {
+          meetingIds.add(a.toObjectId);
+        }
+      }
+    }
+
+    if (meetingIds.size === 0) return [];
+
+    // Fetch meeting details (limit to 15 most relevant)
+    const idsToFetch = Array.from(meetingIds).slice(0, 15);
+    const meetings: HubSpotMeeting[] = [];
+
+    for (const meetingId of idsToFetch) {
+      try {
+        const meeting = await client.crm.objects.meetings.basicApi.getById(
+          meetingId,
+          ['hs_meeting_title', 'hs_timestamp', 'hs_createdate']
+        );
+
+        meetings.push({
+          id: meeting.id,
+          properties: {
+            hs_meeting_title: meeting.properties.hs_meeting_title || null,
+            hs_timestamp: meeting.properties.hs_timestamp || null,
+            hs_createdate: meeting.properties.hs_createdate || null,
+          },
+        });
+      } catch (error) {
+        console.warn(`Failed to fetch meeting ${meetingId}:`, error);
+      }
+    }
+
+    // Sort by hs_createdate descending (newest first)
+    meetings.sort((a, b) => {
+      const timeA = a.properties.hs_createdate ? new Date(a.properties.hs_createdate).getTime() : 0;
+      const timeB = b.properties.hs_createdate ? new Date(b.properties.hs_createdate).getTime() : 0;
+      return timeB - timeA;
+    });
+
+    return meetings;
+  } catch (error) {
+    console.warn(`Failed to get meeting associations for deal ${dealId}:`, error);
+    return [];
+  }
+}
+
 // ===== HubSpot Task Types =====
 
 export interface HubSpotTask {

@@ -10,7 +10,7 @@
  * - Inbound emails (replies from prospect) are NOT counted
  */
 
-import type { HubSpotCall, HubSpotEmail } from '@/lib/hubspot/engagements';
+import type { HubSpotCall, HubSpotEmail, HubSpotMeeting } from '@/lib/hubspot/engagements';
 import { addBusinessDays } from './business-days';
 
 export interface TouchCounts {
@@ -27,6 +27,8 @@ export interface Week1TouchAnalysis {
   status: 'on_track' | 'behind' | 'critical';
   week1EndDate: string;
   isInWeek1: boolean;
+  meetingBooked: boolean;
+  meetingBookedDate: string | null;
 }
 
 /**
@@ -112,7 +114,8 @@ export function analyzeWeek1Touches(
   calls: HubSpotCall[],
   emails: HubSpotEmail[],
   dealCreatedAt: string,
-  target: number = 6
+  target: number = 6,
+  meetings?: HubSpotMeeting[]
 ): Week1TouchAnalysis {
   const createdDate = new Date(dealCreatedAt);
   createdDate.setHours(0, 0, 0, 0);
@@ -146,12 +149,44 @@ export function analyzeWeek1Touches(
     }
   }
 
+  // Check if a meeting was booked during Week 1
+  let meetingBooked = false;
+  let meetingBookedDate: string | null = null;
+
+  if (meetings && meetings.length > 0) {
+    const startMs = createdDate.getTime();
+    const endMs = week1EndDate.getTime();
+
+    // Find meetings booked (hs_createdate) within Week 1
+    const week1Meetings = meetings.filter((m) => {
+      if (!m.properties.hs_createdate) return false;
+      const bookedMs = new Date(m.properties.hs_createdate).getTime();
+      return bookedMs >= startMs && bookedMs <= endMs;
+    });
+
+    if (week1Meetings.length > 0) {
+      meetingBooked = true;
+      // Find the earliest meeting booked in Week 1
+      const earliest = week1Meetings.reduce((a, b) => {
+        const timeA = new Date(a.properties.hs_createdate!).getTime();
+        const timeB = new Date(b.properties.hs_createdate!).getTime();
+        return timeA <= timeB ? a : b;
+      });
+      meetingBookedDate = earliest.properties.hs_createdate;
+
+      // Meeting booked = auto-compliance (mission accomplished)
+      status = 'on_track';
+    }
+  }
+
   return {
     touches,
     target,
-    gap: Math.max(0, gap),
+    gap: meetingBooked ? 0 : Math.max(0, gap),
     status,
     week1EndDate: week1EndDate.toISOString(),
     isInWeek1,
+    meetingBooked,
+    meetingBookedDate,
   };
 }

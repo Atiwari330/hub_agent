@@ -3,7 +3,7 @@ import { createServerSupabaseClient } from '@/lib/supabase/client';
 import { SYNC_CONFIG } from '@/lib/hubspot/sync-config';
 import { getAllPipelines } from '@/lib/hubspot/pipelines';
 import { getBusinessDaysSinceDate } from '@/lib/utils/business-days';
-import { getCallsByDealId, getEmailsByDealId } from '@/lib/hubspot/engagements';
+import { getCallsByDealId, getEmailsByDealId, getMeetingsByDealId } from '@/lib/hubspot/engagements';
 import { analyzeWeek1Touches, countTouchesInRange, type Week1TouchAnalysis } from '@/lib/utils/touch-counter';
 import { checkApiAuth } from '@/lib/auth/api';
 import { RESOURCES } from '@/lib/auth';
@@ -32,6 +32,9 @@ export interface PplSequenceDeal {
   dealAgeDays: number;
   week1Analysis: Week1TouchAnalysis | null;
   totalTouches: number | null;
+  // Meeting compliance
+  meetingBooked: boolean;
+  meetingBookedDate: string | null;
   // Flags
   needsActivityCheck: boolean;
 }
@@ -43,7 +46,9 @@ interface QueueResponse {
     behind: number;
     critical: number;
     pending: number;
+    meeting_booked: number;
   };
+  avgTouchesExcludingMeetings: number | null;
 }
 
 export async function GET(request: NextRequest) {
@@ -66,7 +71,7 @@ export async function GET(request: NextRequest) {
       .in('email', SYNC_CONFIG.TARGET_AE_EMAILS);
 
     if (!owners || owners.length === 0) {
-      return NextResponse.json({ deals: [], counts: { on_track: 0, behind: 0, critical: 0, pending: 0 } });
+      return NextResponse.json({ deals: [], counts: { on_track: 0, behind: 0, critical: 0, pending: 0, meeting_booked: 0 }, avgTouchesExcludingMeetings: null });
     }
 
     // Build owner lookup map
@@ -81,7 +86,7 @@ export async function GET(request: NextRequest) {
     // Filter by specific owner if requested
     if (ownerIdFilter) {
       if (!ownerIds.includes(ownerIdFilter)) {
-        return NextResponse.json({ deals: [], counts: { on_track: 0, behind: 0, critical: 0, pending: 0 } });
+        return NextResponse.json({ deals: [], counts: { on_track: 0, behind: 0, critical: 0, pending: 0, meeting_booked: 0 }, avgTouchesExcludingMeetings: null });
       }
       ownerIds = [ownerIdFilter];
     }
@@ -126,7 +131,7 @@ export async function GET(request: NextRequest) {
 
     // Build response with PPL sequence analysis
     const pplDeals: PplSequenceDeal[] = [];
-    const counts = { on_track: 0, behind: 0, critical: 0, pending: 0 };
+    const counts = { on_track: 0, behind: 0, critical: 0, pending: 0, meeting_booked: 0 };
 
     for (const deal of deals || []) {
       const ownerInfo = deal.owner_id ? ownerMap.get(deal.owner_id) : null;
@@ -143,13 +148,14 @@ export async function GET(request: NextRequest) {
       // Only fetch activity data if we have a HubSpot ID and creation date
       if (fetchActivity && hubspotDealId && deal.hubspot_created_at) {
         try {
-          // Fetch calls and emails from HubSpot
-          const [calls, emails] = await Promise.all([
+          // Fetch calls, emails, and meetings from HubSpot
+          const [calls, emails, meetings] = await Promise.all([
             getCallsByDealId(hubspotDealId),
             getEmailsByDealId(hubspotDealId),
+            getMeetingsByDealId(hubspotDealId),
           ]);
 
-          week1Analysis = analyzeWeek1Touches(calls, emails, deal.hubspot_created_at, target);
+          week1Analysis = analyzeWeek1Touches(calls, emails, deal.hubspot_created_at, target, meetings);
 
           // Count all touches (no date filter) for total column
           const allTimeTouches = countTouchesInRange(
@@ -160,8 +166,12 @@ export async function GET(request: NextRequest) {
           );
           totalTouches = allTimeTouches.total;
 
-          // Count statuses
-          counts[week1Analysis.status]++;
+          // Count statuses - meeting_booked is separate from on_track
+          if (week1Analysis.meetingBooked) {
+            counts.meeting_booked++;
+          } else {
+            counts[week1Analysis.status]++;
+          }
         } catch (error) {
           console.warn(`[ppl-sequence] Failed to fetch activity for deal ${hubspotDealId}:`, error);
           needsActivityCheck = true;
@@ -186,11 +196,21 @@ export async function GET(request: NextRequest) {
         dealAgeDays,
         week1Analysis,
         totalTouches,
+        meetingBooked: week1Analysis?.meetingBooked ?? false,
+        meetingBookedDate: week1Analysis?.meetingBookedDate ?? null,
         needsActivityCheck,
       });
     }
 
-    const response: QueueResponse = { deals: pplDeals, counts };
+    // Compute avg touches excluding meeting-booked deals
+    const nonMeetingDeals = pplDeals.filter(
+      (d) => !d.meetingBooked && !d.needsActivityCheck && d.week1Analysis
+    );
+    const avgTouchesExcludingMeetings = nonMeetingDeals.length > 0
+      ? nonMeetingDeals.reduce((sum, d) => sum + (d.week1Analysis?.touches.total ?? 0), 0) / nonMeetingDeals.length
+      : null;
+
+    const response: QueueResponse = { deals: pplDeals, counts, avgTouchesExcludingMeetings };
     return NextResponse.json(response);
   } catch (error) {
     console.error('[ppl-sequence] Queue error:', error);
