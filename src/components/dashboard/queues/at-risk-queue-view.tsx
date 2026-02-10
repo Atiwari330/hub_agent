@@ -196,6 +196,7 @@ export function AtRiskQueueView() {
   };
 
   const hasActiveFilters = ownerFilter !== 'all' || accountStatusFilter !== 'all';
+  const hasStatusFilter = statusFilter !== 'all';
 
   const clearFilters = () => {
     setOwnerFilter('all');
@@ -316,9 +317,9 @@ export function AtRiskQueueView() {
 
       {/* Empty State */}
       {!loading && !error && processedCompanies.length === 0 && (
-        <div className="text-center py-12 bg-gray-50 rounded-lg">
+        <div className="text-center py-12 bg-emerald-50 rounded-lg border border-emerald-200">
           <svg
-            className="mx-auto h-12 w-12 text-gray-400"
+            className="mx-auto h-12 w-12 text-emerald-500"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -330,11 +331,23 @@ export function AtRiskQueueView() {
               d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
             />
           </svg>
-          <h3 className="mt-4 text-lg font-medium text-gray-900">No at-risk accounts</h3>
-          <p className="mt-1 text-sm text-gray-500">
+          <h3 className="mt-4 text-lg font-medium text-emerald-900">
             {hasActiveFilters
-              ? 'No accounts match the current filters.'
-              : 'All customer accounts are in good health.'}
+              ? 'No accounts match the current filters'
+              : statusFilter === 'at-risk'
+                ? 'No at-risk accounts — looking good!'
+                : statusFilter === 'flagged'
+                  ? 'No flagged accounts — all clear!'
+                  : statusFilter === 'both'
+                    ? 'No accounts are both at-risk and flagged!'
+                    : 'No at-risk accounts — hooray!'}
+          </h3>
+          <p className="mt-1 text-sm text-emerald-700">
+            {hasActiveFilters
+              ? 'Try adjusting the owner or account status filters.'
+              : hasStatusFilter
+                ? 'None of your accounts fall into this category right now.'
+                : 'All customer accounts are in good health.'}
           </p>
         </div>
       )}
