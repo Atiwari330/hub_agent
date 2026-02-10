@@ -9,7 +9,7 @@ interface RevenueCardProps {
   pipeline: {
     totalValue: number;
     dealCount: number;
-    coverageRatio: number;
+    coverageRatio: number | null;
   };
 }
 
@@ -38,7 +38,10 @@ export function RevenueCard({ quota, pipeline }: RevenueCardProps) {
   const paceColor = quota.onTrack ? 'text-emerald-600' : 'text-red-600';
   const paceArrow = quota.onTrack ? '\u2191' : '\u2193';
   const coverageColor =
-    pipeline.coverageRatio >= 3 ? 'text-emerald-600' : pipeline.coverageRatio >= 2 ? 'text-amber-600' : 'text-red-600';
+    pipeline.coverageRatio === null ? 'text-slate-400'
+    : pipeline.coverageRatio >= 3 ? 'text-emerald-600'
+    : pipeline.coverageRatio >= 2 ? 'text-amber-600'
+    : 'text-red-600';
 
   return (
     <div className="bg-white rounded-2xl shadow-sm p-6">
@@ -88,7 +91,7 @@ export function RevenueCard({ quota, pipeline }: RevenueCardProps) {
           </p>
 
           <p className={`text-sm font-medium ${coverageColor}`}>
-            {pipeline.coverageRatio}x coverage
+            {pipeline.coverageRatio === null ? 'N/A' : `${pipeline.coverageRatio}x coverage`}
           </p>
         </div>
       </div>

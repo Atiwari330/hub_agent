@@ -10,6 +10,14 @@ import type { PplSequenceDeal, QueueResponse } from '@/types/ppl-sequence';
 type SortColumn = 'dealName' | 'dealAgeDays' | 'touches' | 'gap';
 type SortDirection = 'asc' | 'desc';
 type StatusFilter = 'all' | 'on_track' | 'behind' | 'critical' | 'meeting_booked';
+type AgeFilter = '7' | '14' | '30' | 'all';
+
+const AGE_OPTIONS: { value: AgeFilter; label: string }[] = [
+  { value: '7', label: '\u2264 7 days' },
+  { value: '14', label: '\u2264 14 days' },
+  { value: '30', label: '\u2264 30 days' },
+  { value: 'all', label: 'All Ages' },
+];
 
 // ===== Constants =====
 
@@ -209,11 +217,11 @@ function ExpandedDealPanel({ deal }: { deal: PplSequenceDeal }) {
 
 export function PplSequenceCard() {
   const [allDeals, setAllDeals] = useState<PplSequenceDeal[]>([]);
-  const [counts, setCounts] = useState({ on_track: 0, behind: 0, critical: 0, pending: 0, meeting_booked: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   // Filters & sort
+  const [ageFilter, setAgeFilter] = useState<AgeFilter>('7');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [sortColumn, setSortColumn] = useState<SortColumn>('dealAgeDays');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
@@ -224,6 +232,11 @@ export function PplSequenceCard() {
   // Filter and sort deals
   const filteredDeals = useMemo(() => {
     let result = allDeals;
+
+    if (ageFilter !== 'all') {
+      const maxAge = parseInt(ageFilter, 10);
+      result = result.filter((d) => d.dealAgeDays <= maxAge);
+    }
 
     if (statusFilter !== 'all') {
       result = result.filter((d) => getStatusForDeal(d) === statusFilter);
@@ -257,7 +270,7 @@ export function PplSequenceCard() {
     });
 
     return result;
-  }, [allDeals, statusFilter, sortColumn, sortDirection]);
+  }, [allDeals, ageFilter, statusFilter, sortColumn, sortDirection]);
 
   // Fetch data
   const fetchData = useCallback(async () => {
@@ -269,7 +282,6 @@ export function PplSequenceCard() {
       }
       const json: QueueResponse = await response.json();
       setAllDeals(json.deals || []);
-      setCounts(json.counts || { on_track: 0, behind: 0, critical: 0, pending: 0, meeting_booked: 0 });
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
@@ -303,44 +315,65 @@ export function PplSequenceCard() {
           PPL Sequence Compliance
         </p>
         {!loading && allDeals.length > 0 && (
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
-            className="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white text-gray-600 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-          >
-            <option value="all">All Status</option>
-            <option value="on_track">On Track</option>
-            <option value="meeting_booked">Meeting Booked</option>
-            <option value="behind">Behind</option>
-            <option value="critical">Critical</option>
-          </select>
+          <div className="flex items-center gap-2">
+            <select
+              value={ageFilter}
+              onChange={(e) => setAgeFilter(e.target.value as AgeFilter)}
+              className="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white text-gray-600 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            >
+              {AGE_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+              className="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white text-gray-600 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            >
+              <option value="all">All Status</option>
+              <option value="on_track">On Track</option>
+              <option value="meeting_booked">Meeting Booked</option>
+              <option value="behind">Behind</option>
+              <option value="critical">Critical</option>
+            </select>
+          </div>
         )}
       </div>
 
-      {/* Summary Badges */}
-      {!loading && allDeals.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2 mb-4">
-          <span className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-medium rounded-full bg-emerald-100 text-emerald-700">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-            {counts.on_track} On Track
-          </span>
-          <span className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-medium rounded-full bg-blue-100 text-blue-700">
-            <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-            {counts.meeting_booked} Meeting
-          </span>
-          <span className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-medium rounded-full bg-amber-100 text-amber-700">
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-            {counts.behind} Behind
-          </span>
-          <span className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-medium rounded-full bg-red-100 text-red-700">
-            <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
-            {counts.critical} Critical
-          </span>
-          <span className="text-[10px] text-gray-400 ml-1">
-            {allDeals.length} total
-          </span>
-        </div>
-      )}
+      {/* Summary Badges — derived from age-filtered deals */}
+      {!loading && allDeals.length > 0 && (() => {
+        const ageFiltered = ageFilter !== 'all'
+          ? allDeals.filter((d) => d.dealAgeDays <= parseInt(ageFilter, 10))
+          : allDeals;
+        const badgeCounts = { on_track: 0, behind: 0, critical: 0, meeting_booked: 0 };
+        for (const d of ageFiltered) {
+          const s = getStatusForDeal(d);
+          if (s in badgeCounts) badgeCounts[s as keyof typeof badgeCounts]++;
+        }
+        return (
+          <div className="flex flex-wrap items-center gap-2 mb-4">
+            <span className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-medium rounded-full bg-emerald-100 text-emerald-700">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              {badgeCounts.on_track} On Track
+            </span>
+            <span className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-medium rounded-full bg-blue-100 text-blue-700">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+              {badgeCounts.meeting_booked} Meeting
+            </span>
+            <span className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-medium rounded-full bg-amber-100 text-amber-700">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+              {badgeCounts.behind} Behind
+            </span>
+            <span className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-medium rounded-full bg-red-100 text-red-700">
+              <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+              {badgeCounts.critical} Critical
+            </span>
+            <span className="text-[10px] text-gray-400 ml-1">
+              {ageFiltered.length} total
+            </span>
+          </div>
+        );
+      })()}
 
       {/* Loading State */}
       {loading && (

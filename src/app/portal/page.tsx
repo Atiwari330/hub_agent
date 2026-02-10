@@ -18,7 +18,6 @@ import { PortalHeader } from '@/components/portal/portal-header';
 import { SpiffRings } from '@/components/portal/spiff-rings';
 import { RevenueCard } from '@/components/portal/revenue-card';
 import { AlertsCard } from '@/components/portal/alerts-card';
-import { WeeklyTrend } from '@/components/portal/weekly-trend';
 import { PplSequenceCard } from '@/components/portal/ppl-sequence-card';
 
 const HUBSPOT_PORTAL_ID = process.env.NEXT_PUBLIC_HUBSPOT_PORTAL_ID || '7358632';
@@ -39,22 +38,6 @@ function getCurrentWeekMonday(): Date {
   const monday = new Date(etDate);
   monday.setDate(monday.getDate() - daysToSubtract);
   return monday;
-}
-
-function getRecentBusinessDays(count: number): Date[] {
-  const now = new Date();
-  const etDateStr = now.toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
-  const etDate = new Date(etDateStr + 'T12:00:00-05:00');
-  const days: Date[] = [];
-  const d = new Date(etDate);
-  while (days.length < count) {
-    const dow = d.getDay();
-    if (dow !== 0 && dow !== 6) {
-      days.unshift(new Date(d));
-    }
-    d.setDate(d.getDate() - 1);
-  }
-  return days;
 }
 
 function getCurrentMonthBoundsET(): { start: Date; end: Date } {
@@ -100,8 +83,6 @@ export default async function PortalPage() {
   const quarterInfo = getQuarterInfo(currentQ.year, currentQ.quarter);
   const progress = getQuarterProgress(quarterInfo);
 
-  const recentBusinessDays = getRecentBusinessDays(5);
-
   // Resolve valid contact owner IDs for call filtering (the 5 dashboard AEs)
   const { data: dashboardOwners } = await supabase
     .from('owners')
@@ -120,7 +101,6 @@ export default async function PortalPage() {
     todayCalls,
     weekDemosResult,
     prospectCount,
-    weekDailyCallResults,
     quotaResult,
     dealsResult,
     stageNames,
@@ -134,13 +114,6 @@ export default async function PortalPage() {
       .gte('demo_completed_entered_at', `${weekMondayStr}T00:00:00`)
       .lte('demo_completed_entered_at', `${todayStr}T23:59:59.999`),
     fetchProspectCountByOwner(hubspotOwnerId, monthStart, monthEnd),
-    Promise.all(
-      recentBusinessDays.map(async (day) => {
-        const { start, end } = getDayBoundsET(day);
-        const calls = await fetchFilteredCallsByOwner(hubspotOwnerId, start, end, contactFilter);
-        return calls.length;
-      })
-    ),
     supabase
       .from('quotas')
       .select('quota_amount')
@@ -217,7 +190,10 @@ export default async function PortalPage() {
   const pipelineValue = pipelineDeals.reduce((sum, d) => sum + (d.amount || 0), 0);
   const remainingQuota = Math.max(0, quotaAmount - closedWonAmount);
   const coverageRatio =
-    remainingQuota > 0 ? pipelineValue / remainingQuota : pipelineValue > 0 ? 999 : 0;
+    quotaAmount === 0 ? null
+    : remainingQuota > 0 ? Math.round((pipelineValue / remainingQuota) * 10) / 10
+    : pipelineValue > 0 ? null
+    : 0;
 
   // Alerts
   const alertDeals = deals
@@ -291,7 +267,7 @@ export default async function PortalPage() {
         pipeline={{
           totalValue: pipelineValue,
           dealCount: pipelineDeals.length,
-          coverageRatio: Math.round(coverageRatio * 10) / 10,
+          coverageRatio,
         }}
       />
 
@@ -299,12 +275,6 @@ export default async function PortalPage() {
       <AlertsCard
         deals={alertDeals.slice(0, 10)}
         totalAlerts={alertDeals.length}
-      />
-
-      {/* Weekly Trend */}
-      <WeeklyTrend
-        weekDaily={weekDailyCallResults}
-        dailyGoal={CALL_TIERS.BASELINE}
       />
 
       {/* PPL Sequence Compliance */}

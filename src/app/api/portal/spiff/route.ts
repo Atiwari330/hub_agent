@@ -260,7 +260,10 @@ export async function GET() {
   );
   const remainingQuota = Math.max(0, quotaAmount - closedWonAmount);
   const coverageRatio =
-    remainingQuota > 0 ? pipelineValue / remainingQuota : pipelineValue > 0 ? 999 : 0;
+    quotaAmount === 0 ? null
+    : remainingQuota > 0 ? Math.round((pipelineValue / remainingQuota) * 10) / 10
+    : pipelineValue > 0 ? null
+    : 0;
 
   // Alerts: deals needing attention (at_risk or stale, or overdue next steps)
   const alertDeals = deals
@@ -331,7 +334,7 @@ export async function GET() {
     pipeline: {
       totalValue: pipelineValue,
       dealCount: pipelineDeals.length,
-      coverageRatio: Math.round(coverageRatio * 10) / 10,
+      coverageRatio,
     },
     alerts: {
       deals: alertDeals.slice(0, 10),
