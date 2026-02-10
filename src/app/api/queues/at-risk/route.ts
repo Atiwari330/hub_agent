@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
   const ownerIdFilter = searchParams.get('ownerId');
 
   try {
-    // Build query for sentiment-flagged companies
+    // Build query for all non-churned companies (sentiment filtering done client-side)
     let query = supabase
       .from('companies')
       .select(`
@@ -57,7 +57,8 @@ export async function GET(request: NextRequest) {
         latest_meeting_date,
         hubspot_owner_id
       `)
-      .eq('sentiment', 'Flagged')
+      // Only include companies that have a sentiment value
+      .not('sentiment', 'is', null)
       // Exclude churned companies
       .neq('contract_status', 'Churned')
       // Sort by ARR descending (biggest $ at risk first)
@@ -116,7 +117,7 @@ export async function GET(request: NextRequest) {
         ownerName: ownerInfo?.name || null,
         ownerEmail: ownerInfo?.email || null,
         hubspotOwnerId: company.hubspot_owner_id,
-        isFlagged: true,
+        isFlagged: company.sentiment === 'Flagged',
       };
     });
 
@@ -124,7 +125,7 @@ export async function GET(request: NextRequest) {
       companies: transformedCompanies,
       counts: {
         total: transformedCompanies.length,
-        flagged: transformedCompanies.length,
+        flagged: transformedCompanies.filter((c) => c.isFlagged).length,
       },
     };
 
