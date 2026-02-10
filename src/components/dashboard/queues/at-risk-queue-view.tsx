@@ -69,6 +69,7 @@ export function AtRiskQueueView() {
   // Filters
   const [ownerFilter, setOwnerFilter] = useState<string>('all');
   const [accountStatusFilter, setAccountStatusFilter] = useState<string>('all');
+  const [sentimentFilter, setSentimentFilter] = useState<string>('all');
 
   // Sorting - default to ARR descending (biggest $ at risk first)
   const [sortColumn, setSortColumn] = useState<SortColumn>('arr');
@@ -121,6 +122,18 @@ export function AtRiskQueueView() {
     return Array.from(statuses).sort();
   }, [data]);
 
+  // Extract unique sentiments from data
+  const uniqueSentiments = useMemo(() => {
+    if (!data) return [];
+    const sentiments = new Set<string>();
+    for (const company of data.companies) {
+      if (company.sentiment) {
+        sentiments.add(company.sentiment);
+      }
+    }
+    return Array.from(sentiments).sort();
+  }, [data]);
+
   // Filtered and sorted companies
   const processedCompanies = useMemo(() => {
     if (!data) return [];
@@ -135,6 +148,11 @@ export function AtRiskQueueView() {
     // Apply account status filter
     if (accountStatusFilter !== 'all') {
       result = result.filter((c) => c.contractStatus === accountStatusFilter);
+    }
+
+    // Apply sentiment filter
+    if (sentimentFilter !== 'all') {
+      result = result.filter((c) => c.sentiment === sentimentFilter);
     }
 
     // Sort
@@ -176,7 +194,7 @@ export function AtRiskQueueView() {
     });
 
     return result;
-  }, [data, ownerFilter, accountStatusFilter, sortColumn, sortDirection]);
+  }, [data, ownerFilter, accountStatusFilter, sentimentFilter, sortColumn, sortDirection]);
 
   const handleSort = (column: SortColumn) => {
     if (sortColumn === column) {
@@ -187,11 +205,12 @@ export function AtRiskQueueView() {
     }
   };
 
-  const hasActiveFilters = ownerFilter !== 'all' || accountStatusFilter !== 'all';
+  const hasActiveFilters = ownerFilter !== 'all' || accountStatusFilter !== 'all' || sentimentFilter !== 'all';
 
   const clearFilters = () => {
     setOwnerFilter('all');
     setAccountStatusFilter('all');
+    setSentimentFilter('all');
   };
 
   return (
@@ -232,6 +251,21 @@ export function AtRiskQueueView() {
             <option value="all">All Statuses</option>
             {uniqueAccountStatuses.map((status) => (
               <option key={status} value={status}>{status}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Sentiment Filter */}
+        <div className="flex items-center gap-2">
+          <label className="text-sm text-gray-600">Sentiment:</label>
+          <select
+            value={sentimentFilter}
+            onChange={(e) => setSentimentFilter(e.target.value)}
+            className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          >
+            <option value="all">All Sentiments</option>
+            {uniqueSentiments.map((sentiment) => (
+              <option key={sentiment} value={sentiment}>{sentiment}</option>
             ))}
           </select>
         </div>
