@@ -70,6 +70,7 @@ export function AtRiskQueueView() {
   // Filters
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [ownerFilter, setOwnerFilter] = useState<string>('all');
+  const [accountStatusFilter, setAccountStatusFilter] = useState<string>('all');
 
   // Sorting - default to sentiment descending (flagged first)
   const [sortColumn, setSortColumn] = useState<SortColumn>('sentiment');
@@ -115,6 +116,18 @@ export function AtRiskQueueView() {
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [data]);
 
+  // Extract unique account statuses from data
+  const uniqueAccountStatuses = useMemo(() => {
+    if (!data) return [];
+    const statuses = new Set<string>();
+    for (const company of data.companies) {
+      if (company.contractStatus) {
+        statuses.add(company.contractStatus);
+      }
+    }
+    return Array.from(statuses).sort();
+  }, [data]);
+
   // Filtered and sorted companies
   const processedCompanies = useMemo(() => {
     if (!data) return [];
@@ -124,6 +137,11 @@ export function AtRiskQueueView() {
     // Apply owner filter
     if (ownerFilter !== 'all') {
       result = result.filter((c) => c.hubspotOwnerId === ownerFilter);
+    }
+
+    // Apply account status filter
+    if (accountStatusFilter !== 'all') {
+      result = result.filter((c) => c.contractStatus === accountStatusFilter);
     }
 
     // Sort
@@ -166,7 +184,7 @@ export function AtRiskQueueView() {
     });
 
     return result;
-  }, [data, ownerFilter, sortColumn, sortDirection]);
+  }, [data, ownerFilter, accountStatusFilter, sortColumn, sortDirection]);
 
   const handleSort = (column: SortColumn) => {
     if (sortColumn === column) {
@@ -177,10 +195,11 @@ export function AtRiskQueueView() {
     }
   };
 
-  const hasActiveFilters = ownerFilter !== 'all';
+  const hasActiveFilters = ownerFilter !== 'all' || accountStatusFilter !== 'all';
 
   const clearFilters = () => {
     setOwnerFilter('all');
+    setAccountStatusFilter('all');
   };
 
   return (
@@ -224,6 +243,21 @@ export function AtRiskQueueView() {
             <option value="all">All Owners</option>
             {uniqueOwners.map((owner) => (
               <option key={owner.id} value={owner.id}>{owner.name}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Account Status Filter */}
+        <div className="flex items-center gap-2">
+          <label className="text-sm text-gray-600">Account Status:</label>
+          <select
+            value={accountStatusFilter}
+            onChange={(e) => setAccountStatusFilter(e.target.value)}
+            className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          >
+            <option value="all">All Statuses</option>
+            {uniqueAccountStatuses.map((status) => (
+              <option key={status} value={status}>{status}</option>
             ))}
           </select>
         </div>
