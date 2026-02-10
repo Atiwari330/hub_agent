@@ -8,8 +8,9 @@ import { analyzeWeek1Touches, countTouchesInRange, type Week1TouchAnalysis } fro
 import { checkApiAuth } from '@/lib/auth/api';
 import { RESOURCES } from '@/lib/auth';
 
-// Active stages (excludes MQL, Closed Won, Closed Lost)
+// Active stages (excludes Closed Won, Closed Lost)
 const ACTIVE_DEAL_STAGES = [
+  '2030251',                                   // MQL
   '17915773',                                  // SQL (legacy)
   '138092708',                                 // SQL/Discovery
   'baedc188-ba76-4a41-8723-5bb99fe7c5bf',     // Demo - Scheduled
