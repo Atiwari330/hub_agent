@@ -1,58 +1,49 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { createServerSupabaseClient } from '@/lib/supabase/client';
+import { NextResponse } from 'next/server';
+import { checkApiAuth } from '@/lib/auth/api';
+import { RESOURCES } from '@/lib/auth/types';
+import { createServiceClient } from '@/lib/supabase/client';
 import { SYNC_CONFIG } from '@/lib/hubspot/sync-config';
 import { getAllPipelines } from '@/lib/hubspot/pipelines';
 import { getBusinessDaysSinceDate } from '@/lib/utils/business-days';
 import { getCallsByDealId, getEmailsByDealId, getMeetingsByDealId } from '@/lib/hubspot/engagements';
-import { analyzeWeek1Touches, countTouchesInRange, type Week1TouchAnalysis } from '@/lib/utils/touch-counter';
-import { checkApiAuth } from '@/lib/auth/api';
-import { RESOURCES } from '@/lib/auth';
+import { analyzeWeek1Touches, countTouchesInRange } from '@/lib/utils/touch-counter';
 import { ACTIVE_DEAL_STAGES, type PplSequenceDeal, type QueueResponse } from '@/types/ppl-sequence';
 
-export async function GET(request: NextRequest) {
-  // Check authorization
-  const authResult = await checkApiAuth(RESOURCES.QUEUE_PPL_SEQUENCE);
+export async function GET() {
+  const authResult = await checkApiAuth(RESOURCES.PORTAL);
   if (authResult instanceof NextResponse) return authResult;
+  const user = authResult;
 
-  const supabase = await createServerSupabaseClient();
+  if (!user.hubspotOwnerId) {
+    return NextResponse.json(
+      { error: 'No HubSpot owner linked to this account' },
+      { status: 400 }
+    );
+  }
 
-  const { searchParams } = new URL(request.url);
-  const ownerIdFilter = searchParams.get('ownerId');
-  const target = parseInt(searchParams.get('target') || '6', 10);
-  const fetchActivity = searchParams.get('fetchActivity') !== 'false'; // Default true
+  const supabase = createServiceClient();
+  const target = 6;
 
   try {
-    // Get target owners (exclude Adi Tiwari — not part of PPL sequence compliance)
-    const pplAeEmails = SYNC_CONFIG.TARGET_AE_EMAILS.filter(
-      (email) => email !== 'atiwari@opusbehavioral.com'
-    );
-    const { data: owners } = await supabase
+    // Look up AE's owner record from hubspot_owner_id
+    const { data: ownerRecord } = await supabase
       .from('owners')
       .select('id, hubspot_owner_id, first_name, last_name, email')
-      .in('email', pplAeEmails);
+      .eq('hubspot_owner_id', user.hubspotOwnerId)
+      .single();
 
-    if (!owners || owners.length === 0) {
-      return NextResponse.json({ deals: [], counts: { on_track: 0, behind: 0, critical: 0, pending: 0, meeting_booked: 0 }, avgTouchesExcludingMeetings: null });
+    if (!ownerRecord) {
+      return NextResponse.json({
+        deals: [],
+        counts: { on_track: 0, behind: 0, critical: 0, pending: 0, meeting_booked: 0 },
+        avgTouchesExcludingMeetings: null,
+      } satisfies QueueResponse);
     }
 
-    // Build owner lookup map
-    const ownerMap = new Map<string, { name: string; email: string }>();
-    for (const owner of owners) {
-      const name = [owner.first_name, owner.last_name].filter(Boolean).join(' ') || owner.email;
-      ownerMap.set(owner.id, { name, email: owner.email });
-    }
+    const ownerName = [ownerRecord.first_name, ownerRecord.last_name].filter(Boolean).join(' ') || ownerRecord.email;
+    const ownerId = ownerRecord.id;
 
-    let ownerIds = owners.map((o) => o.id);
-
-    // Filter by specific owner if requested
-    if (ownerIdFilter) {
-      if (!ownerIds.includes(ownerIdFilter)) {
-        return NextResponse.json({ deals: [], counts: { on_track: 0, behind: 0, critical: 0, pending: 0, meeting_booked: 0 }, avgTouchesExcludingMeetings: null });
-      }
-      ownerIds = [ownerIdFilter];
-    }
-
-    // Fetch PPL deals (lead_source = 'Paid Lead') for target AEs
+    // Fetch PPL deals (lead_source = 'Paid Lead') for this AE
     const { data: deals, error: dealsError } = await supabase
       .from('deals')
       .select(`
@@ -66,14 +57,14 @@ export async function GET(request: NextRequest) {
         close_date,
         lead_source
       `)
-      .in('owner_id', ownerIds)
+      .eq('owner_id', ownerId)
       .eq('pipeline', SYNC_CONFIG.TARGET_PIPELINE_ID)
       .in('deal_stage', ACTIVE_DEAL_STAGES)
       .eq('lead_source', 'Paid Lead')
       .order('amount', { ascending: false, nullsFirst: false });
 
     if (dealsError) {
-      console.error('[ppl-sequence] Error fetching deals:', dealsError);
+      console.error('[portal/ppl-sequence] Error fetching deals:', dealsError);
       return NextResponse.json(
         { error: 'Failed to fetch deals', details: dealsError.message },
         { status: 500 }
@@ -95,21 +86,18 @@ export async function GET(request: NextRequest) {
     const counts = { on_track: 0, behind: 0, critical: 0, pending: 0, meeting_booked: 0 };
 
     for (const deal of deals || []) {
-      const ownerInfo = deal.owner_id ? ownerMap.get(deal.owner_id) : null;
       const hubspotDealId = deal.hubspot_deal_id;
 
       const dealAgeDays = deal.hubspot_created_at
         ? getBusinessDaysSinceDate(deal.hubspot_created_at)
         : 0;
 
-      let week1Analysis: Week1TouchAnalysis | null = null;
+      let week1Analysis: ReturnType<typeof analyzeWeek1Touches> | null = null;
       let totalTouches: number | null = null;
       let needsActivityCheck = false;
 
-      // Only fetch activity data if we have a HubSpot ID and creation date
-      if (fetchActivity && hubspotDealId && deal.hubspot_created_at) {
+      if (hubspotDealId && deal.hubspot_created_at) {
         try {
-          // Fetch calls, emails, and meetings from HubSpot
           const [calls, emails, meetings] = await Promise.all([
             getCallsByDealId(hubspotDealId),
             getEmailsByDealId(hubspotDealId),
@@ -118,7 +106,6 @@ export async function GET(request: NextRequest) {
 
           week1Analysis = analyzeWeek1Touches(calls, emails, deal.hubspot_created_at, target, meetings);
 
-          // Count all touches (no date filter) for total column
           const allTimeTouches = countTouchesInRange(
             calls,
             emails,
@@ -127,14 +114,13 @@ export async function GET(request: NextRequest) {
           );
           totalTouches = allTimeTouches.total;
 
-          // Count statuses - meeting_booked is separate from on_track
           if (week1Analysis.meetingBooked) {
             counts.meeting_booked++;
           } else {
             counts[week1Analysis.status]++;
           }
         } catch (error) {
-          console.warn(`[ppl-sequence] Failed to fetch activity for deal ${hubspotDealId}:`, error);
+          console.warn(`[portal/ppl-sequence] Failed to fetch activity for deal ${hubspotDealId}:`, error);
           needsActivityCheck = true;
           counts.pending++;
         }
@@ -150,8 +136,8 @@ export async function GET(request: NextRequest) {
         amount: deal.amount,
         stageName: stageMap.get(deal.deal_stage || '') || deal.deal_stage || 'Unknown',
         stageId: deal.deal_stage || '',
-        ownerName: ownerInfo?.name || 'Unknown',
-        ownerId: deal.owner_id || '',
+        ownerName,
+        ownerId,
         closeDate: deal.close_date,
         hubspotCreatedAt: deal.hubspot_created_at,
         dealAgeDays,
@@ -174,9 +160,9 @@ export async function GET(request: NextRequest) {
     const response: QueueResponse = { deals: pplDeals, counts, avgTouchesExcludingMeetings };
     return NextResponse.json(response);
   } catch (error) {
-    console.error('[ppl-sequence] Queue error:', error);
+    console.error('[portal/ppl-sequence] Error:', error);
     return NextResponse.json(
-      { error: 'Failed to get PPL sequence queue', details: error instanceof Error ? error.message : 'Unknown error' },
+      { error: 'Failed to get PPL sequence data', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     );
   }

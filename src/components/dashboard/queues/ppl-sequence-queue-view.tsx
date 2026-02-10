@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { formatCurrency } from '@/lib/utils/currency';
 import { getHubSpotDealUrl } from '@/lib/hubspot/urls';
-import type { Week1TouchAnalysis } from '@/lib/utils/touch-counter';
+import type { PplSequenceDeal, QueueResponse } from '@/types/ppl-sequence';
 
 // ===== Utility =====
 
@@ -23,39 +23,6 @@ function formatRelativeTime(dateString: string | null): string {
   if (diffDays < 7) return `${diffDays}d ago`;
 
   return date.toLocaleDateString();
-}
-
-// ===== Types =====
-
-interface PplSequenceDeal {
-  id: string;
-  hubspotDealId: string;
-  dealName: string;
-  amount: number | null;
-  stageName: string;
-  stageId: string;
-  ownerName: string;
-  ownerId: string;
-  closeDate: string | null;
-  hubspotCreatedAt: string | null;
-  dealAgeDays: number;
-  week1Analysis: Week1TouchAnalysis | null;
-  totalTouches: number | null;
-  meetingBooked: boolean;
-  meetingBookedDate: string | null;
-  needsActivityCheck: boolean;
-}
-
-interface QueueResponse {
-  deals: PplSequenceDeal[];
-  counts: {
-    on_track: number;
-    behind: number;
-    critical: number;
-    pending: number;
-    meeting_booked: number;
-  };
-  avgTouchesExcludingMeetings: number | null;
 }
 
 type SortColumn = 'dealName' | 'ownerName' | 'amount' | 'dealAgeDays' | 'touches' | 'gap';

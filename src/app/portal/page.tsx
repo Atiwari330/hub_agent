@@ -19,6 +19,7 @@ import { SpiffRings } from '@/components/portal/spiff-rings';
 import { RevenueCard } from '@/components/portal/revenue-card';
 import { AlertsCard } from '@/components/portal/alerts-card';
 import { WeeklyTrend } from '@/components/portal/weekly-trend';
+import { PplSequenceCard } from '@/components/portal/ppl-sequence-card';
 
 const HUBSPOT_PORTAL_ID = process.env.NEXT_PUBLIC_HUBSPOT_PORTAL_ID || '7358632';
 
@@ -305,6 +306,9 @@ export default async function PortalPage() {
         weekDaily={weekDailyCallResults}
         dailyGoal={CALL_TIERS.BASELINE}
       />
+
+      {/* PPL Sequence Compliance */}
+      <PplSequenceCard />
     </div>
   );
 }
