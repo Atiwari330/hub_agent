@@ -1110,47 +1110,58 @@ export function NextStepQueueView() {
                             </button>
                           ) : /* Priority 2: Create Task or show checkmark for missing/overdue */
                           (deal.status === 'missing' || deal.status === 'overdue') ? (
-                            hasTask ? (
-                              /* Task exists: show subtle checkmark, Re-create on hover */
-                              <div className="flex items-center gap-1.5 group/task">
-                                <svg className="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                </svg>
-                                <span className="text-xs text-gray-500">{formatTaskDate(deal.existingTask!.createdAt)}</span>
+                            <div className="flex items-center gap-2">
+                              {hasTask ? (
+                                /* Task exists: show subtle checkmark, Re-create on hover */
+                                <div className="flex items-center gap-1.5 group/task">
+                                  <svg className="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                  </svg>
+                                  <span className="text-xs text-gray-500">{formatTaskDate(deal.existingTask!.createdAt)}</span>
+                                  <button
+                                    onClick={() => handleCreateTask(deal)}
+                                    disabled={isCreating}
+                                    className="text-xs text-gray-400 hover:text-indigo-600 opacity-0 group-hover/task:opacity-100 transition-opacity"
+                                  >
+                                    {isCreating ? '...' : 'Redo'}
+                                  </button>
+                                </div>
+                              ) : (
+                                /* No task: show Create Task button */
                                 <button
                                   onClick={() => handleCreateTask(deal)}
                                   disabled={isCreating}
-                                  className="text-xs text-gray-400 hover:text-indigo-600 opacity-0 group-hover/task:opacity-100 transition-opacity"
+                                  className="px-3 py-1.5 text-xs font-medium text-white bg-emerald-600 rounded-md hover:bg-emerald-700 transition-colors whitespace-nowrap disabled:opacity-50 shadow-sm"
                                 >
-                                  {isCreating ? '...' : 'Redo'}
+                                  {isCreating ? (
+                                    <span className="flex items-center gap-1.5">
+                                      <svg className="animate-spin w-3 h-3" fill="none" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                      </svg>
+                                      <span>...</span>
+                                    </span>
+                                  ) : (
+                                    'Create Task'
+                                  )}
                                 </button>
-                              </div>
-                            ) : (
-                              /* No task: show Create Task button */
-                              <button
-                                onClick={() => handleCreateTask(deal)}
-                                disabled={isCreating}
-                                className="px-3 py-1.5 text-xs font-medium text-white bg-emerald-600 rounded-md hover:bg-emerald-700 transition-colors whitespace-nowrap disabled:opacity-50 shadow-sm"
-                              >
-                                {isCreating ? (
-                                  <span className="flex items-center gap-1.5">
-                                    <svg className="animate-spin w-3 h-3" fill="none" viewBox="0 0 24 24">
-                                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                                    </svg>
-                                    <span>...</span>
-                                  </span>
-                                ) : (
-                                  'Create Task'
-                                )}
-                              </button>
-                            )
-                          ) : /* Priority 3: Compliant deals - subtle re-analyze option */
+                              )}
+                              {deal.nextStep && (
+                                <button
+                                  onClick={() => handleAnalyze(deal)}
+                                  disabled={isAnalyzing}
+                                  className="text-xs text-indigo-500 hover:text-indigo-700 transition-colors"
+                                >
+                                  {isAnalyzing ? '...' : 'Re-analyze'}
+                                </button>
+                              )}
+                            </div>
+                          ) : /* Priority 3: Compliant deals - visible re-analyze option */
                           deal.status === 'compliant' && deal.nextStep ? (
                             <button
                               onClick={() => handleAnalyze(deal)}
                               disabled={isAnalyzing}
-                              className="text-xs text-gray-400 hover:text-indigo-600 transition-colors opacity-0 group-hover:opacity-100"
+                              className="text-xs text-gray-400 hover:text-indigo-600 transition-colors"
                             >
                               {isAnalyzing ? '...' : 'Re-analyze'}
                             </button>
