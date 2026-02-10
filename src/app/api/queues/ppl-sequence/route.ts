@@ -64,11 +64,14 @@ export async function GET(request: NextRequest) {
   const fetchActivity = searchParams.get('fetchActivity') !== 'false'; // Default true
 
   try {
-    // Get target owners
+    // Get target owners (exclude Adi Tiwari — not part of PPL sequence compliance)
+    const pplAeEmails = SYNC_CONFIG.TARGET_AE_EMAILS.filter(
+      (email) => email !== 'atiwari@opusbehavioral.com'
+    );
     const { data: owners } = await supabase
       .from('owners')
       .select('id, hubspot_owner_id, first_name, last_name, email')
-      .in('email', SYNC_CONFIG.TARGET_AE_EMAILS);
+      .in('email', pplAeEmails);
 
     if (!owners || owners.length === 0) {
       return NextResponse.json({ deals: [], counts: { on_track: 0, behind: 0, critical: 0, pending: 0, meeting_booked: 0 }, avgTouchesExcludingMeetings: null });
