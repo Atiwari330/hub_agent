@@ -18,8 +18,6 @@ export interface AtRiskCompany {
   ownerName: string | null;
   ownerEmail: string | null;
   hubspotOwnerId: string | null;
-  // Computed flags
-  isAtRisk: boolean;
   isFlagged: boolean;
 }
 
@@ -27,9 +25,7 @@ export interface AtRiskQueueResponse {
   companies: AtRiskCompany[];
   counts: {
     total: number;
-    atRisk: number;
     flagged: number;
-    bothAtRiskAndFlagged: number;
   };
 }
 
@@ -42,10 +38,9 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = new URL(request.url);
   const ownerIdFilter = searchParams.get('ownerId');
-  const statusFilter = searchParams.get('status'); // 'at-risk', 'flagged', 'both', or null for all
 
   try {
-    // Build query for at-risk companies
+    // Build query for sentiment-flagged companies
     let query = supabase
       .from('companies')
       .select(`
@@ -62,8 +57,7 @@ export async function GET(request: NextRequest) {
         latest_meeting_date,
         hubspot_owner_id
       `)
-      // Filter for at-risk OR flagged
-      .or('health_score_status.eq.At-Risk,sentiment.eq.Flagged')
+      .eq('sentiment', 'Flagged')
       // Exclude churned companies
       .neq('contract_status', 'Churned')
       // Sort by ARR descending (biggest $ at risk first)
@@ -103,30 +97,11 @@ export async function GET(request: NextRequest) {
       ownerMap.set(owner.hubspot_owner_id, { name, email: owner.email });
     }
 
-    // Transform and count
-    let atRiskCount = 0;
-    let flaggedCount = 0;
-    let bothCount = 0;
-
-    const transformedCompanies: AtRiskCompany[] = [];
-
-    for (const company of companies || []) {
-      const isAtRisk = company.health_score_status === 'At-Risk';
-      const isFlagged = company.sentiment === 'Flagged';
-
-      // Apply status filter
-      if (statusFilter === 'at-risk' && !isAtRisk) continue;
-      if (statusFilter === 'flagged' && !isFlagged) continue;
-      if (statusFilter === 'both' && (!isAtRisk || !isFlagged)) continue;
-
-      // Count
-      if (isAtRisk) atRiskCount++;
-      if (isFlagged) flaggedCount++;
-      if (isAtRisk && isFlagged) bothCount++;
-
+    // Transform companies
+    const transformedCompanies: AtRiskCompany[] = (companies || []).map((company) => {
       const ownerInfo = company.hubspot_owner_id ? ownerMap.get(company.hubspot_owner_id) : null;
 
-      transformedCompanies.push({
+      return {
         id: company.id,
         hubspotCompanyId: company.hubspot_company_id,
         name: company.name,
@@ -141,18 +116,15 @@ export async function GET(request: NextRequest) {
         ownerName: ownerInfo?.name || null,
         ownerEmail: ownerInfo?.email || null,
         hubspotOwnerId: company.hubspot_owner_id,
-        isAtRisk,
-        isFlagged,
-      });
-    }
+        isFlagged: true,
+      };
+    });
 
     const response: AtRiskQueueResponse = {
       companies: transformedCompanies,
       counts: {
         total: transformedCompanies.length,
-        atRisk: atRiskCount,
-        flagged: flaggedCount,
-        bothAtRiskAndFlagged: bothCount,
+        flagged: transformedCompanies.length,
       },
     };
 

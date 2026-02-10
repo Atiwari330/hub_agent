@@ -5,7 +5,6 @@ import { formatCurrency } from '@/lib/utils/currency';
 import { getHubSpotCompanyUrl } from '@/lib/hubspot/urls';
 import type { AtRiskCompany, AtRiskQueueResponse } from '@/app/api/queues/at-risk/route';
 
-type StatusFilter = 'all' | 'at-risk' | 'flagged' | 'both';
 type SortColumn = 'name' | 'arr' | 'accountStatus' | 'sentiment' | 'contractEnd' | 'lastQbrDate' | 'lastActivityDate';
 type SortDirection = 'asc' | 'desc';
 
@@ -68,23 +67,17 @@ export function AtRiskQueueView() {
   const [error, setError] = useState<string | null>(null);
 
   // Filters
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [ownerFilter, setOwnerFilter] = useState<string>('all');
   const [accountStatusFilter, setAccountStatusFilter] = useState<string>('all');
 
-  // Sorting - default to sentiment descending (flagged first)
-  const [sortColumn, setSortColumn] = useState<SortColumn>('sentiment');
+  // Sorting - default to ARR descending (biggest $ at risk first)
+  const [sortColumn, setSortColumn] = useState<SortColumn>('arr');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
 
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const params = new URLSearchParams();
-      if (statusFilter !== 'all') {
-        params.set('status', statusFilter);
-      }
-      const url = `/api/queues/at-risk${params.toString() ? `?${params}` : ''}`;
-      const response = await fetch(url);
+      const response = await fetch('/api/queues/at-risk');
       if (!response.ok) {
         throw new Error('Failed to fetch at-risk accounts');
       }
@@ -96,7 +89,7 @@ export function AtRiskQueueView() {
     } finally {
       setLoading(false);
     }
-  }, [statusFilter]);
+  }, []);
 
   useEffect(() => {
     fetchData();
@@ -158,7 +151,6 @@ export function AtRiskQueueView() {
           comparison = (a.contractStatus || '').localeCompare(b.contractStatus || '');
           break;
         case 'sentiment':
-          // Flagged = 1, others = 0
           comparison = (a.isFlagged ? 1 : 0) - (b.isFlagged ? 1 : 0);
           break;
         case 'contractEnd':
@@ -196,7 +188,6 @@ export function AtRiskQueueView() {
   };
 
   const hasActiveFilters = ownerFilter !== 'all' || accountStatusFilter !== 'all';
-  const hasStatusFilter = statusFilter !== 'all';
 
   const clearFilters = () => {
     setOwnerFilter('all');
@@ -209,26 +200,8 @@ export function AtRiskQueueView() {
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">At-Risk Accounts</h1>
         <p className="text-sm text-gray-600 mt-1">
-          Customer accounts flagged as at-risk by health score status or CSM sentiment, sorted by ARR.
+          Customer accounts flagged by CSM sentiment, sorted by ARR.
         </p>
-      </div>
-
-      {/* Status Tabs */}
-      <div className="flex items-center gap-2 mb-4">
-        <span className="text-sm font-medium text-gray-700">Status:</span>
-        {(['all', 'at-risk', 'flagged', 'both'] as const).map((status) => (
-          <button
-            key={status}
-            onClick={() => setStatusFilter(status)}
-            className={`px-3 py-1.5 text-sm font-medium rounded-lg border transition-colors ${
-              statusFilter === status
-                ? 'bg-indigo-600 text-white border-indigo-600'
-                : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-            }`}
-          >
-            {status === 'all' ? 'All' : status === 'at-risk' ? 'At-Risk' : status === 'flagged' ? 'Flagged' : 'Both'}
-          </button>
-        ))}
       </div>
 
       {/* Filters Row */}
@@ -274,20 +247,12 @@ export function AtRiskQueueView() {
         )}
       </div>
 
-      {/* Summary Badges */}
+      {/* Summary Badge */}
       {!loading && data && (
         <div className="flex items-center gap-3 mb-4">
           <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full bg-red-100 text-red-700">
             <span className="w-2 h-2 rounded-full bg-red-500" />
-            {data.counts.bothAtRiskAndFlagged} Both
-          </span>
-          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full bg-orange-100 text-orange-700">
-            <span className="w-2 h-2 rounded-full bg-orange-500" />
-            {data.counts.atRisk} At-Risk
-          </span>
-          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full bg-yellow-100 text-yellow-700">
-            <span className="w-2 h-2 rounded-full bg-yellow-500" />
-            {data.counts.flagged} Flagged
+            {data.counts.flagged} Flagged account{data.counts.flagged !== 1 ? 's' : ''}
           </span>
           <span className="text-sm text-gray-500 ml-2">
             {processedCompanies.length} showing
@@ -334,20 +299,12 @@ export function AtRiskQueueView() {
           <h3 className="mt-4 text-lg font-medium text-emerald-900">
             {hasActiveFilters
               ? 'No accounts match the current filters'
-              : statusFilter === 'at-risk'
-                ? 'No at-risk accounts — looking good!'
-                : statusFilter === 'flagged'
-                  ? 'No flagged accounts — all clear!'
-                  : statusFilter === 'both'
-                    ? 'No accounts are both at-risk and flagged!'
-                    : 'No at-risk accounts — hooray!'}
+              : 'No flagged accounts — all clear!'}
           </h3>
           <p className="mt-1 text-sm text-emerald-700">
             {hasActiveFilters
               ? 'Try adjusting the owner or account status filters.'
-              : hasStatusFilter
-                ? 'None of your accounts fall into this category right now.'
-                : 'All customer accounts are in good health.'}
+              : 'All customer accounts are in good health.'}
           </p>
         </div>
       )}
