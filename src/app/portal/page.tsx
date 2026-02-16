@@ -12,15 +12,20 @@ import { SALES_PIPELINE_ID } from '@/lib/hubspot/stage-mappings';
 import { CALL_TIERS, getCallTier } from '@/lib/scorecard/daily-scorecard';
 import { DEMO_TIERS, getDemoTier } from '@/lib/scorecard/weekly-scorecard';
 import { PROSPECT_TIERS, getProspectTier } from '@/lib/scorecard/prospect-tiers';
-import { calculateDealRisk } from '@/lib/utils/deal-risk';
+import { checkDealHygiene, checkDealStaleness, checkNextStepCompliance } from '@/lib/utils/queue-detection';
+import { isDateInPast, getDaysUntil } from '@/lib/utils/business-days';
 import { getCurrentQuarter, getQuarterInfo, getQuarterProgress } from '@/lib/utils/quarter';
 import { PortalHeader } from '@/components/portal/portal-header';
 import { SpiffRings } from '@/components/portal/spiff-rings';
 import { RevenueCard } from '@/components/portal/revenue-card';
-import { AlertsCard } from '@/components/portal/alerts-card';
+import {
+  ActionItemsCard,
+  type HygieneDeal,
+  type StalledDeal,
+  type NextStepDeal,
+  type CloseDateDeal,
+} from '@/components/portal/action-items-card';
 import { PplSequenceCard } from '@/components/portal/ppl-sequence-card';
-
-const HUBSPOT_PORTAL_ID = process.env.NEXT_PUBLIC_HUBSPOT_PORTAL_ID || '7358632';
 
 function getDayBoundsET(date: Date): { start: Date; end: Date } {
   const dateStr = date.toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
@@ -175,6 +180,19 @@ export default async function PortalPage() {
     return isInQuarter(closeDate);
   };
 
+  const LATE_STAGE_PATTERNS = ['demo', 'proposal', 'negotiation', 'contract', 'legal', 'procurement'];
+
+  const isLateStage = (stageName: string | null): boolean => {
+    if (!stageName) return false;
+    const lower = stageName.toLowerCase();
+    return LATE_STAGE_PATTERNS.some((p) => lower.includes(p));
+  };
+
+  const resolveStageName = (stageId: string | null): string | null => {
+    if (!stageId) return null;
+    return stageNames.get(stageId) || null;
+  };
+
   // Quota attainment
   const closedWonDeals = deals.filter(
     (d) => isClosedWon(d.deal_stage) && isInQuarter(d.close_date)
@@ -195,41 +213,112 @@ export default async function PortalPage() {
     : pipelineValue > 0 ? null
     : 0;
 
-  // Alerts
-  const alertDeals = deals
-    .filter((d) => !isClosedWon(d.deal_stage) && !isClosedLost(d.deal_stage))
-    .map((d) => {
-      const stageName = d.deal_stage ? stageNames.get(d.deal_stage) || d.deal_stage : null;
-      const risk = calculateDealRisk({
-        stageName,
-        closeDate: d.close_date,
-        lastActivityDate: d.last_activity_date,
-        nextActivityDate: d.next_activity_date,
-        nextStep: d.next_step,
-        sqlEnteredAt: d.sql_entered_at,
-        demoScheduledEnteredAt: d.demo_scheduled_entered_at,
-        demoCompletedEnteredAt: d.demo_completed_entered_at,
-        hubspotCreatedAt: d.hubspot_created_at,
-        nextStepDueDate: d.next_step_due_date,
-        nextStepStatus: d.next_step_status,
-      });
+  // Action Items — categorize active deals by issue type
+  const activeDeals = deals.filter(
+    (d) => !isClosedWon(d.deal_stage) && !isClosedLost(d.deal_stage)
+  );
 
-      return {
-        id: d.id,
-        hubspotDealId: d.hubspot_deal_id,
-        dealName: d.deal_name,
-        amount: d.amount,
-        stageName,
-        risk,
-        hubspotUrl: `https://app.hubspot.com/contacts/${HUBSPOT_PORTAL_ID}/deal/${d.hubspot_deal_id}/`,
-      };
-    })
-    .filter((d) => d.risk.level !== 'healthy')
-    .sort((a, b) => {
-      if (a.risk.level === 'stale' && b.risk.level !== 'stale') return -1;
-      if (a.risk.level !== 'stale' && b.risk.level === 'stale') return 1;
-      return (b.amount || 0) - (a.amount || 0);
+  const hygieneDeals: HygieneDeal[] = [];
+  const stalledDeals: StalledDeal[] = [];
+  const nextStepDeals: NextStepDeal[] = [];
+  const closeDateDeals: CloseDateDeal[] = [];
+  const uniqueDealIds = new Set<string>();
+
+  for (const d of activeDeals) {
+    const dealStageName = resolveStageName(d.deal_stage);
+    const dealIsHighPriority = isLateStage(dealStageName);
+    const base = {
+      id: d.id,
+      hubspotDealId: d.hubspot_deal_id,
+      dealName: d.deal_name,
+      amount: d.amount,
+    };
+
+    // 1. Hygiene check
+    const hygieneResult = checkDealHygiene({
+      id: d.id,
+      hubspot_created_at: d.hubspot_created_at,
+      deal_substage: d.deal_substage,
+      close_date: d.close_date,
+      amount: d.amount,
+      lead_source: d.lead_source,
+      products: d.products,
+      deal_collaborator: d.deal_collaborator ?? null,
     });
+    if (!hygieneResult.isCompliant) {
+      hygieneDeals.push({ ...base, missingFields: hygieneResult.missingFields, stageName: dealStageName, isHighPriority: dealIsHighPriority });
+      uniqueDealIds.add(d.id);
+    }
+
+    // 2. Staleness check
+    const stalenessResult = checkDealStaleness({
+      last_activity_date: d.last_activity_date,
+      next_activity_date: d.next_activity_date,
+      hubspot_created_at: d.hubspot_created_at,
+      close_date: d.close_date,
+      next_step: d.next_step,
+      next_step_due_date: d.next_step_due_date,
+      next_step_status: d.next_step_status,
+      amount: d.amount,
+    });
+    if (stalenessResult.isStalled && stalenessResult.severity) {
+      stalledDeals.push({
+        ...base,
+        severity: stalenessResult.severity,
+        daysSinceActivity: stalenessResult.daysSinceActivity,
+        aggravatingFactors: stalenessResult.aggravatingFactors,
+      });
+      uniqueDealIds.add(d.id);
+    }
+
+    // 3. Next step check
+    const nextStepResult = checkNextStepCompliance({
+      next_step: d.next_step,
+      next_step_due_date: d.next_step_due_date,
+      next_step_status: d.next_step_status,
+    });
+    if (nextStepResult.status !== 'compliant') {
+      nextStepDeals.push({
+        ...base,
+        nextStepStatus: nextStepResult.status,
+        daysOverdue: nextStepResult.daysOverdue,
+        reason: nextStepResult.reason,
+        stageName: dealStageName,
+        isHighPriority: dealIsHighPriority,
+      });
+      uniqueDealIds.add(d.id);
+    }
+
+    // 4. Past close date check
+    if (d.close_date && isDateInPast(d.close_date)) {
+      const daysOverdue = Math.abs(getDaysUntil(d.close_date));
+      closeDateDeals.push({ ...base, closeDate: d.close_date, daysOverdue });
+      uniqueDealIds.add(d.id);
+    }
+  }
+
+  // Sort each category: high-priority first, then existing sort within each group
+  hygieneDeals.sort(
+    (a, b) =>
+      (b.isHighPriority ? 1 : 0) - (a.isHighPriority ? 1 : 0) ||
+      b.missingFields.length - a.missingFields.length ||
+      (b.amount || 0) - (a.amount || 0)
+  );
+  const severityOrder = { critical: 0, warning: 1, watch: 2 };
+  stalledDeals.sort(
+    (a, b) =>
+      severityOrder[a.severity] - severityOrder[b.severity] ||
+      b.daysSinceActivity - a.daysSinceActivity ||
+      (b.amount || 0) - (a.amount || 0)
+  );
+  nextStepDeals.sort((a, b) => {
+    const priorityDiff = (b.isHighPriority ? 1 : 0) - (a.isHighPriority ? 1 : 0);
+    if (priorityDiff !== 0) return priorityDiff;
+    if (a.nextStepStatus === 'overdue' && b.nextStepStatus !== 'overdue') return -1;
+    if (a.nextStepStatus !== 'overdue' && b.nextStepStatus === 'overdue') return 1;
+    return (b.daysOverdue || 0) - (a.daysOverdue || 0) || (b.amount || 0) - (a.amount || 0);
+  });
+  closeDateDeals.sort((a, b) => b.daysOverdue - a.daysOverdue || (b.amount || 0) - (a.amount || 0));
 
   return (
     <div className="space-y-6">
@@ -271,10 +360,13 @@ export default async function PortalPage() {
         }}
       />
 
-      {/* Alerts */}
-      <AlertsCard
-        deals={alertDeals.slice(0, 10)}
-        totalAlerts={alertDeals.length}
+      {/* Action Items */}
+      <ActionItemsCard
+        hygiene={hygieneDeals}
+        stalled={stalledDeals}
+        nextSteps={nextStepDeals}
+        closeDate={closeDateDeals}
+        totalUniqueDeals={uniqueDealIds.size}
       />
 
       {/* PPL Sequence Compliance */}
