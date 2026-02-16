@@ -69,8 +69,8 @@ export function LoginForm() {
         };
         redirectUrl = getDefaultLandingPage(userWithPermissions);
       } else {
-        // Fallback for users without profile
-        redirectUrl = '/dashboard';
+        setError('User profile not found. Please contact your administrator.');
+        return;
       }
 
       // Check if there's a specific redirect param that isn't the generic dashboard
