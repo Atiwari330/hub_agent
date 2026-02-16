@@ -12,17 +12,14 @@ import { SALES_PIPELINE_ID } from '@/lib/hubspot/stage-mappings';
 import { CALL_TIERS, getCallTier } from '@/lib/scorecard/daily-scorecard';
 import { DEMO_TIERS, getDemoTier } from '@/lib/scorecard/weekly-scorecard';
 import { PROSPECT_TIERS, getProspectTier } from '@/lib/scorecard/prospect-tiers';
-import { checkDealHygiene, checkDealStaleness, checkNextStepCompliance } from '@/lib/utils/queue-detection';
+import { checkDealHygiene, checkDealStaleness } from '@/lib/utils/queue-detection';
 import { isDateInPast, getDaysUntil } from '@/lib/utils/business-days';
-import { getCurrentQuarter, getQuarterInfo, getQuarterProgress } from '@/lib/utils/quarter';
 import { PortalHeader } from '@/components/portal/portal-header';
 import { SpiffRings } from '@/components/portal/spiff-rings';
-import { RevenueCard } from '@/components/portal/revenue-card';
 import {
   ActionItemsCard,
   type HygieneDeal,
   type StalledDeal,
-  type NextStepDeal,
   type CloseDateDeal,
 } from '@/components/portal/action-items-card';
 import { PplSequenceCard } from '@/components/portal/ppl-sequence-card';
@@ -83,11 +80,6 @@ export default async function PortalPage() {
   const todayStr = today.toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
   const { start: monthStart, end: monthEnd } = getCurrentMonthBoundsET();
 
-  // Quarter info
-  const currentQ = getCurrentQuarter();
-  const quarterInfo = getQuarterInfo(currentQ.year, currentQ.quarter);
-  const progress = getQuarterProgress(quarterInfo);
-
   // Resolve valid contact owner IDs for call filtering (the 5 dashboard AEs)
   const { data: dashboardOwners } = await supabase
     .from('owners')
@@ -106,7 +98,6 @@ export default async function PortalPage() {
     todayCalls,
     weekDemosResult,
     prospectCount,
-    quotaResult,
     dealsResult,
     stageNames,
   ] = await Promise.all([
@@ -119,13 +110,6 @@ export default async function PortalPage() {
       .gte('demo_completed_entered_at', `${weekMondayStr}T00:00:00`)
       .lte('demo_completed_entered_at', `${todayStr}T23:59:59.999`),
     fetchProspectCountByOwner(hubspotOwnerId, monthStart, monthEnd),
-    supabase
-      .from('quotas')
-      .select('quota_amount')
-      .eq('hubspot_owner_id', hubspotOwnerId)
-      .eq('fiscal_year', currentQ.year)
-      .eq('fiscal_quarter', currentQ.quarter)
-      .single(),
     supabase
       .from('deals')
       .select('*')
@@ -145,15 +129,11 @@ export default async function PortalPage() {
   // Process prospects
   const prospectTier = getProspectTier(prospectCount);
 
-  // Process quota
-  const quotaAmount = quotaResult.data?.quota_amount || 0;
   const deals = dealsResult.data || [];
 
   // Stage classification helpers
   const CLOSED_WON_PATTERNS = ['closedwon', 'closed won', 'closed-won'];
   const CLOSED_LOST_PATTERNS = ['closedlost', 'closed lost', 'closed-lost'];
-  const EXCLUDED_FROM_PIPELINE = ['mql', 'disqualified', 'qualified'];
-
   const isClosedWon = (stageId: string | null): boolean => {
     if (!stageId) return false;
     const name = stageNames.get(stageId) || stageId;
@@ -164,20 +144,6 @@ export default async function PortalPage() {
     if (!stageId) return false;
     const name = stageNames.get(stageId) || stageId;
     return CLOSED_LOST_PATTERNS.some((p) => name.toLowerCase().includes(p));
-  };
-
-  const isInQuarter = (dateStr: string | null): boolean => {
-    if (!dateStr) return false;
-    const date = new Date(dateStr);
-    return date >= quarterInfo.startDate && date <= quarterInfo.endDate;
-  };
-
-  const isInPipeline = (stageId: string | null, closeDate: string | null): boolean => {
-    if (!stageId) return false;
-    if (isClosedWon(stageId) || isClosedLost(stageId)) return false;
-    const name = stageNames.get(stageId) || stageId;
-    if (EXCLUDED_FROM_PIPELINE.some((p) => name.toLowerCase().includes(p))) return false;
-    return isInQuarter(closeDate);
   };
 
   const LATE_STAGE_PATTERNS = ['demo', 'proposal', 'negotiation', 'contract', 'legal', 'procurement'];
@@ -193,26 +159,6 @@ export default async function PortalPage() {
     return stageNames.get(stageId) || null;
   };
 
-  // Quota attainment
-  const closedWonDeals = deals.filter(
-    (d) => isClosedWon(d.deal_stage) && isInQuarter(d.close_date)
-  );
-  const closedWonAmount = closedWonDeals.reduce((sum, d) => sum + (d.amount || 0), 0);
-  const attainment = quotaAmount > 0 ? (closedWonAmount / quotaAmount) * 100 : 0;
-  const expectedByNow = quotaAmount * (progress.percentComplete / 100);
-  const pace = closedWonAmount - expectedByNow;
-  const onTrack = pace >= 0;
-
-  // Pipeline metrics
-  const pipelineDeals = deals.filter((d) => isInPipeline(d.deal_stage, d.close_date));
-  const pipelineValue = pipelineDeals.reduce((sum, d) => sum + (d.amount || 0), 0);
-  const remainingQuota = Math.max(0, quotaAmount - closedWonAmount);
-  const coverageRatio =
-    quotaAmount === 0 ? null
-    : remainingQuota > 0 ? Math.round((pipelineValue / remainingQuota) * 10) / 10
-    : pipelineValue > 0 ? null
-    : 0;
-
   // Action Items — categorize active deals by issue type
   const activeDeals = deals.filter(
     (d) => !isClosedWon(d.deal_stage) && !isClosedLost(d.deal_stage)
@@ -220,7 +166,6 @@ export default async function PortalPage() {
 
   const hygieneDeals: HygieneDeal[] = [];
   const stalledDeals: StalledDeal[] = [];
-  const nextStepDeals: NextStepDeal[] = [];
   const closeDateDeals: CloseDateDeal[] = [];
   const uniqueDealIds = new Set<string>();
 
@@ -271,25 +216,7 @@ export default async function PortalPage() {
       uniqueDealIds.add(d.id);
     }
 
-    // 3. Next step check
-    const nextStepResult = checkNextStepCompliance({
-      next_step: d.next_step,
-      next_step_due_date: d.next_step_due_date,
-      next_step_status: d.next_step_status,
-    });
-    if (nextStepResult.status !== 'compliant') {
-      nextStepDeals.push({
-        ...base,
-        nextStepStatus: nextStepResult.status,
-        daysOverdue: nextStepResult.daysOverdue,
-        reason: nextStepResult.reason,
-        stageName: dealStageName,
-        isHighPriority: dealIsHighPriority,
-      });
-      uniqueDealIds.add(d.id);
-    }
-
-    // 4. Past close date check
+    // 3. Past close date check
     if (d.close_date && isDateInPast(d.close_date)) {
       const daysOverdue = Math.abs(getDaysUntil(d.close_date));
       closeDateDeals.push({ ...base, closeDate: d.close_date, daysOverdue });
@@ -311,13 +238,6 @@ export default async function PortalPage() {
       b.daysSinceActivity - a.daysSinceActivity ||
       (b.amount || 0) - (a.amount || 0)
   );
-  nextStepDeals.sort((a, b) => {
-    const priorityDiff = (b.isHighPriority ? 1 : 0) - (a.isHighPriority ? 1 : 0);
-    if (priorityDiff !== 0) return priorityDiff;
-    if (a.nextStepStatus === 'overdue' && b.nextStepStatus !== 'overdue') return -1;
-    if (a.nextStepStatus !== 'overdue' && b.nextStepStatus === 'overdue') return 1;
-    return (b.daysOverdue || 0) - (a.daysOverdue || 0) || (b.amount || 0) - (a.amount || 0);
-  });
   closeDateDeals.sort((a, b) => b.daysOverdue - a.daysOverdue || (b.amount || 0) - (a.amount || 0));
 
   return (
@@ -344,27 +264,10 @@ export default async function PortalPage() {
         }}
       />
 
-      {/* Revenue Snapshot */}
-      <RevenueCard
-        quota={{
-          target: quotaAmount,
-          closedWon: closedWonAmount,
-          attainment: Math.round(attainment * 10) / 10,
-          pace: Math.round(pace),
-          onTrack,
-        }}
-        pipeline={{
-          totalValue: pipelineValue,
-          dealCount: pipelineDeals.length,
-          coverageRatio,
-        }}
-      />
-
       {/* Action Items */}
       <ActionItemsCard
         hygiene={hygieneDeals}
         stalled={stalledDeals}
-        nextSteps={nextStepDeals}
         closeDate={closeDateDeals}
         totalUniqueDeals={uniqueDealIds.size}
       />

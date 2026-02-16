@@ -30,14 +30,6 @@ export interface StalledDeal extends BaseDeal {
   };
 }
 
-export interface NextStepDeal extends BaseDeal {
-  nextStepStatus: 'missing' | 'overdue';
-  daysOverdue: number | null;
-  reason: string;
-  stageName: string | null;
-  isHighPriority: boolean;
-}
-
 export interface CloseDateDeal extends BaseDeal {
   closeDate: string;
   daysOverdue: number;
@@ -51,7 +43,6 @@ interface PrioritizedDeal extends BaseDeal {
 export interface ActionItemsCardProps {
   hygiene: HygieneDeal[];
   stalled: StalledDeal[];
-  nextSteps: NextStepDeal[];
   closeDate: CloseDateDeal[];
   totalUniqueDeals: number;
 }
@@ -303,21 +294,6 @@ function StalledDetail({ deal }: { deal: StalledDeal }) {
   );
 }
 
-function NextStepDetail({ deal }: { deal: NextStepDeal }) {
-  if (deal.nextStepStatus === 'missing') {
-    return (
-      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-700">
-        No next step defined
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-100 text-red-700">
-      Next step {deal.daysOverdue} day{deal.daysOverdue !== 1 ? 's' : ''} overdue
-    </span>
-  );
-}
-
 function CloseDateDetail({ deal }: { deal: CloseDateDeal }) {
   return (
     <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-100 text-red-700">
@@ -344,14 +320,6 @@ function PauseIcon() {
   );
 }
 
-function ArrowRightIcon() {
-  return (
-    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-    </svg>
-  );
-}
-
 function CalendarIcon() {
   return (
     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -365,7 +333,6 @@ function CalendarIcon() {
 export function ActionItemsCard({
   hygiene,
   stalled,
-  nextSteps,
   closeDate,
   totalUniqueDeals,
 }: ActionItemsCardProps) {
@@ -431,18 +398,7 @@ export function ActionItemsCard({
             )}
           </div>
 
-          {/* 3. Next Steps */}
-          {nextSteps.length > 0 && (
-            <PrioritizedCategorySection
-              icon={<ArrowRightIcon />}
-              label="Next Steps"
-              deals={nextSteps}
-              renderDetail={(deal) => <NextStepDetail deal={deal} />}
-              keyPrefix="nextstep"
-            />
-          )}
-
-          {/* 4. Past Close Date */}
+          {/* 3. Past Close Date */}
           {closeDate.length > 0 && (
             <CategorySection
               icon={<CalendarIcon />}
