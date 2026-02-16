@@ -17,7 +17,9 @@ import { isDateInPast, getDaysUntil } from '@/lib/utils/business-days';
 import { PortalHeader } from '@/components/portal/portal-header';
 import { SpiffRings } from '@/components/portal/spiff-rings';
 import {
-  ActionItemsCard,
+  DealHygieneCard,
+  StalledDealsCard,
+  PastCloseDateCard,
   type HygieneDeal,
   type StalledDeal,
   type CloseDateDeal,
@@ -264,13 +266,16 @@ export default async function PortalPage() {
         }}
       />
 
-      {/* Action Items */}
-      <ActionItemsCard
-        hygiene={hygieneDeals}
-        stalled={stalledDeals}
-        closeDate={closeDateDeals}
-        totalUniqueDeals={uniqueDealIds.size}
-      />
+      {/* Action Items — 2-column grid on desktop */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2">
+          <DealHygieneCard deals={hygieneDeals} totalUniqueDeals={uniqueDealIds.size} />
+        </div>
+        <div className="space-y-6 lg:self-start lg:sticky lg:top-8">
+          <StalledDealsCard deals={stalledDeals} />
+          <PastCloseDateCard deals={closeDateDeals} />
+        </div>
+      </div>
 
       {/* PPL Sequence Compliance */}
       <PplSequenceCard />

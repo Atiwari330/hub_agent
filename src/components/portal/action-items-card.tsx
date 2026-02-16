@@ -40,13 +40,6 @@ interface PrioritizedDeal extends BaseDeal {
   isHighPriority: boolean;
 }
 
-export interface ActionItemsCardProps {
-  hygiene: HygieneDeal[];
-  stalled: StalledDeal[];
-  closeDate: CloseDateDeal[];
-  totalUniqueDeals: number;
-}
-
 // ===== Constants =====
 
 const DEFAULT_VISIBLE = 3;
@@ -328,93 +321,92 @@ function CalendarIcon() {
   );
 }
 
-// ===== Main Component =====
+// ===== Exported Card Components =====
 
-export function ActionItemsCard({
-  hygiene,
-  stalled,
-  closeDate,
+export function DealHygieneCard({
+  deals,
   totalUniqueDeals,
-}: ActionItemsCardProps) {
-  const hasItems = totalUniqueDeals > 0;
-
+}: {
+  deals: HygieneDeal[];
+  totalUniqueDeals: number;
+}) {
   return (
     <div className="bg-white rounded-2xl shadow-sm p-6">
-      {/* Header */}
       <div className="flex items-center gap-2 mb-4">
         <p className="text-xs font-medium uppercase tracking-wider text-slate-400">
           Action Items
         </p>
-        {hasItems && (
+        {totalUniqueDeals > 0 && (
           <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-red-500 text-white text-xs font-bold">
             {totalUniqueDeals}
           </span>
         )}
       </div>
 
-      {/* Empty state */}
-      {!hasItems && (
+      {deals.length === 0 ? (
         <div className="flex items-center gap-3 py-8 justify-center text-slate-400">
           <svg className="w-6 h-6 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
           </svg>
-          <span className="text-sm font-medium text-slate-500">You&apos;re all caught up</span>
+          <span className="text-sm font-medium text-slate-500">No hygiene issues</span>
         </div>
+      ) : (
+        <PrioritizedCategorySection
+          icon={<ClipboardIcon />}
+          label="Deal Hygiene"
+          deals={deals}
+          renderDetail={(deal) => <HygieneDetail deal={deal} />}
+        />
       )}
+    </div>
+  );
+}
 
-      {/* Categories */}
-      {hasItems && (
-        <div className="space-y-5">
-          {/* 1. Deal Hygiene */}
-          {hygiene.length > 0 && (
-            <PrioritizedCategorySection
-              icon={<ClipboardIcon />}
-              label="Deal Hygiene"
-              deals={hygiene}
-              renderDetail={(deal) => <HygieneDetail deal={deal} />}
-            />
-          )}
-
-          {/* 2. Stalled Deals — always visible */}
-          <div className="space-y-1">
-            <div className="flex items-center gap-2 px-1 mb-1">
-              <span className="text-slate-400"><PauseIcon /></span>
-              <span className="text-xs font-semibold text-slate-600">Stalled Deals</span>
-              <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-slate-200 text-slate-600 text-[10px] font-bold px-1">
-                {stalled.length}
-              </span>
-            </div>
-            {stalled.length > 0 ? (
-              <StalledDealsContent deals={stalled} />
-            ) : (
-              <div className="flex items-center gap-2 px-3 py-3">
-                <svg className="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                <span className="text-xs font-medium text-emerald-600">
-                  No stalled deals &mdash; you&apos;re on track
-                </span>
-              </div>
-            )}
+export function StalledDealsCard({ deals }: { deals: StalledDeal[] }) {
+  return (
+    <div className="bg-white rounded-2xl shadow-sm p-6">
+      <div className="space-y-1">
+        <div className="flex items-center gap-2 px-1 mb-1">
+          <span className="text-slate-400"><PauseIcon /></span>
+          <span className="text-xs font-semibold text-slate-600">Stalled Deals</span>
+          <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-slate-200 text-slate-600 text-[10px] font-bold px-1">
+            {deals.length}
+          </span>
+        </div>
+        {deals.length > 0 ? (
+          <StalledDealsContent deals={deals} />
+        ) : (
+          <div className="flex items-center gap-2 px-3 py-3">
+            <svg className="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+            <span className="text-xs font-medium text-emerald-600">
+              No stalled deals &mdash; you&apos;re on track
+            </span>
           </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
-          {/* 3. Past Close Date */}
-          {closeDate.length > 0 && (
-            <CategorySection
-              icon={<CalendarIcon />}
-              label="Past Close Date"
-              count={closeDate.length}
-              deals={closeDate}
-            >
-              {(visible) =>
-                (visible as CloseDateDeal[]).map((deal) => (
-                  <DealRow key={`closedate-${deal.id}`} deal={deal} detail={<CloseDateDetail deal={deal} />} />
-                ))
-              }
-            </CategorySection>
-          )}
-        </div>
-      )}
+export function PastCloseDateCard({ deals }: { deals: CloseDateDeal[] }) {
+  if (deals.length === 0) return null;
+
+  return (
+    <div className="bg-white rounded-2xl shadow-sm p-6">
+      <CategorySection
+        icon={<CalendarIcon />}
+        label="Past Close Date"
+        count={deals.length}
+        deals={deals}
+      >
+        {(visible) =>
+          (visible as CloseDateDeal[]).map((deal) => (
+            <DealRow key={`closedate-${deal.id}`} deal={deal} detail={<CloseDateDetail deal={deal} />} />
+          ))
+        }
+      </CategorySection>
     </div>
   );
 }
