@@ -35,7 +35,7 @@ function Tooltip({ children, content }: { children: React.ReactNode; content: st
 interface ExistingTaskInfo {
   hubspotTaskId: string;
   createdAt: string;
-  taskType: 'missing' | 'overdue';
+  taskType: 'missing' | 'overdue' | 'no_due_date';
   nextStepText: string | null;
   daysOverdue: number | null;
 }
@@ -353,9 +353,30 @@ export function NextStepQueueView() {
         throw new Error(errorData.error || 'Failed to create task');
       }
 
-      if (!skipRefresh) {
-        await fetchData();
-      }
+      const result = await response.json();
+
+      // Optimistic local state update — no full page refresh
+      setData((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          deals: prev.deals.map((d) => {
+            if (d.id === deal.id) {
+              return {
+                ...d,
+                existingTask: {
+                  hubspotTaskId: result.taskId,
+                  createdAt: new Date().toISOString(),
+                  taskType: deal.status as 'missing' | 'overdue' | 'no_due_date',
+                  nextStepText: deal.nextStep || null,
+                  daysOverdue: deal.daysOverdue || null,
+                },
+              };
+            }
+            return d;
+          }),
+        };
+      });
     } catch (err) {
       console.error('Failed to create task:', err);
       alert(err instanceof Error ? err.message : 'Failed to create task');
@@ -1095,9 +1116,62 @@ export function NextStepQueueView() {
                         )}
                       </td>
                       <td className="px-4 py-4">
-                        <div className="flex items-center">
-                          {/* Priority 1: Analyze button if needs analysis */}
-                          {deal.nextStep && deal.analysis.needsAnalysis ? (
+                        <div className="flex items-center gap-2">
+                          {(deal.status === 'missing' || deal.status === 'overdue' || deal.status === 'no_due_date') ? (
+                            <>
+                              {/* Task indicator */}
+                              {hasTask && (
+                                <Tooltip content={`Task created ${formatTaskDate(deal.existingTask!.createdAt)}`}>
+                                  <span className="inline-flex items-center gap-1 text-xs text-emerald-600">
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                    </svg>
+                                    {formatTaskDate(deal.existingTask!.createdAt)}
+                                  </span>
+                                </Tooltip>
+                              )}
+                              {/* Create Task — always available */}
+                              <button
+                                onClick={() => handleCreateTask(deal)}
+                                disabled={isCreating}
+                                className="px-2.5 py-1 text-xs font-medium text-white bg-emerald-600 rounded-md hover:bg-emerald-700 transition-colors whitespace-nowrap disabled:opacity-50 shadow-sm"
+                              >
+                                {isCreating ? (
+                                  <span className="flex items-center gap-1">
+                                    <svg className="animate-spin w-3 h-3" fill="none" viewBox="0 0 24 24">
+                                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                    </svg>
+                                    <span>...</span>
+                                  </span>
+                                ) : (
+                                  'Create Task'
+                                )}
+                              </button>
+                              {/* Analyze / Re-analyze — always available when deal has next step */}
+                              {deal.nextStep && (
+                                <button
+                                  onClick={() => handleAnalyze(deal)}
+                                  disabled={isAnalyzing}
+                                  className={`text-xs transition-colors whitespace-nowrap ${
+                                    deal.analysis.needsAnalysis
+                                      ? 'px-2.5 py-1 font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 shadow-sm disabled:opacity-50'
+                                      : 'text-indigo-500 hover:text-indigo-700'
+                                  }`}
+                                >
+                                  {isAnalyzing ? '...' : deal.analysis.needsAnalysis ? 'Analyze' : 'Re-analyze'}
+                                </button>
+                              )}
+                            </>
+                          ) : deal.status === 'compliant' && deal.nextStep ? (
+                            <button
+                              onClick={() => handleAnalyze(deal)}
+                              disabled={isAnalyzing}
+                              className="text-xs text-gray-400 hover:text-indigo-600 transition-colors"
+                            >
+                              {isAnalyzing ? '...' : 'Re-analyze'}
+                            </button>
+                          ) : deal.nextStep && deal.analysis.needsAnalysis ? (
                             <button
                               onClick={() => handleAnalyze(deal)}
                               disabled={isAnalyzing}
@@ -1115,65 +1189,7 @@ export function NextStepQueueView() {
                                 'Analyze'
                               )}
                             </button>
-                          ) : /* Priority 2: Create Task or show checkmark for missing/overdue/no_due_date */
-                          (deal.status === 'missing' || deal.status === 'overdue' || deal.status === 'no_due_date') ? (
-                            <div className="flex items-center gap-2">
-                              {hasTask ? (
-                                /* Task exists: show subtle checkmark, Re-create on hover */
-                                <div className="flex items-center gap-1.5 group/task">
-                                  <svg className="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                  </svg>
-                                  <span className="text-xs text-gray-500">{formatTaskDate(deal.existingTask!.createdAt)}</span>
-                                  <button
-                                    onClick={() => handleCreateTask(deal)}
-                                    disabled={isCreating}
-                                    className="text-xs text-gray-400 hover:text-indigo-600 opacity-0 group-hover/task:opacity-100 transition-opacity"
-                                  >
-                                    {isCreating ? '...' : 'Redo'}
-                                  </button>
-                                </div>
-                              ) : (
-                                /* No task: show Create Task button */
-                                <button
-                                  onClick={() => handleCreateTask(deal)}
-                                  disabled={isCreating}
-                                  className="px-3 py-1.5 text-xs font-medium text-white bg-emerald-600 rounded-md hover:bg-emerald-700 transition-colors whitespace-nowrap disabled:opacity-50 shadow-sm"
-                                >
-                                  {isCreating ? (
-                                    <span className="flex items-center gap-1.5">
-                                      <svg className="animate-spin w-3 h-3" fill="none" viewBox="0 0 24 24">
-                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                                      </svg>
-                                      <span>...</span>
-                                    </span>
-                                  ) : (
-                                    'Create Task'
-                                  )}
-                                </button>
-                              )}
-                              {deal.nextStep && (
-                                <button
-                                  onClick={() => handleAnalyze(deal)}
-                                  disabled={isAnalyzing}
-                                  className="text-xs text-indigo-500 hover:text-indigo-700 transition-colors"
-                                >
-                                  {isAnalyzing ? '...' : 'Re-analyze'}
-                                </button>
-                              )}
-                            </div>
-                          ) : /* Priority 3: Compliant deals - visible re-analyze option */
-                          deal.status === 'compliant' && deal.nextStep ? (
-                            <button
-                              onClick={() => handleAnalyze(deal)}
-                              disabled={isAnalyzing}
-                              className="text-xs text-gray-400 hover:text-indigo-600 transition-colors"
-                            >
-                              {isAnalyzing ? '...' : 'Re-analyze'}
-                            </button>
                           ) : (
-                            /* Nothing to show */
                             <span className="text-gray-300">—</span>
                           )}
                         </div>
