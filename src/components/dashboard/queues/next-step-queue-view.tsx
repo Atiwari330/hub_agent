@@ -1086,6 +1086,9 @@ export function NextStepQueueView() {
                             {!deal.nextStepDueDate && !deal.analysis.lastAnalyzedAt && (
                               <span className="text-xs text-blue-500">Not analyzed</span>
                             )}
+                            {deal.status === 'no_due_date' && deal.analysis.lastAnalyzedAt && (
+                              <span className="text-xs text-red-500">No date prefix · No action timeline</span>
+                            )}
                           </div>
                         ) : (
                           <span className="text-sm text-gray-400 italic">No next step</span>

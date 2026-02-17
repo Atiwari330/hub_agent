@@ -7,7 +7,7 @@ interface CreateNextStepTaskRequest {
   hubspotDealId: string;
   hubspotOwnerId: string;
   dealName: string;
-  taskType: 'missing' | 'overdue';
+  taskType: 'missing' | 'overdue' | 'no_due_date';
   nextStepText?: string | null;
   daysOverdue?: number | null;
 }
@@ -24,9 +24,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (body.taskType !== 'missing' && body.taskType !== 'overdue') {
+    if (body.taskType !== 'missing' && body.taskType !== 'overdue' && body.taskType !== 'no_due_date') {
       return NextResponse.json(
-        { error: 'taskType must be "missing" or "overdue"' },
+        { error: 'taskType must be "missing", "overdue", or "no_due_date"' },
         { status: 400 }
       );
     }

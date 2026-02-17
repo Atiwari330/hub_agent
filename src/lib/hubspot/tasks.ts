@@ -125,7 +125,7 @@ interface CreateNextStepTaskParams {
   hubspotDealId: string;
   hubspotOwnerId: string;
   dealName: string;
-  taskType: 'missing' | 'overdue';
+  taskType: 'missing' | 'overdue' | 'no_due_date';
   nextStepText?: string | null;
   daysOverdue?: number | null;
 }
@@ -148,6 +148,9 @@ export async function createNextStepTask(params: CreateNextStepTaskParams): Prom
   if (taskType === 'missing') {
     taskSubject = `Next Step Required: ${dealName}`;
     taskBody = `This deal is missing a defined next step.\n\nPlease add a next step with a due date to keep this deal progressing through the pipeline.\n\nGood next steps are specific and actionable (e.g., "Send proposal by Friday", "Schedule follow-up call").`;
+  } else if (taskType === 'no_due_date') {
+    taskSubject = `Next Step Needs Timeline: ${dealName}`;
+    taskBody = `The next step for this deal doesn't include a date for when it was written or a timeline for when the next action should happen.\n\nCurrent next step: "${nextStepText || 'Not specified'}"\n\nPlease update the next step with:\n• A date prefix showing when this was logged (e.g., "02/17 - ...")\n• A specific action with a due date (e.g., "Follow-up call scheduled for Feb 25th")`;
   } else {
     taskSubject = `Overdue Next Step: ${dealName}`;
     taskBody = `The next step for this deal is overdue by ${daysOverdue || 0} day${daysOverdue !== 1 ? 's' : ''}.\n\nOriginal next step: "${nextStepText || 'Not specified'}"\n\nPlease complete this next step or update it with a new action and due date.`;
