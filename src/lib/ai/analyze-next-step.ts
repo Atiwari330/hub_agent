@@ -57,6 +57,10 @@ CLASSIFICATION RULES:
 6. "empty" - The text is blank, empty, or only whitespace
 7. "unparseable" - The text is nonsense, gibberish, or completely unrelated to sales actions
 
+IMPORTANT: Date prefixes like "MM/DD -" or "MM/DD:" at the start of text are LOG TIMESTAMPS indicating when the note was written, NOT due dates. Ignore these and classify based on the remaining text. For example:
+- "01/27 - Attempting to reconnect. Prospect has gone cold." → The "01/27" is when the note was made. The actual content has no future date → "no_date"
+- "02/10 - Demo scheduled for Feb 20th" → Ignore "02/10", extract "Feb 20th" → "date_found"
+
 ACTION TYPE RULES:
 - "demo" - Demo, presentation, or product walkthrough
 - "call" - Phone call, video call
@@ -101,6 +105,9 @@ Output: {"status":"no_date","dueDate":null,"confidence":0.95,"displayMessage":"N
 
 Input: ""
 Output: {"status":"empty","dueDate":null,"confidence":1.0,"displayMessage":"No next step entered","actionType":null}
+
+Input: "01/27 - Attempting to reconnect. Prospect has gone cold."
+Output: {"status":"no_date","dueDate":null,"confidence":0.90,"displayMessage":"No action date specified","actionType":"follow_up"}
 
 ---
 NEXT STEP TEXT TO ANALYZE:

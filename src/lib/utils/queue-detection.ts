@@ -96,7 +96,7 @@ export interface NextStepCheckInput {
   next_step_status: string | null;
 }
 
-export type NextStepQueueStatus = 'compliant' | 'missing' | 'overdue';
+export type NextStepQueueStatus = 'compliant' | 'missing' | 'overdue' | 'no_due_date';
 
 export interface NextStepCheckResult {
   status: NextStepQueueStatus;
@@ -522,6 +522,18 @@ export function checkNextStepCompliance(deal: NextStepCheckInput): NextStepCheck
         reason: `Next step is ${daysOverdue} day${daysOverdue !== 1 ? 's' : ''} overdue. Update or complete it.`,
       };
     }
+  }
+
+  // If analyzed and no actionable date found, flag as needing a date
+  if (
+    deal.next_step_status &&
+    ['no_date', 'date_unclear'].includes(deal.next_step_status)
+  ) {
+    return {
+      status: 'no_due_date',
+      daysOverdue: null,
+      reason: 'Next step has no clear due date. Update with a specific action and timeline.',
+    };
   }
 
   return {

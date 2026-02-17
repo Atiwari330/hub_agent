@@ -43,7 +43,7 @@ interface NextStepQueueDeal {
   stageName: string;
   ownerName: string;
   ownerId: string;
-  status: NextStepQueueStatus | 'compliant' | 'needs_analysis';
+  status: NextStepQueueStatus | 'compliant' | 'needs_analysis' | 'no_due_date';
   nextStep: string | null;
   nextStepDueDate: string | null;
   daysOverdue: number | null;
@@ -167,6 +167,7 @@ export async function GET(request: NextRequest) {
     const counts = {
       missing: 0,
       overdue: 0,
+      no_due_date: 0,
       compliant: 0,
       needsAnalysis: 0,
       total: 0,
@@ -211,10 +212,11 @@ export async function GET(request: NextRequest) {
       counts.total++;
       if (checkResult.status === 'missing') counts.missing++;
       else if (checkResult.status === 'overdue') counts.overdue++;
+      else if (checkResult.status === 'no_due_date') counts.no_due_date++;
       else if (checkResult.status === 'compliant') counts.compliant++;
       if (needsAnalysis) counts.needsAnalysis++;
 
-      // Skip compliant deals unless showAll is true
+      // Skip compliant deals unless showAll is true (no_due_date should show like missing/overdue)
       if (!showAll && effectiveStatus === 'compliant') {
         continue;
       }

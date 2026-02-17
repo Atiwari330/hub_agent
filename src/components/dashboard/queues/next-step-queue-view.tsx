@@ -56,7 +56,7 @@ interface NextStepQueueDeal {
   stageName: string;
   ownerName: string;
   ownerId: string;
-  status: 'missing' | 'overdue' | 'compliant' | 'needs_analysis';
+  status: 'missing' | 'overdue' | 'no_due_date' | 'compliant' | 'needs_analysis';
   nextStep: string | null;
   nextStepDueDate: string | null;
   daysOverdue: number | null;
@@ -71,6 +71,7 @@ interface NextStepQueueResponse {
   counts: {
     missing: number;
     overdue: number;
+    no_due_date: number;
     compliant: number;
     needsAnalysis: number;
     total: number;
@@ -325,8 +326,8 @@ export function NextStepQueueView() {
 
   // Create HubSpot task for a deal
   const handleCreateTask = async (deal: NextStepQueueDeal, skipRefresh = false) => {
-    if (deal.status !== 'missing' && deal.status !== 'overdue') {
-      alert('Can only create tasks for missing or overdue deals');
+    if (deal.status !== 'missing' && deal.status !== 'overdue' && deal.status !== 'no_due_date') {
+      alert('Can only create tasks for missing, overdue, or no-date deals');
       return;
     }
 
@@ -498,6 +499,8 @@ export function NextStepQueueView() {
         };
       case 'missing':
         return { bg: 'bg-amber-100', text: 'text-amber-700', label: 'Missing', fullLabel: 'Missing next step' };
+      case 'no_due_date':
+        return { bg: 'bg-orange-100', text: 'text-orange-700', label: 'No Date', fullLabel: 'No due date in next step' };
       case 'needs_analysis':
         return { bg: 'bg-blue-100', text: 'text-blue-700', label: 'Analyze', fullLabel: 'Needs analysis' };
       case 'compliant':
@@ -551,18 +554,18 @@ export function NextStepQueueView() {
       {data && (
         <div className="mb-6">
           {/* Primary metric: deals needing attention */}
-          {(data.counts.overdue + data.counts.missing) > 0 ? (
+          {(data.counts.overdue + data.counts.missing + (data.counts.no_due_date || 0)) > 0 ? (
             <div className="flex items-center justify-between">
               <div className="flex items-baseline gap-2">
                 <span className="text-2xl font-semibold text-gray-900">
-                  {data.counts.overdue + data.counts.missing}
+                  {data.counts.overdue + data.counts.missing + (data.counts.no_due_date || 0)}
                 </span>
                 <span className="text-gray-600">
-                  deal{(data.counts.overdue + data.counts.missing) !== 1 ? 's' : ''} need attention
+                  deal{(data.counts.overdue + data.counts.missing + (data.counts.no_due_date || 0)) !== 1 ? 's' : ''} need attention
                 </span>
                 {/* Subtle breakdown on hover */}
                 <span className="text-sm text-gray-400 ml-2">
-                  ({data.counts.overdue} overdue, {data.counts.missing} missing)
+                  ({data.counts.overdue} overdue, {data.counts.missing} missing{(data.counts.no_due_date || 0) > 0 ? `, ${data.counts.no_due_date} no date` : ''})
                 </span>
               </div>
               {/* Compliance percentage */}
@@ -684,6 +687,7 @@ export function NextStepQueueView() {
             <option value="all">All Status</option>
             <option value="overdue">Overdue</option>
             <option value="missing">Missing</option>
+            <option value="no_due_date">No Date</option>
             {viewMode === 'all' && (
               <>
                 <option value="needs_analysis">Needs Analysis</option>
@@ -1108,8 +1112,8 @@ export function NextStepQueueView() {
                                 'Analyze'
                               )}
                             </button>
-                          ) : /* Priority 2: Create Task or show checkmark for missing/overdue */
-                          (deal.status === 'missing' || deal.status === 'overdue') ? (
+                          ) : /* Priority 2: Create Task or show checkmark for missing/overdue/no_due_date */
+                          (deal.status === 'missing' || deal.status === 'overdue' || deal.status === 'no_due_date') ? (
                             <div className="flex items-center gap-2">
                               {hasTask ? (
                                 /* Task exists: show subtle checkmark, Re-create on hover */
