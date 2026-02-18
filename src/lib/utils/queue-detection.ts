@@ -90,17 +90,21 @@ export interface HygieneStatusResult {
 
 // ===== NEXT STEP QUEUE TYPES =====
 
+export const STALE_THRESHOLD_DAYS = 7;
+
 export interface NextStepCheckInput {
   next_step: string | null;
   next_step_due_date: string | null;
   next_step_status: string | null;
+  next_step_last_updated_at: string | null;
 }
 
-export type NextStepQueueStatus = 'compliant' | 'missing' | 'overdue' | 'no_due_date';
+export type NextStepQueueStatus = 'compliant' | 'missing' | 'overdue' | 'stale';
 
 export interface NextStepCheckResult {
   status: NextStepQueueStatus;
   daysOverdue: number | null;
+  daysSinceUpdate: number | null;
   reason: string;
 }
 
@@ -495,20 +499,39 @@ function buildStalledResult(
 // ===== NEXT STEP QUEUE DETECTION =====
 
 /**
- * Check if a deal has next step compliance issues
+ * Check if a deal has next step compliance issues.
+ *
+ * Priority order:
+ * 1. Missing — no next step text at all
+ * 2. Stale — next_step_last_updated_at > STALE_THRESHOLD_DAYS ago (or null + has been analyzed)
+ * 3. Overdue — recently updated but LLM-extracted action date is past
+ * 4. Compliant — everything else
  */
 export function checkNextStepCompliance(deal: NextStepCheckInput): NextStepCheckResult {
   const hasNextStep = deal.next_step && deal.next_step.trim().length > 0;
 
+  // 1. Missing
   if (!hasNextStep) {
     return {
       status: 'missing',
       daysOverdue: null,
+      daysSinceUpdate: null,
       reason: 'This deal has no next step defined. Add one to keep it moving.',
     };
   }
 
-  // Check if next step has a due date and if it's overdue
+  // 2. Stale — next step hasn't been updated in too long
+  const daysSinceUpdate = computeDaysSinceUpdate(deal.next_step_last_updated_at);
+  if (daysSinceUpdate !== null && daysSinceUpdate >= STALE_THRESHOLD_DAYS) {
+    return {
+      status: 'stale',
+      daysOverdue: null,
+      daysSinceUpdate,
+      reason: `Next step hasn't been updated in ${daysSinceUpdate} day${daysSinceUpdate !== 1 ? 's' : ''}. Review and refresh.`,
+    };
+  }
+
+  // 3. Overdue — recently updated but extracted action date is past
   if (
     deal.next_step_due_date &&
     deal.next_step_status &&
@@ -519,28 +542,31 @@ export function checkNextStepCompliance(deal: NextStepCheckInput): NextStepCheck
       return {
         status: 'overdue',
         daysOverdue,
+        daysSinceUpdate,
         reason: `Next step is ${daysOverdue} day${daysOverdue !== 1 ? 's' : ''} overdue. Update or complete it.`,
       };
     }
   }
 
-  // If analyzed and no actionable date found, flag as needing a date
-  if (
-    deal.next_step_status &&
-    ['no_date', 'date_unclear'].includes(deal.next_step_status)
-  ) {
-    return {
-      status: 'no_due_date',
-      daysOverdue: null,
-      reason: 'Next step has no clear due date. Update with a specific action and timeline.',
-    };
-  }
-
+  // 4. Compliant
   return {
     status: 'compliant',
     daysOverdue: null,
+    daysSinceUpdate,
     reason: '',
   };
+}
+
+/**
+ * Compute the number of calendar days since the given timestamp.
+ * Returns null if the timestamp is null.
+ */
+function computeDaysSinceUpdate(lastUpdatedAt: string | null): number | null {
+  if (!lastUpdatedAt) return null;
+  const updated = new Date(lastUpdatedAt);
+  const now = new Date();
+  const diffMs = now.getTime() - updated.getTime();
+  return Math.floor(diffMs / (1000 * 60 * 60 * 24));
 }
 
 // ===== CS HYGIENE QUEUE DETECTION =====

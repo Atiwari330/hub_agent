@@ -22,7 +22,7 @@ const ACTIVE_DEAL_STAGES = [
 interface ExistingTaskInfo {
   hubspotTaskId: string;
   createdAt: string;
-  taskType: 'missing' | 'overdue';
+  taskType: 'missing' | 'overdue' | 'stale';
   nextStepText: string | null;
   daysOverdue: number | null;
 }
@@ -43,10 +43,11 @@ interface NextStepQueueDeal {
   stageName: string;
   ownerName: string;
   ownerId: string;
-  status: NextStepQueueStatus | 'compliant' | 'needs_analysis' | 'no_due_date';
+  status: NextStepQueueStatus | 'compliant' | 'needs_analysis';
   nextStep: string | null;
   nextStepDueDate: string | null;
   daysOverdue: number | null;
+  daysSinceUpdate: number | null;
   reason: string;
   existingTask: ExistingTaskInfo | null;
   analysis: AnalysisInfo;
@@ -114,6 +115,7 @@ export async function GET(request: NextRequest) {
         next_step_status,
         next_step_analyzed_at,
         next_step_analyzed_value,
+        next_step_last_updated_at,
         close_date
       `)
       .in('owner_id', ownerIds)
@@ -167,7 +169,7 @@ export async function GET(request: NextRequest) {
     const counts = {
       missing: 0,
       overdue: 0,
-      no_due_date: 0,
+      stale: 0,
       compliant: 0,
       needsAnalysis: 0,
       total: 0,
@@ -178,6 +180,7 @@ export async function GET(request: NextRequest) {
         next_step: deal.next_step,
         next_step_due_date: deal.next_step_due_date,
         next_step_status: deal.next_step_status,
+        next_step_last_updated_at: deal.next_step_last_updated_at,
       };
 
       const checkResult = checkNextStepCompliance(nextStepInput);
@@ -212,11 +215,11 @@ export async function GET(request: NextRequest) {
       counts.total++;
       if (checkResult.status === 'missing') counts.missing++;
       else if (checkResult.status === 'overdue') counts.overdue++;
-      else if (checkResult.status === 'no_due_date') counts.no_due_date++;
+      else if (checkResult.status === 'stale') counts.stale++;
       else if (checkResult.status === 'compliant') counts.compliant++;
       if (needsAnalysis) counts.needsAnalysis++;
 
-      // Skip compliant deals unless showAll is true (no_due_date should show like missing/overdue)
+      // Skip compliant deals unless showAll is true
       if (!showAll && effectiveStatus === 'compliant') {
         continue;
       }
@@ -236,7 +239,7 @@ export async function GET(request: NextRequest) {
         existingTask = {
           hubspotTaskId: existingTaskData.hubspotTaskId,
           createdAt: existingTaskData.createdAt,
-          taskType: existingTaskData.taskType as 'missing' | 'overdue',
+          taskType: existingTaskData.taskType as 'missing' | 'overdue' | 'stale',
           nextStepText: existingTaskData.nextStepText,
           daysOverdue: existingTaskData.daysOverdue,
         };
@@ -255,6 +258,7 @@ export async function GET(request: NextRequest) {
         nextStep: deal.next_step,
         nextStepDueDate: deal.next_step_due_date,
         daysOverdue: checkResult.daysOverdue,
+        daysSinceUpdate: checkResult.daysSinceUpdate,
         reason: effectiveReason,
         existingTask,
         analysis: analysisInfo,

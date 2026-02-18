@@ -35,7 +35,7 @@ function Tooltip({ children, content }: { children: React.ReactNode; content: st
 interface ExistingTaskInfo {
   hubspotTaskId: string;
   createdAt: string;
-  taskType: 'missing' | 'overdue' | 'no_due_date';
+  taskType: 'missing' | 'overdue' | 'stale';
   nextStepText: string | null;
   daysOverdue: number | null;
 }
@@ -56,10 +56,11 @@ interface NextStepQueueDeal {
   stageName: string;
   ownerName: string;
   ownerId: string;
-  status: 'missing' | 'overdue' | 'no_due_date' | 'compliant' | 'needs_analysis';
+  status: 'missing' | 'overdue' | 'stale' | 'compliant' | 'needs_analysis';
   nextStep: string | null;
   nextStepDueDate: string | null;
   daysOverdue: number | null;
+  daysSinceUpdate: number | null;
   reason: string;
   existingTask: ExistingTaskInfo | null;
   analysis: AnalysisInfo;
@@ -71,7 +72,7 @@ interface NextStepQueueResponse {
   counts: {
     missing: number;
     overdue: number;
-    no_due_date: number;
+    stale: number;
     compliant: number;
     needsAnalysis: number;
     total: number;
@@ -326,8 +327,8 @@ export function NextStepQueueView() {
 
   // Create HubSpot task for a deal
   const handleCreateTask = async (deal: NextStepQueueDeal, skipRefresh = false) => {
-    if (deal.status !== 'missing' && deal.status !== 'overdue' && deal.status !== 'no_due_date') {
-      alert('Can only create tasks for missing, overdue, or no-date deals');
+    if (deal.status !== 'missing' && deal.status !== 'overdue' && deal.status !== 'stale') {
+      alert('Can only create tasks for missing, overdue, or stale deals');
       return;
     }
 
@@ -345,6 +346,7 @@ export function NextStepQueueView() {
           taskType: deal.status,
           nextStepText: deal.nextStep,
           daysOverdue: deal.daysOverdue,
+          daysSinceUpdate: deal.daysSinceUpdate,
         }),
       });
 
@@ -367,7 +369,7 @@ export function NextStepQueueView() {
                 existingTask: {
                   hubspotTaskId: result.taskId,
                   createdAt: new Date().toISOString(),
-                  taskType: deal.status as 'missing' | 'overdue' | 'no_due_date',
+                  taskType: deal.status as 'missing' | 'overdue' | 'stale',
                   nextStepText: deal.nextStep || null,
                   daysOverdue: deal.daysOverdue || null,
                 },
@@ -509,19 +511,24 @@ export function NextStepQueueView() {
   };
 
   // Get status badge styling - compact version
-  const getStatusBadge = (status: string, daysOverdue?: number | null) => {
+  const getStatusBadge = (status: string, deal?: NextStepQueueDeal | null) => {
     switch (status) {
       case 'overdue':
         return {
           bg: 'bg-red-100',
           text: 'text-red-700',
-          label: daysOverdue ? `${daysOverdue}d` : 'Late',
-          fullLabel: daysOverdue ? `${daysOverdue} days overdue` : 'Overdue'
+          label: deal?.daysOverdue ? `${deal.daysOverdue}d` : 'Late',
+          fullLabel: deal?.daysOverdue ? `${deal.daysOverdue} days overdue` : 'Overdue'
         };
       case 'missing':
         return { bg: 'bg-amber-100', text: 'text-amber-700', label: 'Missing', fullLabel: 'Missing next step' };
-      case 'no_due_date':
-        return { bg: 'bg-orange-100', text: 'text-orange-700', label: 'No Date', fullLabel: 'No due date in next step' };
+      case 'stale':
+        return {
+          bg: 'bg-orange-100',
+          text: 'text-orange-700',
+          label: deal?.daysSinceUpdate ? `${deal.daysSinceUpdate}d` : 'Stale',
+          fullLabel: deal?.daysSinceUpdate ? `Next step last updated ${deal.daysSinceUpdate} days ago` : 'Stale next step'
+        };
       case 'needs_analysis':
         return { bg: 'bg-blue-100', text: 'text-blue-700', label: 'Analyze', fullLabel: 'Needs analysis' };
       case 'compliant':
@@ -575,18 +582,18 @@ export function NextStepQueueView() {
       {data && (
         <div className="mb-6">
           {/* Primary metric: deals needing attention */}
-          {(data.counts.overdue + data.counts.missing + (data.counts.no_due_date || 0)) > 0 ? (
+          {(data.counts.overdue + data.counts.missing + (data.counts.stale || 0)) > 0 ? (
             <div className="flex items-center justify-between">
               <div className="flex items-baseline gap-2">
                 <span className="text-2xl font-semibold text-gray-900">
-                  {data.counts.overdue + data.counts.missing + (data.counts.no_due_date || 0)}
+                  {data.counts.overdue + data.counts.missing + (data.counts.stale || 0)}
                 </span>
                 <span className="text-gray-600">
-                  deal{(data.counts.overdue + data.counts.missing + (data.counts.no_due_date || 0)) !== 1 ? 's' : ''} need attention
+                  deal{(data.counts.overdue + data.counts.missing + (data.counts.stale || 0)) !== 1 ? 's' : ''} need attention
                 </span>
                 {/* Subtle breakdown on hover */}
                 <span className="text-sm text-gray-400 ml-2">
-                  ({data.counts.overdue} overdue, {data.counts.missing} missing{(data.counts.no_due_date || 0) > 0 ? `, ${data.counts.no_due_date} no date` : ''})
+                  ({data.counts.overdue} overdue, {data.counts.missing} missing{(data.counts.stale || 0) > 0 ? `, ${data.counts.stale} stale` : ''})
                 </span>
               </div>
               {/* Compliance percentage */}
@@ -708,7 +715,7 @@ export function NextStepQueueView() {
             <option value="all">All Status</option>
             <option value="overdue">Overdue</option>
             <option value="missing">Missing</option>
-            <option value="no_due_date">No Date</option>
+            <option value="stale">Stale</option>
             {viewMode === 'all' && (
               <>
                 <option value="needs_analysis">Needs Analysis</option>
@@ -1007,7 +1014,7 @@ export function NextStepQueueView() {
                   const isCreating = creatingTasks.has(deal.id);
                   const isAnalyzing = analyzingDeals.has(deal.id);
                   const hasTask = deal.existingTask !== null;
-                  const statusBadge = getStatusBadge(deal.status, deal.daysOverdue);
+                  const statusBadge = getStatusBadge(deal.status, deal);
 
                   // Batch analysis state for this row
                   const batchResult = batchResults.get(deal.id);
@@ -1104,11 +1111,11 @@ export function NextStepQueueView() {
                                 </span>
                               </Tooltip>
                             )}
-                            {!deal.nextStepDueDate && !deal.analysis.lastAnalyzedAt && (
+                            {!deal.nextStepDueDate && !deal.analysis.lastAnalyzedAt && deal.status !== 'stale' && (
                               <span className="text-xs text-blue-500">Not analyzed</span>
                             )}
-                            {deal.status === 'no_due_date' && deal.analysis.lastAnalyzedAt && (
-                              <span className="text-xs text-red-500">No date prefix · No action timeline</span>
+                            {deal.status === 'stale' && deal.daysSinceUpdate && (
+                              <span className="text-xs text-orange-500">Updated {deal.daysSinceUpdate}d ago</span>
                             )}
                           </div>
                         ) : (
@@ -1117,7 +1124,7 @@ export function NextStepQueueView() {
                       </td>
                       <td className="px-4 py-4">
                         <div className="flex items-center gap-2">
-                          {(deal.status === 'missing' || deal.status === 'overdue' || deal.status === 'no_due_date') ? (
+                          {(deal.status === 'missing' || deal.status === 'overdue' || deal.status === 'stale') ? (
                             <>
                               {/* Task indicator */}
                               {hasTask && (

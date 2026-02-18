@@ -7,9 +7,10 @@ interface CreateNextStepTaskRequest {
   hubspotDealId: string;
   hubspotOwnerId: string;
   dealName: string;
-  taskType: 'missing' | 'overdue' | 'no_due_date';
+  taskType: 'missing' | 'overdue' | 'stale';
   nextStepText?: string | null;
   daysOverdue?: number | null;
+  daysSinceUpdate?: number | null;
 }
 
 export async function POST(request: NextRequest) {
@@ -24,9 +25,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (body.taskType !== 'missing' && body.taskType !== 'overdue' && body.taskType !== 'no_due_date') {
+    if (body.taskType !== 'missing' && body.taskType !== 'overdue' && body.taskType !== 'stale') {
       return NextResponse.json(
-        { error: 'taskType must be "missing", "overdue", or "no_due_date"' },
+        { error: 'taskType must be "missing", "overdue", or "stale"' },
         { status: 400 }
       );
     }
@@ -39,6 +40,7 @@ export async function POST(request: NextRequest) {
       taskType: body.taskType,
       nextStepText: body.nextStepText,
       daysOverdue: body.daysOverdue,
+      daysSinceUpdate: body.daysSinceUpdate,
     });
 
     // Save record in Supabase for tracking
