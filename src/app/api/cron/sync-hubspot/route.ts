@@ -6,6 +6,7 @@ import { getOwnerById } from '@/lib/hubspot/owners';
 import { getNotesByDealIdWithAuthor } from '@/lib/hubspot/engagements';
 import { TRACKED_STAGES } from '@/lib/hubspot/stage-mappings';
 import { SYNC_CONFIG } from '@/lib/hubspot/sync-config';
+import { toTimestamp } from '@/lib/utils/timestamps';
 
 // Active stages for exception deal notes sync (excludes MQL, Closed Won, Closed Lost)
 const ACTIVE_DEAL_STAGES = [
@@ -15,18 +16,6 @@ const ACTIVE_DEAL_STAGES = [
   '963167283',                                 // Demo - Completed
   '59865091',                                  // Proposal
 ];
-
-// Convert empty strings to null for timestamp fields
-// HubSpot returns "" for empty dates, but PostgreSQL needs null
-const toTimestamp = (value: string | undefined | null): string | null => {
-  if (!value || value === '') return null;
-  // HubSpot sometimes returns epoch milliseconds as a string (e.g. "1702304200168")
-  // PostgreSQL TIMESTAMP columns need ISO 8601 format
-  if (/^\d{13}$/.test(value)) {
-    return new Date(parseInt(value, 10)).toISOString();
-  }
-  return value;
-};
 
 // Verify cron secret for security
 function verifyCronSecret(request: Request): boolean {

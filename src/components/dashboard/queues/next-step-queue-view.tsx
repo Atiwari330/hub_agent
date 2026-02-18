@@ -150,6 +150,21 @@ export function NextStepQueueView() {
     new Map()
   );
 
+  // Toast notifications
+  const [toasts, setToasts] = useState<{ id: string; type: 'success' | 'info' | 'error'; title: string; message: string }[]>([]);
+
+  // Row exit animation (compliant deals fading out of Issues Only view)
+  const [exitingDeals, setExitingDeals] = useState<Set<string>>(new Set());
+
+  // Single-deal refresh state
+  const [refreshingDeals, setRefreshingDeals] = useState<Set<string>>(new Set());
+
+  const addToast = useCallback((toast: { type: 'success' | 'info' | 'error'; title: string; message: string }) => {
+    const id = Math.random().toString(36).slice(2);
+    setToasts((prev) => [...prev, { ...toast, id }]);
+    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 4000);
+  }, []);
+
   // Extract unique AEs for filter dropdown
   const uniqueAEs = useMemo(() => {
     if (!data) return [];
@@ -297,7 +312,7 @@ export function NextStepQueueView() {
     setSelectedDeals(newSelected);
   };
 
-  // Analyze a deal's next step
+  // Analyze a deal's next step — optimistic update, no full-page reload
   const handleAnalyze = async (deal: NextStepQueueDeal) => {
     setAnalyzingDeals((prev) => new Set(prev).add(deal.id));
 
@@ -311,13 +326,142 @@ export function NextStepQueueView() {
         throw new Error(errorData.error || 'Failed to analyze');
       }
 
-      // Refresh data to show updated analysis
-      await fetchData();
+      const result = await response.json();
+      const analysis = result.analysis;
+      const isCompliant = analysis.status === 'date_found' || analysis.status === 'date_inferred';
+
+      // Optimistic local state update — same pattern as batch analyze
+      setData((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          deals: prev.deals.map((d) => {
+            if (d.id === deal.id) {
+              return {
+                ...d,
+                nextStep: result.nextStep ?? d.nextStep,
+                nextStepDueDate: analysis.dueDate,
+                status: isCompliant ? 'compliant' : d.status,
+                analysis: {
+                  ...d.analysis,
+                  lastAnalyzedAt: result.analyzedAt,
+                  analyzedValue: result.nextStep,
+                  needsAnalysis: false,
+                  analysisStatus: analysis.status,
+                },
+              };
+            }
+            return d;
+          }),
+        };
+      });
+
+      // Toast with LLM feedback
+      addToast({
+        type: isCompliant ? 'success' : 'info',
+        title: deal.dealName,
+        message: isCompliant
+          ? `Compliant: ${analysis.displayMessage}`
+          : analysis.displayMessage,
+      });
+
+      // If Issues Only mode and now compliant → brief green highlight then fade out
+      if (isCompliant && viewMode === 'issues') {
+        setExitingDeals((prev) => new Set(prev).add(deal.id));
+        setTimeout(() => {
+          setExitingDeals((prev) => {
+            const next = new Set(prev);
+            next.delete(deal.id);
+            return next;
+          });
+          setData((prev) => {
+            if (!prev) return prev;
+            return { ...prev, deals: prev.deals.filter((d) => d.id !== deal.id) };
+          });
+        }, 1500);
+      }
     } catch (err) {
       console.error('Failed to analyze:', err);
-      alert(err instanceof Error ? err.message : 'Failed to analyze');
+      addToast({
+        type: 'error',
+        title: deal.dealName,
+        message: err instanceof Error ? err.message : 'Failed to analyze',
+      });
     } finally {
       setAnalyzingDeals((prev) => {
+        const next = new Set(prev);
+        next.delete(deal.id);
+        return next;
+      });
+    }
+  };
+
+  // Refresh a single deal's next step from HubSpot
+  const handleRefresh = async (deal: NextStepQueueDeal) => {
+    setRefreshingDeals((prev) => new Set(prev).add(deal.id));
+
+    try {
+      const response = await fetch(`/api/ae/${deal.ownerId}/deals/${deal.id}/refresh`, {
+        method: 'POST',
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to refresh');
+      }
+
+      const result = await response.json();
+
+      // Optimistic local state update
+      setData((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          deals: prev.deals.map((d) => {
+            if (d.id === deal.id) {
+              return {
+                ...d,
+                nextStep: result.nextStep,
+                status: result.status,
+                daysSinceUpdate: result.daysSinceUpdate,
+                daysOverdue: result.daysOverdue,
+                reason: result.reason,
+                // If text changed, clear stale analysis
+                ...(result.nextStepChanged
+                  ? {
+                      nextStepDueDate: null,
+                      analysis: {
+                        ...d.analysis,
+                        lastAnalyzedAt: null,
+                        analyzedValue: null,
+                        needsAnalysis: true,
+                        analysisStatus: null,
+                      },
+                    }
+                  : {}),
+              };
+            }
+            return d;
+          }),
+        };
+      });
+
+      addToast({
+        type: 'success',
+        title: deal.dealName,
+        message: result.nextStepChanged
+          ? 'Next step refreshed (changed)'
+          : 'Next step refreshed (no change)',
+      });
+    } catch (err) {
+      console.error('Failed to refresh:', err);
+      addToast({
+        type: 'error',
+        title: deal.dealName,
+        message: err instanceof Error ? err.message : 'Failed to refresh',
+      });
+    } finally {
+      setRefreshingDeals((prev) => {
         const next = new Set(prev);
         next.delete(deal.id);
         return next;
@@ -328,7 +472,7 @@ export function NextStepQueueView() {
   // Create HubSpot task for a deal
   const handleCreateTask = async (deal: NextStepQueueDeal, skipRefresh = false) => {
     if (deal.status !== 'missing' && deal.status !== 'overdue' && deal.status !== 'stale') {
-      alert('Can only create tasks for missing, overdue, or stale deals');
+      addToast({ type: 'error', title: deal.dealName, message: 'Can only create tasks for missing, overdue, or stale deals' });
       return;
     }
 
@@ -381,7 +525,7 @@ export function NextStepQueueView() {
       });
     } catch (err) {
       console.error('Failed to create task:', err);
-      alert(err instanceof Error ? err.message : 'Failed to create task');
+      addToast({ type: 'error', title: deal.dealName, message: err instanceof Error ? err.message : 'Failed to create task' });
     } finally {
       setCreatingTasks((prev) => {
         const next = new Set(prev);
@@ -489,7 +633,7 @@ export function NextStepQueueView() {
       }
     } catch (err) {
       console.error('Batch analysis error:', err);
-      alert(err instanceof Error ? err.message : 'Batch analysis failed');
+      addToast({ type: 'error', title: 'Batch Analysis', message: err instanceof Error ? err.message : 'Batch analysis failed' });
     } finally {
       setIsBatchAnalyzing(false);
       setBatchProgress(null);
@@ -1013,6 +1157,8 @@ export function NextStepQueueView() {
                 {filteredDeals.map((deal) => {
                   const isCreating = creatingTasks.has(deal.id);
                   const isAnalyzing = analyzingDeals.has(deal.id);
+                  const isRefreshing = refreshingDeals.has(deal.id);
+                  const isExiting = exitingDeals.has(deal.id);
                   const hasTask = deal.existingTask !== null;
                   const statusBadge = getStatusBadge(deal.status, deal);
 
@@ -1027,8 +1173,10 @@ export function NextStepQueueView() {
                   return (
                     <tr
                       key={deal.id}
-                      className={`group transition-colors ${
-                        selectedDeals.has(deal.id)
+                      className={`group transition-all duration-500 ${
+                        isExiting
+                          ? 'bg-emerald-50'
+                          : selectedDeals.has(deal.id)
                           ? 'bg-indigo-50/70'
                           : batchAnalysisComplete && batchResult.success
                           ? 'bg-emerald-50/50'
@@ -1038,6 +1186,7 @@ export function NextStepQueueView() {
                           ? 'bg-white hover:bg-gray-50/50'
                           : 'bg-white hover:bg-gray-50'
                       }`}
+                      style={isExiting ? { opacity: 0, transition: 'opacity 1.2s ease-out, background-color 0.3s' } : undefined}
                     >
                       <td className="px-4 py-4">
                         <div className="flex items-center justify-center">
@@ -1124,6 +1273,18 @@ export function NextStepQueueView() {
                       </td>
                       <td className="px-4 py-4">
                         <div className="flex items-center gap-2">
+                          {/* Refresh from HubSpot button */}
+                          <Tooltip content="Refresh from HubSpot">
+                            <button
+                              onClick={() => handleRefresh(deal)}
+                              disabled={isRefreshing || isAnalyzing}
+                              className="text-gray-300 hover:text-indigo-600 transition-colors disabled:opacity-50"
+                            >
+                              <svg className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                              </svg>
+                            </button>
+                          </Tooltip>
                           {(deal.status === 'missing' || deal.status === 'overdue' || deal.status === 'stale') ? (
                             <>
                               {/* Task indicator */}
@@ -1209,6 +1370,42 @@ export function NextStepQueueView() {
           </div>
         </div>
       )}
+
+      {/* Toast notifications */}
+      {toasts.length > 0 && (
+        <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-sm">
+          {toasts.map((toast) => (
+            <div
+              key={toast.id}
+              className={`px-4 py-3 rounded-lg shadow-lg text-sm border ${
+                toast.type === 'success'
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                  : toast.type === 'error'
+                  ? 'bg-red-50 border-red-200 text-red-800'
+                  : 'bg-blue-50 border-blue-200 text-blue-800'
+              }`}
+              style={{ animation: 'slideInRight 0.3s ease-out' }}
+            >
+              <div className="font-medium truncate">{toast.title}</div>
+              <div className="text-xs mt-0.5 opacity-80">{toast.message}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Toast slide-in animation */}
+      <style jsx>{`
+        @keyframes slideInRight {
+          from {
+            transform: translateX(100%);
+            opacity: 0;
+          }
+          to {
+            transform: translateX(0);
+            opacity: 1;
+          }
+        }
+      `}</style>
     </div>
   );
 }
