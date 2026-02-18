@@ -80,6 +80,13 @@ export const DEFAULT_QUEUE_STAGE_IDS: Set<string> = new Set([
   S.QUALIFIED_VALIDATED.id,
 ]);
 
+// Default stages pre-selected for the Pre-Demo Pipeline queue
+export const DEFAULT_PRE_DEMO_STAGES: string[] = [
+  S.MQL.label,
+  S.SQL_DISCOVERY.label,
+  S.DEMO_SCHEDULED.label,
+];
+
 // Set of all known stage IDs (for health check comparison)
 export const ALL_KNOWN_STAGE_IDS: Set<string> = new Set(
   Object.values(SALES_PIPELINE_STAGES).map((s) => s.id)

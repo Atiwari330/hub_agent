@@ -5,6 +5,7 @@ import { formatCurrency } from '@/lib/utils/currency';
 import { getHubSpotDealUrl } from '@/lib/hubspot/urls';
 import type { StalledSeverity } from '@/lib/utils/queue-detection';
 import { getCurrentQuarter, getQuarterInfo } from '@/lib/utils/quarter';
+import { DEFAULT_PRE_DEMO_STAGES } from '@/lib/hubspot/stage-config';
 
 // ===== Types =====
 
@@ -671,13 +672,13 @@ export function PreDemoPipelineQueueView() {
   const [thresholdsOpen, setThresholdsOpen] = useState(false);
 
   // Quarter filter
-  const [quarterFilter, setQuarterFilter] = useState<QuarterFilter>(getCurrentQuarterFilter());
+  const [quarterFilter, setQuarterFilter] = useState<QuarterFilter>('all');
   const quarterOptions = useMemo(() => getQuarterOptions(), []);
   const currentYear = quarterOptions[0]?.year || new Date().getFullYear();
 
   // Filters
   const [aeFilter, setAeFilter] = useState<string>('all');
-  const [stageFilter, setStageFilter] = useState<string[]>([]);
+  const [stageFilter, setStageFilter] = useState<string[]>(DEFAULT_PRE_DEMO_STAGES);
   const [stageDropdownOpen, setStageDropdownOpen] = useState(false);
   const [closeDateFilter, setCloseDateFilter] = useState<CloseDateProximity>('all');
   const [amountMin, setAmountMin] = useState<string>('');
@@ -920,7 +921,8 @@ export function PreDemoPipelineQueueView() {
 
   const hasActiveFilters =
     aeFilter !== 'all' ||
-    stageFilter.length > 0 ||
+    (stageFilter.length !== DEFAULT_PRE_DEMO_STAGES.length ||
+      !DEFAULT_PRE_DEMO_STAGES.every((s) => stageFilter.includes(s))) ||
     closeDateFilter !== 'all' ||
     amountMin !== '' ||
     amountMax !== '' ||
@@ -928,7 +930,7 @@ export function PreDemoPipelineQueueView() {
 
   const clearFilters = () => {
     setAeFilter('all');
-    setStageFilter([]);
+    setStageFilter(DEFAULT_PRE_DEMO_STAGES);
     setCloseDateFilter('all');
     setAmountMin('');
     setAmountMax('');
