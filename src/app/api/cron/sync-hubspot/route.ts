@@ -5,17 +5,10 @@ import { getFilteredDealsForSync, getUpsellDealsForSync } from '@/lib/hubspot/de
 import { getOwnerById } from '@/lib/hubspot/owners';
 import { getNotesByDealIdWithAuthor } from '@/lib/hubspot/engagements';
 import { TRACKED_STAGES } from '@/lib/hubspot/stage-mappings';
+import { ACTIVE_STAGE_IDS } from '@/lib/hubspot/stage-config';
+import { validatePipelineStages } from '@/lib/hubspot/validate-stages';
 import { SYNC_CONFIG } from '@/lib/hubspot/sync-config';
 import { toTimestamp } from '@/lib/utils/timestamps';
-
-// Active stages for exception deal notes sync (excludes MQL, Closed Won, Closed Lost)
-const ACTIVE_DEAL_STAGES = [
-  '17915773',                                  // SQL (legacy)
-  '138092708',                                 // SQL/Discovery
-  'baedc188-ba76-4a41-8723-5bb99fe7c5bf',     // Demo - Scheduled
-  '963167283',                                 // Demo - Completed
-  '59865091',                                  // Proposal
-];
 
 // Verify cron secret for security
 function verifyCronSecret(request: Request): boolean {
@@ -70,6 +63,12 @@ export async function GET(request: Request) {
     }
 
     console.log(`Synced ${owners.length} owners`);
+
+    // Pipeline health check: detect unknown or removed stages
+    const stageValidation = await validatePipelineStages();
+    if (stageValidation.hasWarnings) {
+      console.warn('Pipeline stage validation warnings detected — check workflow_runs result for details');
+    }
 
     // Step 2: Get owner mapping for deals
     const { data: ownerRecords } = await supabase
@@ -286,7 +285,7 @@ export async function GET(request: Request) {
       .select('id, hubspot_deal_id')
       .in('owner_id', targetOwnerIds)                           // Only target AEs
       .eq('pipeline', SYNC_CONFIG.TARGET_PIPELINE_ID)           // Sales Pipeline only
-      .in('deal_stage', ACTIVE_DEAL_STAGES)                     // Only active stages
+      .in('deal_stage', ACTIVE_STAGE_IDS)                     // Only active stages
       .gte('hubspot_created_at', minDate)                       // 2025+ deals only
       .or(`next_step_due_date.lt.${today},close_date.lt.${today},last_activity_date.lt.${tenDaysAgo}`)
       .order('amount', { ascending: false, nullsFirst: false })
@@ -348,6 +347,7 @@ export async function GET(request: Request) {
         notesSynced,
         exceptionDealsProcessed: exceptionDeals?.length || 0,
         durationMs: duration,
+        stageWarnings: stageValidation,
         filters: {
           targetAEs: SYNC_CONFIG.TARGET_AE_EMAILS,
           salesPipeline: SYNC_CONFIG.TARGET_PIPELINE_ID,
@@ -371,6 +371,7 @@ export async function GET(request: Request) {
       dealsUnassigned,
       notesSynced,
       exceptionDealsProcessed: exceptionDeals?.length || 0,
+      stageWarnings: stageValidation,
       durationMs: duration,
     });
   } catch (error) {
