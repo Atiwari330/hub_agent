@@ -328,7 +328,12 @@ export function NextStepQueueView() {
 
       const result = await response.json();
       const analysis = result.analysis;
-      const isCompliant = analysis.status === 'date_found' || analysis.status === 'date_inferred';
+      const hasDate = analysis.status === 'date_found' || analysis.status === 'date_inferred';
+      const dueDatePast = hasDate && analysis.dueDate
+        && new Date(analysis.dueDate + 'T00:00:00') < new Date(new Date().toDateString());
+      const daysOverdue = dueDatePast
+        ? Math.floor((new Date().setHours(0, 0, 0, 0) - new Date(analysis.dueDate + 'T00:00:00').getTime()) / 86400000)
+        : null;
 
       // Optimistic local state update — same pattern as batch analyze
       setData((prev) => {
@@ -340,8 +345,9 @@ export function NextStepQueueView() {
               return {
                 ...d,
                 nextStep: result.nextStep ?? d.nextStep,
-                nextStepDueDate: analysis.dueDate,
-                status: isCompliant ? 'compliant' : d.status,
+                nextStepDueDate: analysis.dueDate ?? d.nextStepDueDate,
+                status: dueDatePast ? 'overdue' : hasDate ? 'compliant' : d.status,
+                daysOverdue: daysOverdue ?? d.daysOverdue,
                 analysis: {
                   ...d.analysis,
                   lastAnalyzedAt: result.analyzedAt,
@@ -357,16 +363,28 @@ export function NextStepQueueView() {
       });
 
       // Toast with LLM feedback
-      addToast({
-        type: isCompliant ? 'success' : 'info',
-        title: deal.dealName,
-        message: isCompliant
-          ? `Compliant: ${analysis.displayMessage}`
-          : analysis.displayMessage,
-      });
+      if (dueDatePast) {
+        addToast({
+          type: 'error',
+          title: deal.dealName,
+          message: `Overdue: due date was ${analysis.dueDate} (${daysOverdue}d ago)`,
+        });
+      } else if (hasDate) {
+        addToast({
+          type: 'success',
+          title: deal.dealName,
+          message: `Compliant: ${analysis.displayMessage}`,
+        });
+      } else {
+        addToast({
+          type: 'info',
+          title: deal.dealName,
+          message: analysis.displayMessage,
+        });
+      }
 
-      // If Issues Only mode and now compliant → brief green highlight then fade out
-      if (isCompliant && viewMode === 'issues') {
+      // If Issues Only mode and now compliant (future date) → brief green highlight then fade out
+      if (hasDate && !dueDatePast && viewMode === 'issues') {
         setExitingDeals((prev) => new Set(prev).add(deal.id));
         setTimeout(() => {
           setExitingDeals((prev) => {
@@ -598,6 +616,13 @@ export function NextStepQueueView() {
 
               // Update the deal in the local data if analysis was successful
               if (event.status === 'success' && event.analysis) {
+                const batchHasDate = event.analysis.status === 'date_found' || event.analysis.status === 'date_inferred';
+                const batchDueDatePast = batchHasDate && event.analysis.dueDate
+                  && new Date(event.analysis.dueDate + 'T00:00:00') < new Date(new Date().toDateString());
+                const batchDaysOverdue = batchDueDatePast
+                  ? Math.floor((new Date().setHours(0, 0, 0, 0) - new Date(event.analysis.dueDate + 'T00:00:00').getTime()) / 86400000)
+                  : null;
+
                 setData((prev) => {
                   if (!prev) return prev;
                   return {
@@ -606,9 +631,9 @@ export function NextStepQueueView() {
                       if (deal.id === event.dealId) {
                         return {
                           ...deal,
-                          status: event.analysis.status === 'date_found' || event.analysis.status === 'date_inferred'
-                            ? 'compliant'
-                            : deal.status,
+                          status: batchDueDatePast ? 'overdue' : batchHasDate ? 'compliant' : deal.status,
+                          daysOverdue: batchDaysOverdue ?? deal.daysOverdue,
+                          nextStepDueDate: event.analysis.dueDate ?? deal.nextStepDueDate,
                           analysis: {
                             ...deal.analysis,
                             lastAnalyzedAt: new Date().toISOString(),

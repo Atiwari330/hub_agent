@@ -503,9 +503,10 @@ function buildStalledResult(
  *
  * Priority order:
  * 1. Missing — no next step text at all
- * 2. Stale — next_step_last_updated_at > STALE_THRESHOLD_DAYS ago (or null + has been analyzed)
- * 3. Overdue — recently updated but LLM-extracted action date is past
- * 4. Compliant — everything else
+ * 2. Overdue — analyzed with date_found/date_inferred AND date is in the past
+ * 3. Compliant via date — analyzed with date_found/date_inferred AND date is in the future
+ * 4. Stale — >7 days since update (catches: no analysis, or analysis with no clear date)
+ * 5. Compliant — everything else (recently updated)
  */
 export function checkNextStepCompliance(deal: NextStepCheckInput): NextStepCheckResult {
   const hasNextStep = deal.next_step && deal.next_step.trim().length > 0;
@@ -520,8 +521,33 @@ export function checkNextStepCompliance(deal: NextStepCheckInput): NextStepCheck
     };
   }
 
-  // 2. Stale — next step hasn't been updated in too long
   const daysSinceUpdate = computeDaysSinceUpdate(deal.next_step_last_updated_at);
+  const hasAnalyzedDate = deal.next_step_due_date
+    && deal.next_step_status
+    && (deal.next_step_status === 'date_found' || deal.next_step_status === 'date_inferred');
+
+  // 2. Overdue — analyzed date is in the past (takes priority over stale)
+  if (hasAnalyzedDate && isDateInPast(deal.next_step_due_date!)) {
+    const daysOverdue = Math.abs(getDaysUntil(deal.next_step_due_date!));
+    return {
+      status: 'overdue',
+      daysOverdue,
+      daysSinceUpdate,
+      reason: `Next step is ${daysOverdue} day${daysOverdue !== 1 ? 's' : ''} overdue. Update or complete it.`,
+    };
+  }
+
+  // 3. Compliant via future date — overrides staleness
+  if (hasAnalyzedDate) {
+    return {
+      status: 'compliant',
+      daysOverdue: null,
+      daysSinceUpdate,
+      reason: '',
+    };
+  }
+
+  // 4. Stale — no clear date from analysis + old update
   if (daysSinceUpdate !== null && daysSinceUpdate >= STALE_THRESHOLD_DAYS) {
     return {
       status: 'stale',
@@ -531,24 +557,7 @@ export function checkNextStepCompliance(deal: NextStepCheckInput): NextStepCheck
     };
   }
 
-  // 3. Overdue — recently updated but extracted action date is past
-  if (
-    deal.next_step_due_date &&
-    deal.next_step_status &&
-    (deal.next_step_status === 'date_found' || deal.next_step_status === 'date_inferred')
-  ) {
-    if (isDateInPast(deal.next_step_due_date)) {
-      const daysOverdue = Math.abs(getDaysUntil(deal.next_step_due_date));
-      return {
-        status: 'overdue',
-        daysOverdue,
-        daysSinceUpdate,
-        reason: `Next step is ${daysOverdue} day${daysOverdue !== 1 ? 's' : ''} overdue. Update or complete it.`,
-      };
-    }
-  }
-
-  // 4. Compliant
+  // 5. Compliant — recently updated
   return {
     status: 'compliant',
     daysOverdue: null,
