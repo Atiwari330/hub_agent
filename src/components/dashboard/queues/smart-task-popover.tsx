@@ -57,6 +57,16 @@ interface GeneratedTask {
   suggestedPriority: 'LOW' | 'MEDIUM' | 'HIGH';
 }
 
+function buildQuickTaskContent(context: EntityContext): { title: string; description: string } {
+  const name = context.type === 'deal' ? context.dealName : context.companyName;
+  const fields = context.missingFields ?? [];
+  const missingFieldsList = fields.map((f) => `• ${f}`).join('\n');
+  return {
+    title: `Deal Hygiene: ${name}`,
+    description: `Please update the following missing fields for this deal:\n\n${missingFieldsList}\n\nThis helps ensure accurate pipeline reporting and forecasting.`,
+  };
+}
+
 export function SmartTaskPopover({
   context,
   queueType,
@@ -74,6 +84,7 @@ export function SmartTaskPopover({
   const [editedDescription, setEditedDescription] = useState('');
   const [editedPriority, setEditedPriority] = useState<'LOW' | 'MEDIUM' | 'HIGH'>('MEDIUM');
   const [error, setError] = useState<string | null>(null);
+  const [isQuickCreating, setIsQuickCreating] = useState(false);
 
   const popoverRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLDivElement>(null);
@@ -108,11 +119,48 @@ export function SmartTaskPopover({
       setEditedDescription('');
       setEditedPriority('MEDIUM');
       setError(null);
+      setIsQuickCreating(false);
     }
   }, [isOpen]);
 
   const handlePresetClick = (presetPrompt: string) => {
     setPrompt(presetPrompt);
+  };
+
+  const handleQuickCreate = async () => {
+    setIsQuickCreating(true);
+    setError(null);
+
+    try {
+      const { title, description } = buildQuickTaskContent(context);
+      const response = await fetch('/api/queues/create-smart-task', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          hubspotDealId: context.type === 'deal' ? context.hubspotDealId : undefined,
+          hubspotCompanyId: context.type === 'company' ? context.hubspotCompanyId : undefined,
+          hubspotOwnerId: context.hubspotOwnerId,
+          title,
+          description,
+          priority: 'MEDIUM',
+          dealId,
+          companyId,
+          queueType,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to create task');
+      }
+
+      setIsOpen(false);
+      onTaskCreated(title);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create task');
+    } finally {
+      setIsQuickCreating(false);
+    }
   };
 
   const handleGeneratePreview = async () => {
@@ -236,6 +284,44 @@ export function SmartTaskPopover({
             {!generatedTask ? (
               // Input mode
               <>
+                {/* Quick Create button - shown when there are missing fields */}
+                {context.missingFields && context.missingFields.length > 0 && (
+                  <>
+                    <button
+                      onClick={handleQuickCreate}
+                      disabled={isQuickCreating || isGenerating}
+                      className="w-full px-3 py-2.5 text-sm font-medium text-amber-800 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    >
+                      {isQuickCreating ? (
+                        <>
+                          <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                          </svg>
+                          Creating...
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                          </svg>
+                          Quick Create: Update {context.missingFields.length} Missing Field{context.missingFields.length !== 1 ? 's' : ''}
+                        </>
+                      )}
+                    </button>
+                    <p className="text-xs text-gray-500 mt-1.5 text-center">
+                      24h due date &middot; Medium priority &middot; Assigned to {context.ownerName}
+                    </p>
+
+                    {/* Divider */}
+                    <div className="flex items-center gap-3 my-3">
+                      <div className="flex-1 border-t border-gray-200" />
+                      <span className="text-xs text-gray-400">or use AI to customize</span>
+                      <div className="flex-1 border-t border-gray-200" />
+                    </div>
+                  </>
+                )}
+
                 {/* Preset chips */}
                 <div className="flex flex-wrap gap-2 mb-3">
                   {presets.map((preset) => (
@@ -277,7 +363,7 @@ export function SmartTaskPopover({
                   </button>
                   <button
                     onClick={handleGeneratePreview}
-                    disabled={isGenerating || !prompt.trim()}
+                    disabled={isGenerating || isQuickCreating || !prompt.trim()}
                     className="px-3 py-1.5 text-xs font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
                   >
                     {isGenerating ? (
