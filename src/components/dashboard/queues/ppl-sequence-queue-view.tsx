@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { formatCurrency } from '@/lib/utils/currency';
 import { getHubSpotDealUrl } from '@/lib/hubspot/urls';
 import { ACTIVE_STAGE_OPTIONS } from '@/lib/hubspot/stage-config';
+import { getCurrentQuarter, getQuarterInfo } from '@/lib/utils/quarter';
 import type { PplSequenceDeal, QueueResponse } from '@/types/ppl-sequence';
 
 // ===== Utility =====
@@ -29,6 +30,23 @@ function formatRelativeTime(dateString: string | null): string {
 type SortColumn = 'dealName' | 'ownerName' | 'amount' | 'dealAgeDays' | 'touches' | 'gap';
 type SortDirection = 'asc' | 'desc';
 type StatusFilter = 'all' | 'on_track' | 'behind' | 'critical' | 'meeting_booked' | 'pending';
+type QuarterFilter = 'q1' | 'q2' | 'q3' | 'q4' | 'all';
+
+function getQuarterOptions(): { value: QuarterFilter; label: string; year: number }[] {
+  const currentQ = getCurrentQuarter();
+  return [
+    { value: 'q1', label: `Q1 ${currentQ.year}`, year: currentQ.year },
+    { value: 'q2', label: `Q2 ${currentQ.year}`, year: currentQ.year },
+    { value: 'q3', label: `Q3 ${currentQ.year}`, year: currentQ.year },
+    { value: 'q4', label: `Q4 ${currentQ.year}`, year: currentQ.year },
+    { value: 'all', label: 'All Quarters', year: currentQ.year },
+  ];
+}
+
+function getCurrentQuarterFilter(): QuarterFilter {
+  const currentQ = getCurrentQuarter();
+  return `q${currentQ.quarter}` as QuarterFilter;
+}
 
 // ===== Constants =====
 
@@ -510,6 +528,11 @@ export function PplSequenceQueueView() {
   // Methodology panel
   const [showMethodology, setShowMethodology] = useState(false);
 
+  // Quarter filter
+  const [quarterFilter, setQuarterFilter] = useState<QuarterFilter>(getCurrentQuarterFilter());
+  const quarterOptions = useMemo(() => getQuarterOptions(), []);
+  const currentYear = quarterOptions[0]?.year || new Date().getFullYear();
+
   // Filters
   const [aeFilter, setAeFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
@@ -539,6 +562,17 @@ export function PplSequenceQueueView() {
   // Filter and sort
   const filteredDeals = useMemo(() => {
     let result = allDeals;
+
+    // Filter by quarter (close date)
+    if (quarterFilter !== 'all') {
+      const quarterNum = parseInt(quarterFilter.replace('q', ''), 10);
+      const qi = getQuarterInfo(currentYear, quarterNum);
+      result = result.filter((deal) => {
+        if (!deal.closeDate) return false;
+        const closeTime = new Date(deal.closeDate).getTime();
+        return closeTime >= qi.startDate.getTime() && closeTime <= qi.endDate.getTime();
+      });
+    }
 
     // Filter by AE
     if (aeFilter !== 'all') {
@@ -600,7 +634,7 @@ export function PplSequenceQueueView() {
     });
 
     return result;
-  }, [allDeals, aeFilter, statusFilter, stageFilter, dateFilter, sortColumn, sortDirection]);
+  }, [allDeals, quarterFilter, currentYear, aeFilter, statusFilter, stageFilter, dateFilter, sortColumn, sortDirection]);
 
   // Fetch data
   const fetchData = useCallback(async () => {
@@ -638,9 +672,10 @@ export function PplSequenceQueueView() {
     setExpandedDealId((prev) => (prev === dealId ? null : dealId));
   };
 
-  const hasActiveFilters = aeFilter !== 'all' || statusFilter !== 'all' || stageFilter !== 'all' || dateFilter !== 'all';
+  const hasActiveFilters = quarterFilter !== getCurrentQuarterFilter() || aeFilter !== 'all' || statusFilter !== 'all' || stageFilter !== 'all' || dateFilter !== 'all';
 
   const clearFilters = () => {
+    setQuarterFilter(getCurrentQuarterFilter());
     setAeFilter('all');
     setStatusFilter('all');
     setStageFilter('all');
@@ -680,6 +715,20 @@ export function PplSequenceQueueView() {
 
       {/* Filters Row */}
       <div className="flex flex-wrap items-center gap-3 mb-4">
+        {/* Quarter Filter */}
+        <div className="flex items-center gap-2">
+          <label className="text-sm text-gray-600">Quarter:</label>
+          <select
+            value={quarterFilter}
+            onChange={(e) => setQuarterFilter(e.target.value as QuarterFilter)}
+            className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          >
+            {quarterOptions.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+        </div>
+
         {/* AE Filter */}
         <div className="flex items-center gap-2">
           <label className="text-sm text-gray-600">AE:</label>

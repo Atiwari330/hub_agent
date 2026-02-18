@@ -671,7 +671,7 @@ export function PreDemoPipelineQueueView() {
   const [thresholdsOpen, setThresholdsOpen] = useState(false);
 
   // Quarter filter
-  const [quarterFilter, setQuarterFilter] = useState<QuarterFilter>('all');
+  const [quarterFilter, setQuarterFilter] = useState<QuarterFilter>(getCurrentQuarterFilter());
   const quarterOptions = useMemo(() => getQuarterOptions(), []);
   const currentYear = quarterOptions[0]?.year || new Date().getFullYear();
 

@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { formatCurrency } from '@/lib/utils/currency';
 import { getHubSpotDealUrl } from '@/lib/hubspot/urls';
 import { getCurrentQuarter, getQuarterInfo } from '@/lib/utils/quarter';
-import { ACTIVE_STAGE_OPTIONS } from '@/lib/hubspot/stage-config';
+import { ACTIVE_STAGE_OPTIONS, DEFAULT_QUEUE_STAGE_IDS } from '@/lib/hubspot/stage-config';
 
 interface OverdueTaskInfo {
   taskId: string;
@@ -68,6 +68,14 @@ function getCurrentQuarterFilter(): QuarterFilter {
 
 const STAGE_OPTIONS = ACTIVE_STAGE_OPTIONS;
 
+function setsEqual(a: Set<string>, b: Set<string>): boolean {
+  if (a.size !== b.size) return false;
+  for (const item of a) {
+    if (!b.has(item)) return false;
+  }
+  return true;
+}
+
 function SortIcon({ active, direction }: { active: boolean; direction: SortDirection }) {
   if (!active) {
     return (
@@ -112,7 +120,7 @@ export function OverdueTasksQueueView() {
 
   // Filters
   const [aeFilter, setAeFilter] = useState<string>('all');
-  const [selectedStages, setSelectedStages] = useState<Set<string>>(new Set(STAGE_OPTIONS.map((s) => s.id)));
+  const [selectedStages, setSelectedStages] = useState<Set<string>>(new Set(DEFAULT_QUEUE_STAGE_IDS));
   const [severityFilter, setSeverityFilter] = useState<string>('all');
   const [stageDropdownOpen, setStageDropdownOpen] = useState(false);
 
@@ -453,11 +461,11 @@ export function OverdueTasksQueueView() {
           </select>
         </div>
 
-        {(aeFilter !== 'all' || selectedStages.size < STAGE_OPTIONS.length || quarterFilter !== getCurrentQuarterFilter() || severityFilter !== 'all') && (
+        {(aeFilter !== 'all' || !setsEqual(selectedStages, DEFAULT_QUEUE_STAGE_IDS) || quarterFilter !== getCurrentQuarterFilter() || severityFilter !== 'all') && (
           <button
             onClick={() => {
               setAeFilter('all');
-              setSelectedStages(new Set(STAGE_OPTIONS.map((s) => s.id)));
+              setSelectedStages(new Set(DEFAULT_QUEUE_STAGE_IDS));
               setQuarterFilter(getCurrentQuarterFilter());
               setSeverityFilter('all');
             }}

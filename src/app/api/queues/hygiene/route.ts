@@ -23,6 +23,7 @@ interface HygieneQueueDeal {
   hubspotDealId: string;
   dealName: string;
   amount: number | null;
+  closeDate: string | null;
   stageName: string;
   ownerName: string;
   ownerId: string;
@@ -192,6 +193,7 @@ export async function GET(request: NextRequest) {
         hubspotDealId: deal.hubspot_deal_id,
         dealName: deal.deal_name,
         amount: deal.amount,
+        closeDate: deal.close_date,
         stageName: stageMap.get(deal.deal_stage || '') || deal.deal_stage || 'Unknown',
         ownerName: ownerInfo?.name || 'Unknown',
         ownerId: deal.owner_id || '',

@@ -3,8 +3,28 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { formatCurrency } from '@/lib/utils/currency';
 import { getHubSpotDealUrl } from '@/lib/hubspot/urls';
+import { getCurrentQuarter, getQuarterInfo } from '@/lib/utils/quarter';
+import { DEFAULT_QUEUE_STAGES } from '@/lib/hubspot/stage-config';
 import { SlackMessageModal } from './slack-message-modal';
 import { SmartTaskPopover } from './smart-task-popover';
+
+type QuarterFilter = 'q1' | 'q2' | 'q3' | 'q4' | 'all';
+
+function getQuarterOptions(): { value: QuarterFilter; label: string; year: number }[] {
+  const currentQ = getCurrentQuarter();
+  return [
+    { value: 'q1', label: `Q1 ${currentQ.year}`, year: currentQ.year },
+    { value: 'q2', label: `Q2 ${currentQ.year}`, year: currentQ.year },
+    { value: 'q3', label: `Q3 ${currentQ.year}`, year: currentQ.year },
+    { value: 'q4', label: `Q4 ${currentQ.year}`, year: currentQ.year },
+    { value: 'all', label: 'All Quarters', year: currentQ.year },
+  ];
+}
+
+function getCurrentQuarterFilter(): QuarterFilter {
+  const currentQ = getCurrentQuarter();
+  return `q${currentQ.quarter}` as QuarterFilter;
+}
 
 interface ExistingTaskInfo {
   hubspotTaskId: string;
@@ -25,6 +45,7 @@ interface HygieneQueueDeal {
   hubspotDealId: string;
   dealName: string;
   amount: number | null;
+  closeDate: string | null;
   stageName: string;
   ownerName: string;
   ownerId: string;
@@ -108,10 +129,15 @@ export function BaseHygieneQueueView({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Quarter filter
+  const [quarterFilter, setQuarterFilter] = useState<QuarterFilter>(getCurrentQuarterFilter());
+  const quarterOptions = useMemo(() => getQuarterOptions(), []);
+  const currentYear = quarterOptions[0]?.year || new Date().getFullYear();
+
   // Filters
   const [aeFilter, setAeFilter] = useState<string>('all');
   const [missingFieldFilter, setMissingFieldFilter] = useState<string>('all');
-  const [stageFilter, setStageFilter] = useState<string[]>([]);
+  const [stageFilter, setStageFilter] = useState<string[]>(DEFAULT_QUEUE_STAGES);
   const [stageDropdownOpen, setStageDropdownOpen] = useState(false);
 
   // Sorting (default: amount descending)
@@ -175,6 +201,17 @@ export function BaseHygieneQueueView({
 
     let result = data.deals;
 
+    // Quarter filter
+    if (quarterFilter !== 'all') {
+      const quarterNum = parseInt(quarterFilter.replace('q', ''), 10);
+      const qi = getQuarterInfo(currentYear, quarterNum);
+      result = result.filter((deal) => {
+        if (!deal.closeDate) return false;
+        const closeTime = new Date(deal.closeDate).getTime();
+        return closeTime >= qi.startDate.getTime() && closeTime <= qi.endDate.getTime();
+      });
+    }
+
     if (aeFilter !== 'all') {
       result = result.filter((d) => d.ownerId === aeFilter);
     }
@@ -207,7 +244,7 @@ export function BaseHygieneQueueView({
     });
 
     return result;
-  }, [data, aeFilter, missingFieldFilter, stageFilter, sortColumn, sortDirection]);
+  }, [data, quarterFilter, currentYear, aeFilter, missingFieldFilter, stageFilter, sortColumn, sortDirection]);
 
   // Get deals for Slack modal
   const dealsForSlack = useMemo(() => {
@@ -406,6 +443,19 @@ export function BaseHygieneQueueView({
       {/* Filters Row */}
       <div className="flex items-center gap-3 mb-4">
         <div className="flex items-center gap-2">
+          <label className="text-sm text-gray-600">Quarter:</label>
+          <select
+            value={quarterFilter}
+            onChange={(e) => setQuarterFilter(e.target.value as QuarterFilter)}
+            className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          >
+            {quarterOptions.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="flex items-center gap-2">
           <label className="text-sm text-gray-600">AE:</label>
           <select
             value={aeFilter}
@@ -484,12 +534,13 @@ export function BaseHygieneQueueView({
           )}
         </div>
 
-        {(aeFilter !== 'all' || missingFieldFilter !== 'all' || stageFilter.length > 0) && (
+        {(quarterFilter !== getCurrentQuarterFilter() || aeFilter !== 'all' || missingFieldFilter !== 'all' || JSON.stringify([...stageFilter].sort()) !== JSON.stringify([...DEFAULT_QUEUE_STAGES].sort())) && (
           <button
             onClick={() => {
+              setQuarterFilter(getCurrentQuarterFilter());
               setAeFilter('all');
               setMissingFieldFilter('all');
-              setStageFilter([]);
+              setStageFilter([...DEFAULT_QUEUE_STAGES]);
             }}
             className="text-sm text-gray-500 hover:text-gray-700"
           >

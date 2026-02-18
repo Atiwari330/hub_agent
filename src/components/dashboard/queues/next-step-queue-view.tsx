@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { formatCurrency } from '@/lib/utils/currency';
 import { getHubSpotDealUrl } from '@/lib/hubspot/urls';
 import { getCurrentQuarter, getQuarterInfo } from '@/lib/utils/quarter';
+import { DEFAULT_QUEUE_STAGES } from '@/lib/hubspot/stage-config';
 
 // Tooltip component for hover information
 function Tooltip({ children, content }: { children: React.ReactNode; content: string }) {
@@ -87,7 +88,7 @@ type SortDirection = 'asc' | 'desc';
 type ViewMode = 'issues' | 'all';
 type QuarterFilter = 'q1' | 'q2' | 'q3' | 'q4';
 
-const DEFAULT_STAGES = ['Proposal/Evaluating', 'Demo - Completed'];
+const DEFAULT_STAGES = DEFAULT_QUEUE_STAGES;
 const DEFAULT_QUARTERS: QuarterFilter[] = ['q1'];
 
 function SortIcon({ active, direction }: { active: boolean; direction: SortDirection }) {

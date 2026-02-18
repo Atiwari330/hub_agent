@@ -4,6 +4,9 @@
 export const SALES_PIPELINE_ID = '1c27e5a3-5e5e-4403-ab0f-d356bf268cf3';
 
 // Stage IDs we want to track for leading indicators
+// NOTE: Qualified/Validated (1286807303), Proposal/Evaluating (59865091), and
+// MSA Sent/Review (1286807304) are not tracked here yet — they need a DB migration
+// to add the corresponding entered_at columns before they can be synced.
 export const TRACKED_STAGES = {
   MQL: {
     id: '2030251',
@@ -13,7 +16,7 @@ export const TRACKED_STAGES = {
   },
   SQL: {
     id: '17915773',
-    label: 'SQL (legacy)',
+    label: 'SQL (legacy - removed from pipeline)',
     property: 'hs_v2_date_entered_17915773',
     dbColumn: 'sql_entered_at',
   },

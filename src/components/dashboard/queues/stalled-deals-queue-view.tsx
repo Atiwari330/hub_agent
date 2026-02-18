@@ -6,6 +6,7 @@ import { getHubSpotDealUrl } from '@/lib/hubspot/urls';
 import { STALLED_THRESHOLDS } from '@/lib/utils/queue-detection';
 import type { StalledSeverity } from '@/lib/utils/queue-detection';
 import { getCurrentQuarter, getQuarterInfo } from '@/lib/utils/quarter';
+import { DEFAULT_QUEUE_STAGES } from '@/lib/hubspot/stage-config';
 
 // ===== Types =====
 
@@ -655,7 +656,7 @@ export function StalledDealsQueueView() {
 
   // Filters
   const [aeFilter, setAeFilter] = useState<string>('all');
-  const [stageFilter, setStageFilter] = useState<string[]>([]);
+  const [stageFilter, setStageFilter] = useState<string[]>(DEFAULT_QUEUE_STAGES);
   const [stageDropdownOpen, setStageDropdownOpen] = useState(false);
   const [closeDateFilter, setCloseDateFilter] = useState<CloseDateProximity>('all');
   const [amountMin, setAmountMin] = useState<string>('');
@@ -910,7 +911,7 @@ export function StalledDealsQueueView() {
 
   const hasActiveFilters =
     aeFilter !== 'all' ||
-    stageFilter.length > 0 ||
+    JSON.stringify([...stageFilter].sort()) !== JSON.stringify([...DEFAULT_QUEUE_STAGES].sort()) ||
     closeDateFilter !== 'all' ||
     amountMin !== '' ||
     amountMax !== '' ||
@@ -919,7 +920,7 @@ export function StalledDealsQueueView() {
 
   const clearFilters = () => {
     setAeFilter('all');
-    setStageFilter([]);
+    setStageFilter([...DEFAULT_QUEUE_STAGES]);
     setCloseDateFilter('all');
     setAmountMin('');
     setAmountMax('');

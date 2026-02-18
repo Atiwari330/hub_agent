@@ -65,6 +65,21 @@ export const ACTIVE_STAGE_OPTIONS: { id: string; label: string }[] = [
   { id: S.MSA_SENT_REVIEW.id,     label: S.MSA_SENT_REVIEW.label },
 ];
 
+// Default stages pre-selected across sales pipeline queues
+export const DEFAULT_QUEUE_STAGES: string[] = [
+  S.DEMO_COMPLETED.label,
+  S.MSA_SENT_REVIEW.label,
+  S.PROPOSAL_EVALUATING.label,
+  S.QUALIFIED_VALIDATED.label,
+];
+
+export const DEFAULT_QUEUE_STAGE_IDS: Set<string> = new Set([
+  S.DEMO_COMPLETED.id,
+  S.MSA_SENT_REVIEW.id,
+  S.PROPOSAL_EVALUATING.id,
+  S.QUALIFIED_VALIDATED.id,
+]);
+
 // Set of all known stage IDs (for health check comparison)
 export const ALL_KNOWN_STAGE_IDS: Set<string> = new Set(
   Object.values(SALES_PIPELINE_STAGES).map((s) => s.id)
