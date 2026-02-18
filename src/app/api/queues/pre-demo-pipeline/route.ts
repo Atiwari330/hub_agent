@@ -2,17 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/client';
 import { SYNC_CONFIG } from '@/lib/hubspot/sync-config';
 import { getAllPipelines } from '@/lib/hubspot/pipelines';
+import { PRE_DEMO_STAGE_IDS } from '@/lib/hubspot/stage-config';
 import { getBusinessDaysSinceDate, getDaysUntil, isDateInPast } from '@/lib/utils/business-days';
 import { checkApiAuth } from '@/lib/auth/api';
 import { RESOURCES } from '@/lib/auth';
-
-// Pre-demo stages only (MQL, SQL (legacy), SQL/Discovery, Demo Scheduled)
-const PRE_DEMO_STAGES = [
-  '2030251',                                   // MQL
-  '17915773',                                  // SQL (legacy)
-  '138092708',                                 // SQL/Discovery
-  'baedc188-ba76-4a41-8723-5bb99fe7c5bf',     // Demo - Scheduled
-];
 
 export interface PreDemoDealWithMetadata {
   id: string;
@@ -121,7 +114,7 @@ export async function GET(request: NextRequest) {
       `)
       .in('owner_id', ownerIds)
       .eq('pipeline', SYNC_CONFIG.TARGET_PIPELINE_ID)
-      .in('deal_stage', PRE_DEMO_STAGES)
+      .in('deal_stage', PRE_DEMO_STAGE_IDS)
       .is('demo_completed_entered_at', null)
       .order('amount', { ascending: false, nullsFirst: false });
 

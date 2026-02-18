@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/client';
 import { SYNC_CONFIG } from '@/lib/hubspot/sync-config';
 import { getAllPipelines } from '@/lib/hubspot/pipelines';
+import { ACTIVE_STAGE_IDS } from '@/lib/hubspot/stage-config';
 import { getTasksByDealId } from '@/lib/hubspot/engagements';
 import {
   checkOverdueTasks,
@@ -10,15 +11,6 @@ import {
 } from '@/lib/utils/queue-detection';
 import { checkApiAuth } from '@/lib/auth/api';
 import { RESOURCES } from '@/lib/auth';
-
-// Active stages (excludes MQL, Closed Won, Closed Lost)
-const ACTIVE_DEAL_STAGES = [
-  '17915773',                                  // SQL (legacy)
-  '138092708',                                 // SQL/Discovery
-  'baedc188-ba76-4a41-8723-5bb99fe7c5bf',     // Demo - Scheduled
-  '963167283',                                 // Demo - Completed
-  '59865091',                                  // Proposal
-];
 
 interface ExistingReminderInfo {
   hubspotTaskId: string;
@@ -90,9 +82,9 @@ export async function GET(request: NextRequest) {
     }
 
     // Determine which stages to query
-    let targetStages = ACTIVE_DEAL_STAGES;
+    let targetStages = ACTIVE_STAGE_IDS;
     if (stageFilter) {
-      const stageIds = stageFilter.split(',').filter((s) => ACTIVE_DEAL_STAGES.includes(s));
+      const stageIds = stageFilter.split(',').filter((s) => ACTIVE_STAGE_IDS.includes(s));
       if (stageIds.length > 0) {
         targetStages = stageIds;
       }

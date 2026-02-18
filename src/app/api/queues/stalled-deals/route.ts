@@ -2,18 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/client';
 import { SYNC_CONFIG } from '@/lib/hubspot/sync-config';
 import { getAllPipelines } from '@/lib/hubspot/pipelines';
+import { ACTIVE_STAGE_IDS } from '@/lib/hubspot/stage-config';
 import { getBusinessDaysSinceDate, getDaysUntil, isDateInPast } from '@/lib/utils/business-days';
 import { checkApiAuth } from '@/lib/auth/api';
 import { RESOURCES } from '@/lib/auth';
-
-// Active stages (excludes MQL, Closed Won, Closed Lost)
-const ACTIVE_DEAL_STAGES = [
-  '17915773',                                  // SQL (legacy)
-  '138092708',                                 // SQL/Discovery
-  'baedc188-ba76-4a41-8723-5bb99fe7c5bf',     // Demo - Scheduled
-  '963167283',                                 // Demo - Completed
-  '59865091',                                  // Proposal
-];
 
 export interface ActiveDealWithMetadata {
   id: string;
@@ -107,7 +99,7 @@ export async function GET(request: NextRequest) {
       `)
       .in('owner_id', ownerIds)
       .eq('pipeline', SYNC_CONFIG.TARGET_PIPELINE_ID)
-      .in('deal_stage', ACTIVE_DEAL_STAGES)
+      .in('deal_stage', ACTIVE_STAGE_IDS)
       .order('amount', { ascending: false, nullsFirst: false });
 
     if (dealsError) {

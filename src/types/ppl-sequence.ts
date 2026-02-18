@@ -1,14 +1,8 @@
 import type { Week1TouchAnalysis } from '@/lib/utils/touch-counter';
+import { ALL_OPEN_STAGE_IDS } from '@/lib/hubspot/stage-config';
 
-// Active stages (excludes Closed Won, Closed Lost)
-export const ACTIVE_DEAL_STAGES = [
-  '2030251',                                   // MQL
-  '17915773',                                  // SQL (legacy)
-  '138092708',                                 // SQL/Discovery
-  'baedc188-ba76-4a41-8723-5bb99fe7c5bf',     // Demo - Scheduled
-  '963167283',                                 // Demo - Completed
-  '59865091',                                  // Proposal
-];
+// Re-export for backwards compatibility with consumers that import from this file
+export const ACTIVE_DEAL_STAGES = ALL_OPEN_STAGE_IDS;
 
 export interface PplSequenceDeal {
   id: string;

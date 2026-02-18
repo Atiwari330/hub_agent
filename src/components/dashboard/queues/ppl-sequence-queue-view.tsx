@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { formatCurrency } from '@/lib/utils/currency';
 import { getHubSpotDealUrl } from '@/lib/hubspot/urls';
+import { ACTIVE_STAGE_OPTIONS } from '@/lib/hubspot/stage-config';
 import type { PplSequenceDeal, QueueResponse } from '@/types/ppl-sequence';
 
 // ===== Utility =====
@@ -41,14 +42,10 @@ const STATUS_COLORS = {
 
 const TOTAL_COLUMNS = 10; // chevron + 9 data columns
 
-// Stage filter options (map stage IDs to readable names)
+// Stage filter options (map from centralized config to { value, label } shape)
 const STAGE_OPTIONS = [
   { value: 'all', label: 'All Stages' },
-  { value: '17915773', label: 'SQL' },
-  { value: '138092708', label: 'Discovery' },
-  { value: 'baedc188-ba76-4a41-8723-5bb99fe7c5bf', label: 'Demo Scheduled' },
-  { value: '963167283', label: 'Demo Completed' },
-  { value: '59865091', label: 'Proposal' },
+  ...ACTIVE_STAGE_OPTIONS.map((s) => ({ value: s.id, label: s.label })),
 ];
 
 // Created date filter options

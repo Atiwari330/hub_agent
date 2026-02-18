@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { formatCurrency } from '@/lib/utils/currency';
 import { getHubSpotDealUrl } from '@/lib/hubspot/urls';
 import { getCurrentQuarter, getQuarterInfo } from '@/lib/utils/quarter';
+import { ACTIVE_STAGE_OPTIONS } from '@/lib/hubspot/stage-config';
 
 interface OverdueTaskInfo {
   taskId: string;
@@ -65,14 +66,7 @@ function getCurrentQuarterFilter(): QuarterFilter {
   return `q${currentQ.quarter}` as QuarterFilter;
 }
 
-// Stage options for multi-select filter
-const STAGE_OPTIONS = [
-  { id: '17915773', label: 'SQL' },
-  { id: '138092708', label: 'Discovery' },
-  { id: 'baedc188-ba76-4a41-8723-5bb99fe7c5bf', label: 'Demo - Scheduled' },
-  { id: '963167283', label: 'Demo - Completed' },
-  { id: '59865091', label: 'Proposal' },
-];
+const STAGE_OPTIONS = ACTIVE_STAGE_OPTIONS;
 
 function SortIcon({ active, direction }: { active: boolean; direction: SortDirection }) {
   if (!active) {
