@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { formatCurrency } from '@/lib/utils/currency';
 import { getHubSpotDealUrl } from '@/lib/hubspot/urls';
 import { getCurrentQuarter, getQuarterInfo } from '@/lib/utils/quarter';
@@ -45,6 +45,9 @@ interface AnalysisInfo {
   analyzedValue: string | null;
   needsAnalysis: boolean;
   analysisStatus: string | null;
+  confidence: number | null;
+  actionType: string | null;
+  displayMessage: string | null;
 }
 
 interface NextStepQueueDeal {
@@ -106,6 +109,199 @@ function SortIcon({ active, direction }: { active: boolean; direction: SortDirec
   );
 }
 
+function ChevronIcon({ expanded }: { expanded: boolean }) {
+  return (
+    <span className="inline-flex p-1 rounded hover:bg-gray-200 transition-colors">
+      <svg
+        className={`w-4 h-4 text-gray-500 transition-transform ${expanded ? 'rotate-90' : ''}`}
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+      >
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+      </svg>
+    </span>
+  );
+}
+
+function ExpandedNextStepPanel({ deal }: { deal: NextStepQueueDeal }) {
+  const { analysis, existingTask } = deal;
+
+  const formatDateTime = (dateStr: string | null) => {
+    if (!dateStr) return null;
+    const d = new Date(dateStr);
+    return d.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  };
+
+  const formatDate = (dateStr: string | null) => {
+    if (!dateStr) return null;
+    const d = new Date(dateStr);
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  };
+
+  const getAnalysisStatusBadge = (status: string | null) => {
+    switch (status) {
+      case 'date_found':
+        return { bg: 'bg-green-100', text: 'text-green-700', label: 'Date Found' };
+      case 'date_inferred':
+        return { bg: 'bg-blue-100', text: 'text-blue-700', label: 'Date Inferred' };
+      case 'no_date':
+        return { bg: 'bg-gray-100', text: 'text-gray-700', label: 'No Date' };
+      case 'no_due_date':
+        return { bg: 'bg-gray-100', text: 'text-gray-700', label: 'No Due Date' };
+      case 'stale':
+        return { bg: 'bg-orange-100', text: 'text-orange-700', label: 'Stale' };
+      default:
+        return status
+          ? { bg: 'bg-gray-100', text: 'text-gray-600', label: status.replace(/_/g, ' ') }
+          : null;
+    }
+  };
+
+  const getTaskTypeBadge = (taskType: string) => {
+    switch (taskType) {
+      case 'overdue':
+        return { bg: 'bg-red-100', text: 'text-red-700', label: 'Overdue' };
+      case 'missing':
+        return { bg: 'bg-amber-100', text: 'text-amber-700', label: 'Missing' };
+      case 'stale':
+        return { bg: 'bg-orange-100', text: 'text-orange-700', label: 'Stale' };
+      default:
+        return { bg: 'bg-gray-100', text: 'text-gray-600', label: taskType };
+    }
+  };
+
+  const hasAnalysis = analysis.lastAnalyzedAt !== null;
+  const textChanged = hasAnalysis && analysis.analyzedValue !== deal.nextStep;
+  const statusBadge = getAnalysisStatusBadge(analysis.analysisStatus);
+
+  return (
+    <div className="p-5 bg-slate-50 border-t border-gray-200">
+      <div className="grid grid-cols-2 gap-6">
+        {/* Left column: Analysis */}
+        <div>
+          <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+            Analysis
+          </h4>
+          {hasAnalysis ? (
+            <div className="space-y-2.5">
+              {statusBadge && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-500 w-20">Status</span>
+                  <span className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full ${statusBadge.bg} ${statusBadge.text}`}>
+                    {statusBadge.label}
+                  </span>
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-500 w-20">Due Date</span>
+                <span className="text-sm text-gray-700">
+                  {deal.nextStepDueDate ? formatDate(deal.nextStepDueDate) : '\u2014'}
+                </span>
+              </div>
+              {analysis.actionType && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-500 w-20">Action Type</span>
+                  <span className="text-sm text-gray-700 capitalize">{analysis.actionType.replace(/_/g, ' ')}</span>
+                </div>
+              )}
+              {analysis.confidence !== null && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-500 w-20">Confidence</span>
+                  <div className="flex items-center gap-2">
+                    <div className="w-16 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full ${
+                          analysis.confidence >= 80 ? 'bg-green-500' : analysis.confidence >= 50 ? 'bg-yellow-500' : 'bg-red-500'
+                        }`}
+                        style={{ width: `${analysis.confidence}%` }}
+                      />
+                    </div>
+                    <span className="text-sm text-gray-700">{analysis.confidence}%</span>
+                  </div>
+                </div>
+              )}
+              {analysis.displayMessage && (
+                <div className="flex gap-2">
+                  <span className="text-xs text-gray-500 w-20 shrink-0 pt-0.5">AI Summary</span>
+                  <p className="text-sm text-gray-700 bg-white border border-gray-200 rounded p-2">
+                    {analysis.displayMessage}
+                  </p>
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-500 w-20">Analyzed At</span>
+                <span className="text-xs text-gray-500">{formatDateTime(analysis.lastAnalyzedAt)}</span>
+              </div>
+              {textChanged && analysis.analyzedValue && (
+                <div className="flex gap-2">
+                  <span className="text-xs text-gray-500 w-20 shrink-0 pt-0.5">Text Analyzed</span>
+                  <div>
+                    <p className="text-sm text-gray-700 bg-white border border-amber-300 rounded p-2">
+                      {analysis.analyzedValue}
+                    </p>
+                    <p className="text-xs text-amber-600 mt-1">Next step has changed since analysis</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <p className="text-sm text-gray-400 italic">Not yet analyzed</p>
+          )}
+        </div>
+
+        {/* Right column: Task History */}
+        <div>
+          <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+            Task History
+          </h4>
+          {existingTask ? (
+            <div className="space-y-2.5">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-500 w-24">Task Created</span>
+                <span className="text-sm text-gray-700">{formatDate(existingTask.createdAt)}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-500 w-24">Task Type</span>
+                {(() => {
+                  const badge = getTaskTypeBadge(existingTask.taskType);
+                  return (
+                    <span className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full ${badge.bg} ${badge.text}`}>
+                      {badge.label}
+                    </span>
+                  );
+                })()}
+              </div>
+              {existingTask.nextStepText && (
+                <div className="flex gap-2">
+                  <span className="text-xs text-gray-500 w-24 shrink-0 pt-0.5">Next Step</span>
+                  <p className="text-sm text-gray-700 bg-white border border-gray-200 rounded p-2">
+                    {existingTask.nextStepText}
+                  </p>
+                </div>
+              )}
+              {existingTask.daysOverdue !== null && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-500 w-24">Days Overdue</span>
+                  <span className="text-sm text-red-600">{existingTask.daysOverdue} days</span>
+                </div>
+              )}
+            </div>
+          ) : (
+            <p className="text-sm text-gray-400 italic">No task created</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function NextStepQueueView() {
   const [data, setData] = useState<NextStepQueueResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -158,6 +354,10 @@ export function NextStepQueueView() {
 
   // Single-deal refresh state
   const [refreshingDeals, setRefreshingDeals] = useState<Set<string>>(new Set());
+
+  // Expandable row
+  const [expandedDealId, setExpandedDealId] = useState<string | null>(null);
+  const toggleExpanded = (id: string) => setExpandedDealId((prev) => (prev === id ? null : id));
 
   const addToast = useCallback((toast: { type: 'success' | 'info' | 'error'; title: string; message: string }) => {
     const id = Math.random().toString(36).slice(2);
@@ -354,6 +554,9 @@ export function NextStepQueueView() {
                   analyzedValue: result.nextStep,
                   needsAnalysis: false,
                   analysisStatus: analysis.status,
+                  confidence: analysis.confidence ?? d.analysis.confidence,
+                  actionType: analysis.actionType ?? d.analysis.actionType,
+                  displayMessage: analysis.displayMessage ?? d.analysis.displayMessage,
                 },
               };
             }
@@ -639,6 +842,9 @@ export function NextStepQueueView() {
                             lastAnalyzedAt: new Date().toISOString(),
                             needsAnalysis: false,
                             analysisStatus: event.analysis.status,
+                            confidence: event.analysis.confidence ?? deal.analysis.confidence,
+                            actionType: event.analysis.actionType ?? deal.analysis.actionType,
+                            displayMessage: event.analysis.displayMessage ?? deal.analysis.displayMessage,
                           },
                         };
                       }
@@ -1131,6 +1337,7 @@ export function NextStepQueueView() {
             <table className="w-full">
               <thead>
                 <tr className="bg-gray-50/80 border-b border-gray-200">
+                  <th className="w-8 px-1 py-3" />
                   <th className="w-10 px-4 py-3">
                     <input
                       type="checkbox"
@@ -1186,6 +1393,7 @@ export function NextStepQueueView() {
                   const isExiting = exitingDeals.has(deal.id);
                   const hasTask = deal.existingTask !== null;
                   const statusBadge = getStatusBadge(deal.status, deal);
+                  const isExpanded = expandedDealId === deal.id;
 
                   // Batch analysis state for this row
                   const batchResult = batchResults.get(deal.id);
@@ -1196,10 +1404,12 @@ export function NextStepQueueView() {
                   const isHighValue = (deal.amount || 0) >= 50000;
 
                   return (
+                    <React.Fragment key={deal.id}>
                     <tr
-                      key={deal.id}
-                      className={`group transition-all duration-500 ${
-                        isExiting
+                      className={`group transition-all duration-500 cursor-pointer ${
+                        isExpanded
+                          ? 'bg-slate-50'
+                          : isExiting
                           ? 'bg-emerald-50'
                           : selectedDeals.has(deal.id)
                           ? 'bg-indigo-50/70'
@@ -1212,8 +1422,12 @@ export function NextStepQueueView() {
                           : 'bg-white hover:bg-gray-50'
                       }`}
                       style={isExiting ? { opacity: 0, transition: 'opacity 1.2s ease-out, background-color 0.3s' } : undefined}
+                      onClick={() => toggleExpanded(deal.id)}
                     >
-                      <td className="px-4 py-4">
+                      <td className="px-1 py-4 text-center">
+                        <ChevronIcon expanded={isExpanded} />
+                      </td>
+                      <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-center">
                           {isBeingBatchAnalyzed ? (
                             <svg className="animate-spin w-4 h-4 text-indigo-600" fill="none" viewBox="0 0 24 24">
@@ -1244,6 +1458,7 @@ export function NextStepQueueView() {
                           href={getHubSpotDealUrl(deal.hubspotDealId)}
                           target="_blank"
                           rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
                           className={`text-sm hover:text-indigo-600 transition-colors block truncate ${
                             isHighValue ? 'font-semibold text-gray-900' : 'font-medium text-gray-800'
                           }`}
@@ -1296,7 +1511,7 @@ export function NextStepQueueView() {
                           <span className="text-sm text-gray-400 italic">No next step</span>
                         )}
                       </td>
-                      <td className="px-4 py-4">
+                      <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center gap-2">
                           {/* Refresh from HubSpot button */}
                           <Tooltip content="Refresh from HubSpot">
@@ -1388,6 +1603,14 @@ export function NextStepQueueView() {
                         </div>
                       </td>
                     </tr>
+                    {isExpanded && (
+                      <tr>
+                        <td colSpan={9} className="p-0">
+                          <ExpandedNextStepPanel deal={deal} />
+                        </td>
+                      </tr>
+                    )}
+                    </React.Fragment>
                   );
                 })}
               </tbody>

@@ -32,6 +32,9 @@ interface AnalysisInfo {
   analyzedValue: string | null;  // The next_step text that was analyzed
   needsAnalysis: boolean;        // True if next_step changed since last analysis or never analyzed
   analysisStatus: string | null; // The status from last analysis (date_found, date_inferred, etc.)
+  confidence: number | null;
+  actionType: string | null;
+  displayMessage: string | null;
 }
 
 interface NextStepQueueDeal {
@@ -116,6 +119,9 @@ export async function GET(request: NextRequest) {
         next_step_analyzed_at,
         next_step_analyzed_value,
         next_step_last_updated_at,
+        next_step_confidence,
+        next_step_action_type,
+        next_step_display_message,
         close_date
       `)
       .in('owner_id', ownerIds)
@@ -197,6 +203,9 @@ export async function GET(request: NextRequest) {
         analyzedValue: deal.next_step_analyzed_value,
         needsAnalysis,
         analysisStatus: deal.next_step_status,
+        confidence: deal.next_step_confidence ?? null,
+        actionType: deal.next_step_action_type ?? null,
+        displayMessage: deal.next_step_display_message ?? null,
       };
 
       // Determine effective status for display
