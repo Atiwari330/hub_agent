@@ -42,6 +42,9 @@ export const DealRecordSchema = z.object({
   closed_won_entered_at: z.string().nullable().optional(),
   // Deal collaborator from 007_hygiene_commitments.sql
   deal_collaborator: z.string().nullable().optional(),
+  // Hot Tracker columns from 021_hot_tracker.sql
+  proposal_entered_at: z.string().nullable().optional(),
+  sent_gift_or_incentive: z.boolean().nullable().optional(),
 });
 
 export type DealRecord = z.infer<typeof DealRecordSchema>;

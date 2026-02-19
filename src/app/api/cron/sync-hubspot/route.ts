@@ -114,6 +114,8 @@ export async function GET(request: Request) {
       demo_scheduled_entered_at: toTimestamp(deal.properties[TRACKED_STAGES.DEMO_SCHEDULED.property]),
       demo_completed_entered_at: toTimestamp(deal.properties[TRACKED_STAGES.DEMO_COMPLETED.property]),
       closed_won_entered_at: toTimestamp(deal.properties[TRACKED_STAGES.CLOSED_WON.property]),
+      proposal_entered_at: toTimestamp(deal.properties[TRACKED_STAGES.PROPOSAL.property]),
+      sent_gift_or_incentive: deal.properties.sent_gift_or_incentive === 'true',
       synced_at: new Date().toISOString(),
     }));
 
@@ -206,6 +208,8 @@ export async function GET(request: Request) {
       demo_scheduled_entered_at: toTimestamp(deal.properties[TRACKED_STAGES.DEMO_SCHEDULED.property]),
       demo_completed_entered_at: toTimestamp(deal.properties[TRACKED_STAGES.DEMO_COMPLETED.property]),
       closed_won_entered_at: toTimestamp(deal.properties[TRACKED_STAGES.CLOSED_WON.property]),
+      proposal_entered_at: toTimestamp(deal.properties[TRACKED_STAGES.PROPOSAL.property]),
+      sent_gift_or_incentive: deal.properties.sent_gift_or_incentive === 'true',
       synced_at: new Date().toISOString(),
     }));
 

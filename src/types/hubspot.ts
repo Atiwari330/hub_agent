@@ -36,6 +36,8 @@ export const HubSpotDealSchema = z.object({
     proposal_stage: z.string().nullable().optional(),
     // Deal collaborator for hygiene tracking
     hs_all_collaborator_owner_ids: z.string().nullable().optional(),
+    // Hot Tracker: gift/incentive flag
+    sent_gift_or_incentive: z.string().nullable().optional(),
     // Stage entry timestamps for weekly pipeline tracking
     // These use the HubSpot stage IDs as property names
     'hs_v2_date_entered_2030251': z.string().nullable().optional(), // MQL
@@ -44,6 +46,7 @@ export const HubSpotDealSchema = z.object({
     'hs_v2_date_entered_baedc188-ba76-4a41-8723-5bb99fe7c5bf': z.string().nullable().optional(), // Demo Scheduled
     'hs_v2_date_entered_963167283': z.string().nullable().optional(), // Demo Completed
     'hs_v2_date_entered_97b2bcc6-fb34-4b56-8e6e-c349c88ef3d5': z.string().nullable().optional(), // Closed Won
+    'hs_v2_date_entered_59865091': z.string().nullable().optional(), // Proposal/Evaluating
   }),
   createdAt: z.string().optional(),
   updatedAt: z.string().optional(),

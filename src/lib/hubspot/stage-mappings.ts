@@ -44,6 +44,12 @@ export const TRACKED_STAGES = {
     property: 'hs_v2_date_entered_97b2bcc6-fb34-4b56-8e6e-c349c88ef3d5',
     dbColumn: 'closed_won_entered_at',
   },
+  PROPOSAL: {
+    id: '59865091',
+    label: 'Proposal/Evaluating',
+    property: 'hs_v2_date_entered_59865091',
+    dbColumn: 'proposal_entered_at',
+  },
 } as const;
 
 // Get all HubSpot property names for stage entry timestamps

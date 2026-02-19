@@ -183,6 +183,8 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
   // Customer Success queues
   const isOnAtRiskQueue = pathname === '/dashboard/queues/at-risk';
   const isOnCSHygieneQueue = pathname === '/dashboard/queues/cs-hygiene';
+  // Hot Tracker
+  const isOnHotTracker = pathname === '/dashboard/hot-tracker';
 
   return (
     <aside className={`fixed left-0 top-0 h-screen bg-slate-900 text-slate-100 flex flex-col transition-all duration-300 ${isCollapsed ? 'w-16' : 'w-64'}`}>
@@ -229,6 +231,27 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
               </div>
             )}
           </>
+        )}
+
+        {/* Hot Tracker Link */}
+        {hasPermission(user, RESOURCES.HOT_TRACKER) && (
+          <div className="mb-2">
+            <Link
+              href="/dashboard/hot-tracker"
+              className={`flex items-center gap-3 py-2.5 text-sm font-medium transition-colors ${isCollapsed ? 'px-0 justify-center' : 'px-4'} ${
+                isOnHotTracker
+                  ? 'bg-indigo-600 text-white'
+                  : 'text-slate-300 hover:bg-slate-800'
+              }`}
+              title={isCollapsed ? 'Hot Tracker' : undefined}
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.777 17.656 7.343A7.975 7.975 0 0120 13a7.975 7.975 0 01-2.343 5.657z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.879 16.121A3 3 0 1012.015 11L11 14H9c0 .768.293 1.536.879 2.121z" />
+              </svg>
+              {!isCollapsed && <span>Hot Tracker</span>}
+            </Link>
+          </div>
         )}
 
         {/* Account Executives Section - only show if user has ae_detail permission */}
