@@ -11,7 +11,6 @@
  */
 
 import type { HubSpotCall, HubSpotEmail, HubSpotMeeting } from '@/lib/hubspot/engagements';
-import { addBusinessDays } from './business-days';
 
 export interface TouchCounts {
   calls: number;
@@ -101,7 +100,7 @@ export function countTouchesInRange(
 /**
  * Calculate Week 1 touch compliance for a deal
  *
- * Week 1 = first 5 business days after deal creation
+ * Week 1 = first 7 calendar days after deal creation (day 0 through day 6)
  * Target = 6 touches (configurable)
  *
  * @param calls - Array of HubSpot calls for the deal
@@ -120,8 +119,9 @@ export function analyzeWeek1Touches(
   const createdDate = new Date(dealCreatedAt);
   createdDate.setHours(0, 0, 0, 0);
 
-  // Week 1 = 5 business days from creation
-  const week1EndDate = addBusinessDays(createdDate, 5);
+  // Week 1 = 7 calendar days from creation (day 0 through day 6)
+  const week1EndDate = new Date(createdDate);
+  week1EndDate.setDate(week1EndDate.getDate() + 6);
   week1EndDate.setHours(23, 59, 59, 999);
 
   const now = new Date();

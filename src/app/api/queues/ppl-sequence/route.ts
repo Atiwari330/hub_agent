@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/client';
 import { SYNC_CONFIG } from '@/lib/hubspot/sync-config';
 import { getAllPipelines } from '@/lib/hubspot/pipelines';
-import { getBusinessDaysSinceDate } from '@/lib/utils/business-days';
 import { batchFetchDealEngagements } from '@/lib/hubspot/batch-engagements';
 import { analyzeWeek1Touches, countTouchesInRange, type Week1TouchAnalysis } from '@/lib/utils/touch-counter';
 import { checkApiAuth } from '@/lib/auth/api';
@@ -114,7 +113,7 @@ export async function GET(request: NextRequest) {
       const hubspotDealId = deal.hubspot_deal_id;
 
       const dealAgeDays = deal.hubspot_created_at
-        ? getBusinessDaysSinceDate(deal.hubspot_created_at)
+        ? Math.floor((Date.now() - new Date(deal.hubspot_created_at).getTime()) / 86400000)
         : 0;
 
       let week1Analysis: Week1TouchAnalysis | null = null;

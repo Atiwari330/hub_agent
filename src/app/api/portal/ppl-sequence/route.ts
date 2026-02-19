@@ -4,7 +4,6 @@ import { RESOURCES } from '@/lib/auth/types';
 import { createServiceClient } from '@/lib/supabase/client';
 import { SYNC_CONFIG } from '@/lib/hubspot/sync-config';
 import { getAllPipelines } from '@/lib/hubspot/pipelines';
-import { getBusinessDaysSinceDate } from '@/lib/utils/business-days';
 import { batchFetchDealEngagements } from '@/lib/hubspot/batch-engagements';
 import { analyzeWeek1Touches, countTouchesInRange } from '@/lib/utils/touch-counter';
 import { ACTIVE_DEAL_STAGES, type PplSequenceDeal, type QueueResponse } from '@/types/ppl-sequence';
@@ -104,7 +103,7 @@ export async function GET() {
       const hubspotDealId = deal.hubspot_deal_id;
 
       const dealAgeDays = deal.hubspot_created_at
-        ? getBusinessDaysSinceDate(deal.hubspot_created_at)
+        ? Math.floor((Date.now() - new Date(deal.hubspot_created_at).getTime()) / 86400000)
         : 0;
 
       let week1Analysis: ReturnType<typeof analyzeWeek1Touches> | null = null;

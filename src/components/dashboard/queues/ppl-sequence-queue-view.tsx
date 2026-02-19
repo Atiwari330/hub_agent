@@ -320,19 +320,19 @@ function MethodologyPanel({ open, onClose }: { open: boolean; onClose: () => voi
               <tbody className="text-gray-700">
                 <tr className="border-b border-blue-100">
                   <td className="py-1.5 pr-4 font-medium whitespace-nowrap">Age</td>
-                  <td className="py-1.5">Business days since the deal was created in HubSpot (excludes weekends)</td>
+                  <td className="py-1.5">Calendar days since the deal was created in HubSpot</td>
                 </tr>
                 <tr className="border-b border-blue-100">
                   <td className="py-1.5 pr-4 font-medium whitespace-nowrap">Week 1 Touches</td>
-                  <td className="py-1.5">Total calls + outbound emails during the first 5 business days after deal creation</td>
+                  <td className="py-1.5">Total calls + outbound emails during the first 7 days after deal creation</td>
                 </tr>
                 <tr className="border-b border-blue-100">
                   <td className="py-1.5 pr-4 font-medium whitespace-nowrap">Wk 1 Calls</td>
-                  <td className="py-1.5">Calls logged in HubSpot within the first 5 business days</td>
+                  <td className="py-1.5">Calls logged in HubSpot within the first 7 days</td>
                 </tr>
                 <tr className="border-b border-blue-100">
                   <td className="py-1.5 pr-4 font-medium whitespace-nowrap">Wk 1 Emails</td>
-                  <td className="py-1.5">Outbound emails sent within the first 5 business days</td>
+                  <td className="py-1.5">Outbound emails sent within the first 7 days</td>
                 </tr>
                 <tr className="border-b border-blue-100">
                   <td className="py-1.5 pr-4 font-medium whitespace-nowrap">Total Touches</td>
@@ -361,13 +361,16 @@ function MethodologyPanel({ open, onClose }: { open: boolean; onClose: () => voi
           </p>
         </div>
 
-        {/* Avg Touches KPI */}
+        {/* Week 1 Compliance Section */}
         <div className="mb-4">
-          <h4 className="text-sm font-semibold text-gray-800 mb-2">Avg Week 1 Touches KPI</h4>
-          <p className="text-sm text-gray-700">
-            Shows the average number of Week 1 touches across PPL deals, excluding deals where a meeting was booked
-            (since those stopped the sequence early on success, which would skew the average down). This tells you:
-            for deals that went through the full sequence without getting a meeting, how hard are AEs working them?
+          <h4 className="text-sm font-semibold text-gray-800 mb-2">Week 1 Compliance Dashboard</h4>
+          <p className="text-sm text-gray-700 mb-2">
+            The scorecards show average Week 1 touches per AE and as a team, excluding deals where a meeting was booked
+            (since those stopped the sequence early on success, which would skew the average down).
+          </p>
+          <p className="text-sm text-gray-700 mb-2">
+            The weekly trend chart groups deals by the calendar week they were created, showing how team touch
+            averages are trending over time. Toggle &quot;By AE&quot; to see individual performance within each week.
           </p>
           <ul className="text-sm text-gray-700 space-y-1 ml-4 list-disc mt-1">
             <li>Green: Average &ge; 6.0 (meeting target)</li>
@@ -389,68 +392,350 @@ function MethodologyPanel({ open, onClose }: { open: boolean; onClose: () => voi
   );
 }
 
-// ===== Avg Touches KPI Card =====
+// ===== Week 1 Compliance KPI Helpers =====
 
-function AvgTouchesKpiCard({ allDeals, filteredDeals }: { allDeals: PplSequenceDeal[]; filteredDeals: PplSequenceDeal[] }) {
-  const { globalAvg, globalSampleSize, filteredAvg, filteredSampleSize, isFiltered } = useMemo(() => {
-    // Compute global avg from allDeals (excludes meeting-booked and pending)
-    const globalEligible = allDeals.filter(
-      (d) => !d.meetingBooked && !d.needsActivityCheck && d.week1Analysis
+const TOUCH_TARGET = 6.0;
+
+function getWeekCohortKey(dateString: string): string {
+  const date = new Date(dateString);
+  const day = date.getDay(); // 0=Sun, 1=Mon
+  const diff = (day + 6) % 7; // days since Monday
+  const monday = new Date(date);
+  monday.setDate(date.getDate() - diff);
+  return monday.toISOString().slice(0, 10);
+}
+
+function formatWeekLabel(mondayStr: string): string {
+  const date = new Date(mondayStr + 'T00:00:00');
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function getAvgColor(avg: number): string {
+  if (avg >= TOUCH_TARGET) return 'text-emerald-600';
+  if (avg >= 4) return 'text-amber-600';
+  return 'text-red-600';
+}
+
+function getBarColor(avg: number): string {
+  if (avg >= TOUCH_TARGET) return 'bg-emerald-500';
+  if (avg >= 4) return 'bg-amber-500';
+  return 'bg-red-500';
+}
+
+const AE_COLORS = [
+  { bar: 'bg-indigo-500', text: 'text-indigo-600', light: 'bg-indigo-100' },
+  { bar: 'bg-cyan-500', text: 'text-cyan-600', light: 'bg-cyan-100' },
+  { bar: 'bg-rose-500', text: 'text-rose-600', light: 'bg-rose-100' },
+];
+
+// ===== Week 1 Compliance KPI Components =====
+
+function TrendBadge({ currentAvg, previousAvg }: { currentAvg: number; previousAvg: number }) {
+  const diff = currentAvg - previousAvg;
+  const absDiff = Math.abs(diff);
+
+  if (absDiff <= 0.1) {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-gray-100 text-gray-600">
+        &rarr; flat vs prev week
+      </span>
     );
-    const gAvg = globalEligible.length > 0
-      ? globalEligible.reduce((sum, d) => sum + (d.week1Analysis?.touches.total ?? 0), 0) / globalEligible.length
-      : null;
+  }
 
-    // Compute filtered avg only when filters are active
-    const filtered = filteredDeals.length !== allDeals.length;
-    let fAvg: number | null = null;
-    let fSampleSize = 0;
-    if (filtered) {
-      const filteredEligible = filteredDeals.filter(
-        (d) => !d.meetingBooked && !d.needsActivityCheck && d.week1Analysis
-      );
-      if (filteredEligible.length > 0) {
-        fAvg = filteredEligible.reduce((sum, d) => sum + (d.week1Analysis?.touches.total ?? 0), 0) / filteredEligible.length;
-        fSampleSize = filteredEligible.length;
-      }
-    }
-
-    return {
-      globalAvg: gAvg,
-      globalSampleSize: globalEligible.length,
-      filteredAvg: fAvg,
-      filteredSampleSize: fSampleSize,
-      isFiltered: filtered,
-    };
-  }, [allDeals, filteredDeals]);
-
-  if (globalAvg === null) return null;
-
-  const TARGET = 6.0;
-  const colorClass = globalAvg >= TARGET ? 'text-emerald-600' : globalAvg >= 4 ? 'text-amber-600' : 'text-red-600';
-  const bgClass = globalAvg >= TARGET ? 'bg-emerald-50 border-emerald-200' : globalAvg >= 4 ? 'bg-amber-50 border-amber-200' : 'bg-red-50 border-red-200';
+  if (diff > 0) {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-emerald-100 text-emerald-700">
+        &uarr; {absDiff.toFixed(1)} vs prev week
+      </span>
+    );
+  }
 
   return (
-    <div className={`inline-flex items-center gap-4 px-4 py-3 rounded-lg border mb-4 ${bgClass}`}>
-      <div>
-        <div className="text-xs font-medium text-gray-500 uppercase tracking-wider">
-          Avg Week 1 Touches <span className="normal-case">(excl. meeting-booked)</span>
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-red-100 text-red-700">
+      &darr; {absDiff.toFixed(1)} vs prev week
+    </span>
+  );
+}
+
+function AeKpiCard({ name, avg, dealCount, isTeam }: { name: string; avg: number; dealCount: number; isTeam?: boolean }) {
+  const pct = Math.min(100, (avg / TOUCH_TARGET) * 100);
+  const colorClass = getAvgColor(avg);
+  const barColor = avg >= TOUCH_TARGET ? 'bg-emerald-500' : avg >= 4 ? 'bg-amber-500' : 'bg-red-500';
+
+  return (
+    <div className={`flex-1 min-w-[160px] rounded-lg border p-4 ${isTeam ? 'bg-slate-50 border-slate-300' : 'bg-white border-gray-200'}`}>
+      <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider truncate">
+        {isTeam ? 'Team Average' : name}
+      </div>
+      <div className={`text-3xl font-bold tabular-nums mt-1 ${colorClass}`}>
+        {avg.toFixed(1)}
+      </div>
+      <div className="text-xs text-gray-500 mt-0.5">
+        avg touches ({dealCount} deal{dealCount !== 1 ? 's' : ''})
+      </div>
+      <div className="mt-2">
+        <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+          <div className={`h-full rounded-full ${barColor}`} style={{ width: `${pct}%` }} />
         </div>
-        <div className="flex items-baseline gap-2 mt-0.5">
-          <span className={`text-2xl font-bold tabular-nums ${colorClass}`}>
-            {globalAvg.toFixed(1)}
-          </span>
-          <span className="text-sm text-gray-400">/ {TARGET.toFixed(1)} target</span>
+        <div className="text-xs text-gray-400 mt-0.5 text-right tabular-nums">/ {TOUCH_TARGET.toFixed(1)}</div>
+      </div>
+    </div>
+  );
+}
+
+interface WeekCohort {
+  mondayStr: string;
+  label: string;
+  teamAvg: number;
+  teamDealCount: number;
+  byAe: { name: string; avg: number; dealCount: number }[];
+}
+
+function WeeklyTrendChart({ cohorts, aeNames }: { cohorts: WeekCohort[]; aeNames: string[] }) {
+  const [viewMode, setViewMode] = useState<'team' | 'byAe'>('team');
+  const [hoveredWeek, setHoveredWeek] = useState<string | null>(null);
+
+  if (cohorts.length === 0) return null;
+
+  const maxVal = Math.max(TOUCH_TARGET + 1, ...cohorts.map((c) => {
+    if (viewMode === 'team') return c.teamAvg;
+    return Math.max(...c.byAe.map((a) => a.avg), 0);
+  }));
+  const chartHeight = 180;
+  const barToHeight = (val: number) => (val / maxVal) * chartHeight;
+  const targetY = chartHeight - barToHeight(TOUCH_TARGET);
+
+  // Current week detection
+  const todayMondayKey = getWeekCohortKey(new Date().toISOString());
+
+  return (
+    <div className="mt-6">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-semibold text-gray-700">Weekly Avg Touches Trend</h3>
+        <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
+          <button
+            onClick={() => setViewMode('team')}
+            className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${viewMode === 'team' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+          >
+            Team
+          </button>
+          <button
+            onClick={() => setViewMode('byAe')}
+            className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${viewMode === 'byAe' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+          >
+            By AE
+          </button>
         </div>
-        <div className="text-xs text-gray-400 mt-0.5">
-          Based on {globalSampleSize} deal{globalSampleSize !== 1 ? 's' : ''}
+      </div>
+
+      <div className="relative bg-white border border-gray-200 rounded-lg p-4 overflow-x-auto">
+        {/* Y-axis labels */}
+        <div className="flex">
+          <div className="w-8 flex-shrink-0 relative" style={{ height: chartHeight }}>
+            <span className="absolute top-0 right-1 text-[10px] text-gray-400">{Math.ceil(maxVal)}</span>
+            <span className="absolute right-1 text-[10px] text-gray-400" style={{ top: targetY - 6 }}>{TOUCH_TARGET.toFixed(0)}</span>
+            <span className="absolute bottom-0 right-1 text-[10px] text-gray-400">0</span>
+          </div>
+
+          {/* Bars area */}
+          <div className="flex-1 relative" style={{ height: chartHeight }}>
+            {/* Target line */}
+            <div
+              className="absolute left-0 right-0 border-t-2 border-dashed border-gray-300 z-10"
+              style={{ top: targetY }}
+            >
+              <span className="absolute -top-3 right-0 text-[10px] text-gray-400">Target: {TOUCH_TARGET.toFixed(1)}</span>
+            </div>
+
+            {/* Bars */}
+            <div className="flex items-end h-full gap-1 px-1" style={{ minWidth: cohorts.length * (viewMode === 'byAe' ? 80 : 50) }}>
+              {cohorts.map((cohort) => {
+                const isCurrent = cohort.mondayStr === todayMondayKey;
+                const isHovered = hoveredWeek === cohort.mondayStr;
+
+                return (
+                  <div
+                    key={cohort.mondayStr}
+                    className="flex-1 flex flex-col items-center justify-end relative min-w-[40px]"
+                    style={{ height: chartHeight }}
+                    onMouseEnter={() => setHoveredWeek(cohort.mondayStr)}
+                    onMouseLeave={() => setHoveredWeek(null)}
+                  >
+                    {/* Tooltip */}
+                    {isHovered && (
+                      <div className="absolute bottom-full mb-2 z-20 bg-gray-900 text-white text-xs rounded-lg p-2.5 shadow-lg whitespace-nowrap">
+                        <div className="font-semibold mb-1">{cohort.label}</div>
+                        <div>Team avg: {cohort.teamAvg.toFixed(1)} ({cohort.teamDealCount} deals)</div>
+                        {cohort.byAe.map((ae) => (
+                          <div key={ae.name} className="text-gray-300">{ae.name}: {ae.avg.toFixed(1)} ({ae.dealCount})</div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Bar(s) */}
+                    {viewMode === 'team' ? (
+                      <div
+                        className={`w-8 rounded-t ${getBarColor(cohort.teamAvg)} transition-all ${isHovered ? 'opacity-80' : ''}`}
+                        style={{ height: barToHeight(cohort.teamAvg) }}
+                      />
+                    ) : (
+                      <div className="flex items-end gap-0.5">
+                        {cohort.byAe.map((ae, i) => (
+                          <div
+                            key={ae.name}
+                            className={`rounded-t transition-all ${AE_COLORS[i % AE_COLORS.length].bar} ${isHovered ? 'opacity-80' : ''}`}
+                            style={{ height: barToHeight(ae.avg), width: Math.max(12, 24 / Math.max(cohort.byAe.length, 1)) }}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
-        {isFiltered && filteredAvg !== null && (
-          <div className="text-xs text-gray-500 mt-1">
-            ({filteredAvg.toFixed(1)} avg among {filteredSampleSize} filtered deal{filteredSampleSize !== 1 ? 's' : ''})
+
+        {/* X-axis labels */}
+        <div className="flex ml-8">
+          <div className="flex-1 flex gap-1 px-1" style={{ minWidth: cohorts.length * (viewMode === 'byAe' ? 80 : 50) }}>
+            {cohorts.map((cohort) => {
+              const isCurrent = cohort.mondayStr === todayMondayKey;
+              return (
+                <div key={cohort.mondayStr} className="flex-1 text-center min-w-[40px]">
+                  <span className={`text-[10px] ${isCurrent ? 'font-bold text-indigo-600' : 'text-gray-400'}`}>
+                    {cohort.label}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* AE legend for By AE mode */}
+        {viewMode === 'byAe' && aeNames.length > 0 && (
+          <div className="flex items-center gap-3 mt-3 pt-3 border-t border-gray-100">
+            {aeNames.map((name, i) => (
+              <div key={name} className="flex items-center gap-1.5">
+                <div className={`w-2.5 h-2.5 rounded-sm ${AE_COLORS[i % AE_COLORS.length].bar}`} />
+                <span className="text-xs text-gray-600">{name}</span>
+              </div>
+            ))}
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function Week1ComplianceSection({ filteredDeals }: { filteredDeals: PplSequenceDeal[] }) {
+  const { aeCards, teamCard, weekCohorts, aeNames, trend } = useMemo(() => {
+    // Filter to eligible deals (exclude meeting-booked and pending)
+    const eligible = filteredDeals.filter(
+      (d) => !d.meetingBooked && !d.needsActivityCheck && d.week1Analysis
+    );
+
+    if (eligible.length === 0) {
+      return { aeCards: [], teamCard: null, weekCohorts: [], aeNames: [] as string[], trend: null };
+    }
+
+    // Group by AE
+    const byAe = new Map<string, { name: string; deals: PplSequenceDeal[] }>();
+    for (const deal of eligible) {
+      const existing = byAe.get(deal.ownerId);
+      if (existing) {
+        existing.deals.push(deal);
+      } else {
+        byAe.set(deal.ownerId, { name: deal.ownerName, deals: [deal] });
+      }
+    }
+
+    // Per-AE cards
+    const aeCardData = Array.from(byAe.values())
+      .map(({ name, deals }) => ({
+        name,
+        avg: deals.reduce((sum, d) => sum + (d.week1Analysis?.touches.total ?? 0), 0) / deals.length,
+        dealCount: deals.length,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    // Team aggregate
+    const teamAvg = eligible.reduce((sum, d) => sum + (d.week1Analysis?.touches.total ?? 0), 0) / eligible.length;
+    const teamCardData = { name: 'Team Average', avg: teamAvg, dealCount: eligible.length };
+
+    // AE names (sorted)
+    const sortedAeNames = aeCardData.map((a) => a.name);
+
+    // Group by creation week cohort
+    const weekMap = new Map<string, { deals: PplSequenceDeal[]; byAe: Map<string, PplSequenceDeal[]> }>();
+    for (const deal of eligible) {
+      if (!deal.hubspotCreatedAt) continue;
+      const key = getWeekCohortKey(deal.hubspotCreatedAt);
+      const existing = weekMap.get(key);
+      if (existing) {
+        existing.deals.push(deal);
+        const aeDeals = existing.byAe.get(deal.ownerName);
+        if (aeDeals) aeDeals.push(deal);
+        else existing.byAe.set(deal.ownerName, [deal]);
+      } else {
+        const aeMap = new Map<string, PplSequenceDeal[]>();
+        aeMap.set(deal.ownerName, [deal]);
+        weekMap.set(key, { deals: [deal], byAe: aeMap });
+      }
+    }
+
+    // Build sorted cohorts
+    const cohorts: WeekCohort[] = Array.from(weekMap.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([mondayStr, { deals, byAe: aeMap }]) => ({
+        mondayStr,
+        label: formatWeekLabel(mondayStr),
+        teamAvg: deals.reduce((sum, d) => sum + (d.week1Analysis?.touches.total ?? 0), 0) / deals.length,
+        teamDealCount: deals.length,
+        byAe: sortedAeNames
+          .filter((name) => aeMap.has(name))
+          .map((name) => {
+            const aeDeals = aeMap.get(name)!;
+            return {
+              name,
+              avg: aeDeals.reduce((sum, d) => sum + (d.week1Analysis?.touches.total ?? 0), 0) / aeDeals.length,
+              dealCount: aeDeals.length,
+            };
+          }),
+      }));
+
+    // Compute trend (last two cohorts)
+    let trendData: { currentAvg: number; previousAvg: number } | null = null;
+    if (cohorts.length >= 2) {
+      trendData = {
+        currentAvg: cohorts[cohorts.length - 1].teamAvg,
+        previousAvg: cohorts[cohorts.length - 2].teamAvg,
+      };
+    }
+
+    return { aeCards: aeCardData, teamCard: teamCardData, weekCohorts: cohorts, aeNames: sortedAeNames, trend: trendData };
+  }, [filteredDeals]);
+
+  if (!teamCard) return null;
+
+  return (
+    <div className="mb-6">
+      {/* Section header */}
+      <div className="flex items-center gap-3 mb-3">
+        <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">Week 1 Compliance</h2>
+        {trend && <TrendBadge currentAvg={trend.currentAvg} previousAvg={trend.previousAvg} />}
+      </div>
+
+      {/* Per-AE Scorecards + Team */}
+      <div className="flex gap-3 overflow-x-auto">
+        {aeCards.map((ae) => (
+          <AeKpiCard key={ae.name} name={ae.name} avg={ae.avg} dealCount={ae.dealCount} />
+        ))}
+        <AeKpiCard name="Team Average" avg={teamCard.avg} dealCount={teamCard.dealCount} isTeam />
+      </div>
+
+      {/* Weekly Trend Chart */}
+      <WeeklyTrendChart cohorts={weekCohorts} aeNames={aeNames} />
     </div>
   );
 }
@@ -737,7 +1022,7 @@ export function PplSequenceQueueView() {
           </button>
         </div>
         <p className="text-sm text-gray-600 mt-1">
-          Track Week 1 touch compliance for Paid Per Lead deals. Target: 6 touches in first 5 business days.
+          Track Week 1 touch compliance for Paid Per Lead deals. Target: 6 touches in first 7 days.
         </p>
       </div>
 
@@ -858,9 +1143,9 @@ export function PplSequenceQueueView() {
         </div>
       )}
 
-      {/* Avg Touches KPI Card */}
+      {/* Week 1 Compliance KPI Section */}
       {!loading && allDeals.length > 0 && (
-        <AvgTouchesKpiCard allDeals={allDeals} filteredDeals={filteredDeals} />
+        <Week1ComplianceSection filteredDeals={filteredDeals} />
       )}
 
       {/* Loading State */}
