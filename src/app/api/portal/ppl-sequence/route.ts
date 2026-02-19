@@ -5,7 +5,7 @@ import { createServiceClient } from '@/lib/supabase/client';
 import { SYNC_CONFIG } from '@/lib/hubspot/sync-config';
 import { getAllPipelines } from '@/lib/hubspot/pipelines';
 import { getBusinessDaysSinceDate } from '@/lib/utils/business-days';
-import { getCallsByDealId, getEmailsByDealId, getMeetingsByDealId } from '@/lib/hubspot/engagements';
+import { batchFetchDealEngagements } from '@/lib/hubspot/batch-engagements';
 import { analyzeWeek1Touches, countTouchesInRange } from '@/lib/utils/touch-counter';
 import { ACTIVE_DEAL_STAGES, type PplSequenceDeal, type QueueResponse } from '@/types/ppl-sequence';
 
@@ -85,6 +85,21 @@ export async function GET() {
     const pplDeals: PplSequenceDeal[] = [];
     const counts = { on_track: 0, behind: 0, critical: 0, pending: 0, meeting_booked: 0 };
 
+    // Batch-fetch all engagements in bulk (replaces per-deal sequential API calls)
+    const eligibleDealIds = (deals || [])
+      .filter((d) => d.hubspot_deal_id && d.hubspot_created_at)
+      .map((d) => d.hubspot_deal_id!);
+
+    let engagementMap = new Map<string, { calls: import('@/lib/hubspot/engagements').HubSpotCall[]; emails: import('@/lib/hubspot/engagements').HubSpotEmail[]; meetings: import('@/lib/hubspot/engagements').HubSpotMeeting[] }>();
+
+    if (eligibleDealIds.length > 0) {
+      try {
+        engagementMap = await batchFetchDealEngagements(eligibleDealIds);
+      } catch (error) {
+        console.warn('[portal/ppl-sequence] Batch engagement fetch failed, all deals will be pending:', error);
+      }
+    }
+
     for (const deal of deals || []) {
       const hubspotDealId = deal.hubspot_deal_id;
 
@@ -97,12 +112,9 @@ export async function GET() {
       let needsActivityCheck = false;
 
       if (hubspotDealId && deal.hubspot_created_at) {
-        try {
-          const [calls, emails, meetings] = await Promise.all([
-            getCallsByDealId(hubspotDealId),
-            getEmailsByDealId(hubspotDealId),
-            getMeetingsByDealId(hubspotDealId),
-          ]);
+        const engagements = engagementMap.get(hubspotDealId);
+        if (engagements) {
+          const { calls, emails, meetings } = engagements;
 
           week1Analysis = analyzeWeek1Touches(calls, emails, deal.hubspot_created_at, target, meetings);
 
@@ -119,8 +131,7 @@ export async function GET() {
           } else {
             counts[week1Analysis.status]++;
           }
-        } catch (error) {
-          console.warn(`[portal/ppl-sequence] Failed to fetch activity for deal ${hubspotDealId}:`, error);
+        } else {
           needsActivityCheck = true;
           counts.pending++;
         }

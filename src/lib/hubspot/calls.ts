@@ -7,6 +7,7 @@
 import { getHubSpotClient } from './client';
 import { FilterOperatorEnum } from '@hubspot/api-client/lib/codegen/crm/objects/calls';
 import type { CallData, CallContact, CallDeal } from '@/types/calls';
+import { chunk } from '@/lib/utils/chunk';
 
 // HubSpot portal ID for URL construction
 const HUBSPOT_PORTAL_ID = process.env.HUBSPOT_PORTAL_ID || '7358632';
@@ -159,17 +160,6 @@ export async function fetchAllCallsByOwner(
 
 // HubSpot batch API limit
 const BATCH_CHUNK_SIZE = 100;
-
-/**
- * Helper to chunk an array into batches of a given size
- */
-function chunk<T>(arr: T[], size: number): T[][] {
-  const chunks: T[][] = [];
-  for (let i = 0; i < arr.length; i += size) {
-    chunks.push(arr.slice(i, i + size));
-  }
-  return chunks;
-}
 
 /**
  * Fetch associations (contacts and deals) for a batch of call IDs.
