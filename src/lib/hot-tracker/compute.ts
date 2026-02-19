@@ -18,6 +18,11 @@ import { SYNC_CONFIG } from '@/lib/hubspot/sync-config';
 // 15-minute threshold in milliseconds
 const FIFTEEN_MINUTES_MS = 15 * 60 * 1000;
 
+// Hot Tracker excludes Adi Tiwari (tracked separately from the 3 target AEs)
+const HOT_TRACKER_AE_EMAILS = SYNC_CONFIG.TARGET_AE_EMAILS.filter(
+  (e) => e !== 'atiwari@opusbehavioral.com'
+);
+
 // ── Types ──
 
 export interface SqlDealDetail {
@@ -136,7 +141,7 @@ export async function computeHotTrackerForQuarter(
   const { data: owners } = await supabase
     .from('owners')
     .select('id, hubspot_owner_id, first_name, last_name')
-    .in('email', [...SYNC_CONFIG.TARGET_AE_EMAILS]);
+    .in('email', [...HOT_TRACKER_AE_EMAILS]);
 
   const ownerList: OwnerInfo[] = owners || [];
 

@@ -276,6 +276,7 @@ export async function getFilteredDealsForSync(
             product_s: deal.properties.product_s,
             proposal_stage: deal.properties.proposal_stage,
             hs_all_collaborator_owner_ids: deal.properties.hs_all_collaborator_owner_ids,
+            sent_gift_or_incentive: deal.properties.sent_gift_or_incentive,
             [TRACKED_STAGES.SQL.property]:
               deal.properties[TRACKED_STAGES.SQL.property],
             [TRACKED_STAGES.DISCOVERY.property]:
@@ -286,6 +287,8 @@ export async function getFilteredDealsForSync(
               deal.properties[TRACKED_STAGES.DEMO_COMPLETED.property],
             [TRACKED_STAGES.CLOSED_WON.property]:
               deal.properties[TRACKED_STAGES.CLOSED_WON.property],
+            [TRACKED_STAGES.PROPOSAL.property]:
+              deal.properties[TRACKED_STAGES.PROPOSAL.property],
           },
           createdAt: deal.createdAt?.toISOString(),
           updatedAt: deal.updatedAt?.toISOString(),
