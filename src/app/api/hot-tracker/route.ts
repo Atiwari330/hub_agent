@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/client';
 import { getCurrentQuarter } from '@/lib/utils/quarter';
+import { SYNC_CONFIG } from '@/lib/hubspot/sync-config';
+
+// Hot Tracker excludes Adi Tiwari — same filter as compute.ts
+const HOT_TRACKER_AE_EMAILS = SYNC_CONFIG.TARGET_AE_EMAILS.filter(
+  (e) => e !== 'atiwari@opusbehavioral.com'
+);
 
 export async function GET(request: NextRequest) {
   const supabase = await createServerSupabaseClient();
@@ -13,6 +19,14 @@ export async function GET(request: NextRequest) {
   if (quarter < 1 || quarter > 4) {
     return NextResponse.json({ error: 'Quarter must be between 1 and 4' }, { status: 400 });
   }
+
+  // Resolve allowed owner IDs from the Hot Tracker AE email list
+  const { data: allowedOwners } = await supabase
+    .from('owners')
+    .select('id')
+    .in('email', [...HOT_TRACKER_AE_EMAILS]);
+
+  const allowedOwnerIds = new Set((allowedOwners || []).map((o) => o.id as string));
 
   // Fetch all snapshot rows for this quarter
   const { data: snapshots, error } = await supabase
@@ -27,8 +41,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  // Filter snapshots to only team totals (owner_id null) and allowed AEs
+  const filtered = (snapshots || []).filter(
+    (s) => s.owner_id === null || allowedOwnerIds.has(s.owner_id)
+  );
+
   // Fetch owner names
-  const ownerIds = [...new Set((snapshots || []).filter((s) => s.owner_id).map((s) => s.owner_id!))];
+  const ownerIds = [...new Set(filtered.filter((s) => s.owner_id).map((s) => s.owner_id!))];
   const { data: owners } = await supabase
     .from('owners')
     .select('id, first_name, last_name, hubspot_owner_id')
@@ -39,8 +58,8 @@ export async function GET(request: NextRequest) {
   );
 
   // Get last computed timestamp
-  const lastComputed = snapshots && snapshots.length > 0
-    ? snapshots.reduce((latest, s) => {
+  const lastComputed = filtered.length > 0
+    ? filtered.reduce((latest, s) => {
         const ct = new Date(s.computed_at).getTime();
         return ct > latest ? ct : latest;
       }, 0)
@@ -72,7 +91,7 @@ export async function GET(request: NextRequest) {
     }[];
   }>();
 
-  for (const snap of snapshots || []) {
+  for (const snap of filtered) {
     if (!weekMap.has(snap.week_number)) {
       weekMap.set(snap.week_number, {
         weekNumber: snap.week_number,
