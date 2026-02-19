@@ -69,6 +69,7 @@ const STAGE_OPTIONS = [
 // Created date filter options
 const DATE_OPTIONS = [
   { value: 'all', label: 'All Time' },
+  { value: 'thisWeek', label: 'This Week' },
   { value: '7', label: 'Last 7 Days' },
   { value: '14', label: 'Last 14 Days' },
   { value: '30', label: 'Last 30 Days' },
@@ -390,26 +391,44 @@ function MethodologyPanel({ open, onClose }: { open: boolean; onClose: () => voi
 
 // ===== Avg Touches KPI Card =====
 
-function AvgTouchesKpiCard({ deals }: { deals: PplSequenceDeal[] }) {
-  const { avg, sampleSize } = useMemo(() => {
-    // Exclude meeting-booked deals and pending deals
-    const eligible = deals.filter(
+function AvgTouchesKpiCard({ allDeals, filteredDeals }: { allDeals: PplSequenceDeal[]; filteredDeals: PplSequenceDeal[] }) {
+  const { globalAvg, globalSampleSize, filteredAvg, filteredSampleSize, isFiltered } = useMemo(() => {
+    // Compute global avg from allDeals (excludes meeting-booked and pending)
+    const globalEligible = allDeals.filter(
       (d) => !d.meetingBooked && !d.needsActivityCheck && d.week1Analysis
     );
-    if (eligible.length === 0) return { avg: null, sampleSize: 0 };
+    const gAvg = globalEligible.length > 0
+      ? globalEligible.reduce((sum, d) => sum + (d.week1Analysis?.touches.total ?? 0), 0) / globalEligible.length
+      : null;
 
-    const total = eligible.reduce((sum, d) => sum + (d.week1Analysis?.touches.total ?? 0), 0);
+    // Compute filtered avg only when filters are active
+    const filtered = filteredDeals.length !== allDeals.length;
+    let fAvg: number | null = null;
+    let fSampleSize = 0;
+    if (filtered) {
+      const filteredEligible = filteredDeals.filter(
+        (d) => !d.meetingBooked && !d.needsActivityCheck && d.week1Analysis
+      );
+      if (filteredEligible.length > 0) {
+        fAvg = filteredEligible.reduce((sum, d) => sum + (d.week1Analysis?.touches.total ?? 0), 0) / filteredEligible.length;
+        fSampleSize = filteredEligible.length;
+      }
+    }
+
     return {
-      avg: total / eligible.length,
-      sampleSize: eligible.length,
+      globalAvg: gAvg,
+      globalSampleSize: globalEligible.length,
+      filteredAvg: fAvg,
+      filteredSampleSize: fSampleSize,
+      isFiltered: filtered,
     };
-  }, [deals]);
+  }, [allDeals, filteredDeals]);
 
-  if (avg === null) return null;
+  if (globalAvg === null) return null;
 
   const TARGET = 6.0;
-  const colorClass = avg >= TARGET ? 'text-emerald-600' : avg >= 4 ? 'text-amber-600' : 'text-red-600';
-  const bgClass = avg >= TARGET ? 'bg-emerald-50 border-emerald-200' : avg >= 4 ? 'bg-amber-50 border-amber-200' : 'bg-red-50 border-red-200';
+  const colorClass = globalAvg >= TARGET ? 'text-emerald-600' : globalAvg >= 4 ? 'text-amber-600' : 'text-red-600';
+  const bgClass = globalAvg >= TARGET ? 'bg-emerald-50 border-emerald-200' : globalAvg >= 4 ? 'bg-amber-50 border-amber-200' : 'bg-red-50 border-red-200';
 
   return (
     <div className={`inline-flex items-center gap-4 px-4 py-3 rounded-lg border mb-4 ${bgClass}`}>
@@ -419,13 +438,18 @@ function AvgTouchesKpiCard({ deals }: { deals: PplSequenceDeal[] }) {
         </div>
         <div className="flex items-baseline gap-2 mt-0.5">
           <span className={`text-2xl font-bold tabular-nums ${colorClass}`}>
-            {avg.toFixed(1)}
+            {globalAvg.toFixed(1)}
           </span>
           <span className="text-sm text-gray-400">/ {TARGET.toFixed(1)} target</span>
         </div>
         <div className="text-xs text-gray-400 mt-0.5">
-          Based on {sampleSize} deal{sampleSize !== 1 ? 's' : ''}
+          Based on {globalSampleSize} deal{globalSampleSize !== 1 ? 's' : ''}
         </div>
+        {isFiltered && filteredAvg !== null && (
+          <div className="text-xs text-gray-500 mt-1">
+            ({filteredAvg.toFixed(1)} avg among {filteredSampleSize} filtered deal{filteredSampleSize !== 1 ? 's' : ''})
+          </div>
+        )}
       </div>
     </div>
   );
@@ -529,7 +553,7 @@ export function PplSequenceQueueView() {
   const [showMethodology, setShowMethodology] = useState(false);
 
   // Quarter filter
-  const [quarterFilter, setQuarterFilter] = useState<QuarterFilter>(getCurrentQuarterFilter());
+  const [quarterFilter, setQuarterFilter] = useState<QuarterFilter>('all');
   const quarterOptions = useMemo(() => getQuarterOptions(), []);
   const currentYear = quarterOptions[0]?.year || new Date().getFullYear();
 
@@ -590,7 +614,17 @@ export function PplSequenceQueueView() {
     }
 
     // Filter by created date
-    if (dateFilter !== 'all') {
+    if (dateFilter === 'thisWeek') {
+      const now = new Date();
+      const dayOfWeek = now.getDay(); // 0=Sun, 1=Mon, ...
+      const monday = new Date(now);
+      monday.setDate(now.getDate() - ((dayOfWeek + 6) % 7));
+      monday.setHours(0, 0, 0, 0);
+      result = result.filter((d) => {
+        if (!d.hubspotCreatedAt) return false;
+        return new Date(d.hubspotCreatedAt) >= monday;
+      });
+    } else if (dateFilter !== 'all') {
       const days = parseInt(dateFilter, 10);
       const cutoffDate = new Date();
       cutoffDate.setDate(cutoffDate.getDate() - days);
@@ -672,10 +706,10 @@ export function PplSequenceQueueView() {
     setExpandedDealId((prev) => (prev === dealId ? null : dealId));
   };
 
-  const hasActiveFilters = quarterFilter !== getCurrentQuarterFilter() || aeFilter !== 'all' || statusFilter !== 'all' || stageFilter !== 'all' || dateFilter !== 'all';
+  const hasActiveFilters = quarterFilter !== 'all' || aeFilter !== 'all' || statusFilter !== 'all' || stageFilter !== 'all' || dateFilter !== 'all';
 
   const clearFilters = () => {
-    setQuarterFilter(getCurrentQuarterFilter());
+    setQuarterFilter('all');
     setAeFilter('all');
     setStatusFilter('all');
     setStageFilter('all');
@@ -826,7 +860,7 @@ export function PplSequenceQueueView() {
 
       {/* Avg Touches KPI Card */}
       {!loading && allDeals.length > 0 && (
-        <AvgTouchesKpiCard deals={filteredDeals} />
+        <AvgTouchesKpiCard allDeals={allDeals} filteredDeals={filteredDeals} />
       )}
 
       {/* Loading State */}
