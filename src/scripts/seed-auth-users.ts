@@ -47,13 +47,13 @@ const USERS = [
     email: 'eric@opusbehavioral.com',
     displayName: 'Eric Brandman',
     role: 'cmo',
-    permissions: ['queue:ppl-sequence'],
+    permissions: ['queue:ppl-sequence', 'hot_tracker'],
   },
   {
     email: 'hbuniotto@opusbehavioral.com',
     displayName: 'Humberto Buniotto',
     role: 'ceo',
-    permissions: ['queue:ppl-sequence'],
+    permissions: ['queue:ppl-sequence', 'hot_tracker'],
   },
   {
     email: 'aboyd@opusbehavioral.com',

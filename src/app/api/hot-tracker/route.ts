@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/client';
 import { getCurrentQuarter } from '@/lib/utils/quarter';
 import { SYNC_CONFIG } from '@/lib/hubspot/sync-config';
+import { checkApiAuth } from '@/lib/auth/api';
+import { RESOURCES } from '@/lib/auth';
 
 // Hot Tracker excludes Adi Tiwari — same filter as compute.ts
 const HOT_TRACKER_AE_EMAILS = SYNC_CONFIG.TARGET_AE_EMAILS.filter(
@@ -9,6 +11,9 @@ const HOT_TRACKER_AE_EMAILS = SYNC_CONFIG.TARGET_AE_EMAILS.filter(
 );
 
 export async function GET(request: NextRequest) {
+  const authResult = await checkApiAuth(RESOURCES.HOT_TRACKER);
+  if (authResult instanceof NextResponse) return authResult;
+
   const supabase = await createServerSupabaseClient();
 
   const searchParams = request.nextUrl.searchParams;
