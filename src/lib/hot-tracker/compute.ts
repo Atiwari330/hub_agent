@@ -83,7 +83,7 @@ export interface HotTrackerResult {
 
 // ── Week utilities ──
 
-function getWeekStart(date: Date): Date {
+export function getWeekStart(date: Date): Date {
   const d = new Date(date);
   const day = d.getUTCDay();
   const diff = d.getUTCDate() - day + (day === 0 ? -6 : 1);
@@ -92,11 +92,11 @@ function getWeekStart(date: Date): Date {
   return d;
 }
 
-function formatDateUTC(date: Date): string {
+export function formatDateUTC(date: Date): string {
   return date.toISOString().split('T')[0];
 }
 
-function getWeekNumberInQuarter(date: Date, quarterStart: Date): number {
+export function getWeekNumberInQuarter(date: Date, quarterStart: Date): number {
   const weekAlignedStart = getWeekStart(quarterStart);
   const diffMs = date.getTime() - weekAlignedStart.getTime();
   const diffWeeks = Math.floor(diffMs / (7 * 24 * 60 * 60 * 1000));

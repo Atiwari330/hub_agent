@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { getCurrentQuarter } from '@/lib/utils/quarter';
+import { PplDrillDownModal } from './ppl-drill-down-modal';
 
 // ── Types ──
 
@@ -106,6 +107,11 @@ export function HotTrackerView() {
   const [error, setError] = useState<string | null>(null);
   const [selectedYear, setSelectedYear] = useState<number>(getCurrentQuarter().year);
   const [selectedQuarter, setSelectedQuarter] = useState<number>(getCurrentQuarter().quarter);
+  const [pplModal, setPplModal] = useState<{
+    weekNumber: number;
+    ownerId?: string;
+    ownerName?: string;
+  } | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
@@ -521,23 +527,34 @@ export function HotTrackerView() {
                 const future = isFutureWeek(w.weekStart);
                 if (future || (w.team.pplComplianceDealsCount || 0) === 0) return <EmptyCell future={future} />;
                 return (
-                  <MetricCell
-                    value={formatPct(w.team.pplComplianceAvg)}
-                    sub={`(${w.team.pplComplianceDealsCount} deal${w.team.pplComplianceDealsCount !== 1 ? 's' : ''})`}
-                    colorClass={pctColor(w.team.pplComplianceAvg, goals.pplDailyCompliance)}
-                  />
+                  <button
+                    className="w-full text-left cursor-pointer"
+                    onClick={() => setPplModal({ weekNumber: w.weekNumber })}
+                  >
+                    <MetricCell
+                      value={formatPct(w.team.pplComplianceAvg)}
+                      sub={`(${w.team.pplComplianceDealsCount} deal${w.team.pplComplianceDealsCount !== 1 ? 's' : ''})`}
+                      colorClass={pctColor(w.team.pplComplianceAvg, goals.pplDailyCompliance)}
+                    />
+                  </button>
                 );
               }}
               renderAECell={(w, aeId) => {
                 const future = isFutureWeek(w.weekStart);
                 const ae = w.byAE.find((a) => a.ownerId === aeId);
                 if (future || !ae || (ae.pplComplianceDealsCount || 0) === 0) return <EmptyCell future={future} />;
+                const aeName = aeMap.get(aeId) || 'Unknown';
                 return (
-                  <MetricCell
-                    value={formatPct(ae.pplComplianceAvg)}
-                    sub={`(${ae.pplComplianceDealsCount} deal${ae.pplComplianceDealsCount !== 1 ? 's' : ''})`}
-                    colorClass={pctColor(ae.pplComplianceAvg, goals.pplDailyCompliance)}
-                  />
+                  <button
+                    className="w-full text-left cursor-pointer"
+                    onClick={() => setPplModal({ weekNumber: w.weekNumber, ownerId: aeId, ownerName: aeName })}
+                  >
+                    <MetricCell
+                      value={formatPct(ae.pplComplianceAvg)}
+                      sub={`(${ae.pplComplianceDealsCount} deal${ae.pplComplianceDealsCount !== 1 ? 's' : ''})`}
+                      colorClass={pctColor(ae.pplComplianceAvg, goals.pplDailyCompliance)}
+                    />
+                  </button>
                 );
               }}
               renderTotalCell={() => {
@@ -576,6 +593,17 @@ export function HotTrackerView() {
           </tbody>
         </table>
       </div>
+
+      {/* PPL Drill-Down Modal */}
+      <PplDrillDownModal
+        isOpen={pplModal !== null}
+        onClose={() => setPplModal(null)}
+        year={selectedYear}
+        quarter={selectedQuarter}
+        weekNumber={pplModal?.weekNumber ?? 1}
+        ownerId={pplModal?.ownerId}
+        ownerName={pplModal?.ownerName}
+      />
     </div>
   );
 }
