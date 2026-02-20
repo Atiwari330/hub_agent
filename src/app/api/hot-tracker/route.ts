@@ -78,6 +78,9 @@ export async function GET(request: NextRequest) {
       proposalWithGift: number;
       proposalTotal: number;
       sqlDealDetails: unknown[];
+      pplTouchesTotal: number;
+      pplDealsCount: number;
+      pplTouchesAvg: number;
     };
     byAE: {
       ownerId: string;
@@ -88,6 +91,9 @@ export async function GET(request: NextRequest) {
       callsToSqlWithPhone: number;
       proposalWithGift: number;
       proposalTotal: number;
+      pplTouchesTotal: number;
+      pplDealsCount: number;
+      pplTouchesAvg: number;
     }[];
   }>();
 
@@ -105,6 +111,9 @@ export async function GET(request: NextRequest) {
           proposalWithGift: 0,
           proposalTotal: 0,
           sqlDealDetails: [],
+          pplTouchesTotal: 0,
+          pplDealsCount: 0,
+          pplTouchesAvg: 0,
         },
         byAE: [],
       });
@@ -122,6 +131,9 @@ export async function GET(request: NextRequest) {
         proposalWithGift: snap.proposal_deals_with_gift,
         proposalTotal: snap.proposal_deals_count,
         sqlDealDetails: snap.sql_deal_details || [],
+        pplTouchesTotal: snap.ppl_touches_total,
+        pplDealsCount: snap.ppl_deals_count,
+        pplTouchesAvg: snap.ppl_deals_count > 0 ? snap.ppl_touches_total / snap.ppl_deals_count : 0,
       };
     } else {
       // Per-AE row
@@ -134,6 +146,9 @@ export async function GET(request: NextRequest) {
         callsToSqlWithPhone: snap.calls_to_sql_with_phone,
         proposalWithGift: snap.proposal_deals_with_gift,
         proposalTotal: snap.proposal_deals_count,
+        pplTouchesTotal: snap.ppl_touches_total,
+        pplDealsCount: snap.ppl_deals_count,
+        pplTouchesAvg: snap.ppl_deals_count > 0 ? snap.ppl_touches_total / snap.ppl_deals_count : 0,
       });
     }
   }
@@ -145,6 +160,7 @@ export async function GET(request: NextRequest) {
       sqlContactedPct: 1.0,
       callsToSqlWithPhone: 180,
       proposalWithGift: 4,
+      pplAvgTouches: 6,
     },
     weeks: Array.from(weekMap.values()).sort((a, b) => a.weekNumber - b.weekNumber),
   });

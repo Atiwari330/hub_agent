@@ -14,6 +14,9 @@ interface AEMetrics {
   callsToSqlWithPhone: number;
   proposalWithGift: number;
   proposalTotal: number;
+  pplTouchesAvg: number;
+  pplTouchesTotal: number;
+  pplDealsCount: number;
 }
 
 interface TeamMetrics {
@@ -24,6 +27,9 @@ interface TeamMetrics {
   proposalWithGift: number;
   proposalTotal: number;
   sqlDealDetails: unknown[];
+  pplTouchesAvg: number;
+  pplTouchesTotal: number;
+  pplDealsCount: number;
 }
 
 interface WeekData {
@@ -41,6 +47,7 @@ interface HotTrackerData {
     sqlContactedPct: number;
     callsToSqlWithPhone: number;
     proposalWithGift: number;
+    pplAvgTouches: number;
   };
   weeks: WeekData[];
 }
@@ -188,8 +195,10 @@ export function HotTrackerView() {
       callsToSqlWithPhone: acc.callsToSqlWithPhone + w.team.callsToSqlWithPhone,
       proposalWithGift: acc.proposalWithGift + w.team.proposalWithGift,
       proposalTotal: acc.proposalTotal + w.team.proposalTotal,
+      pplTouchesTotal: acc.pplTouchesTotal + w.team.pplTouchesTotal,
+      pplDealsCount: acc.pplDealsCount + w.team.pplDealsCount,
     }),
-    { sqlContacted: 0, sqlTotal: 0, callsToSqlWithPhone: 0, proposalWithGift: 0, proposalTotal: 0 }
+    { sqlContacted: 0, sqlTotal: 0, callsToSqlWithPhone: 0, proposalWithGift: 0, proposalTotal: 0, pplTouchesTotal: 0, pplDealsCount: 0 }
   );
 
   return (
@@ -425,6 +434,69 @@ export function HotTrackerView() {
                       totals.gift,
                       (goals.proposalWithGift / Math.max(1, aeList.length)) * weeks.filter((w) => !isFutureWeek(w.weekStart)).length
                     )}
+                  />
+                );
+              }}
+            />
+
+            {/* ─── Metric 4: Avg PPL First Week Touches ─── */}
+            <MetricSection
+              title="Avg PPL First Week Touches"
+              goal={`Goal: ${goals.pplAvgTouches}/deal`}
+              weeks={weeks}
+              aeList={aeList}
+              renderTeamCell={(w) => {
+                const future = isFutureWeek(w.weekStart);
+                if (future || w.team.pplDealsCount === 0) return <EmptyCell future={future} />;
+                return (
+                  <MetricCell
+                    value={w.team.pplTouchesAvg.toFixed(1)}
+                    sub={`(${w.team.pplDealsCount} deal${w.team.pplDealsCount !== 1 ? 's' : ''})`}
+                    colorClass={countColor(w.team.pplTouchesAvg, goals.pplAvgTouches)}
+                  />
+                );
+              }}
+              renderAECell={(w, aeId) => {
+                const future = isFutureWeek(w.weekStart);
+                const ae = w.byAE.find((a) => a.ownerId === aeId);
+                if (future || !ae || ae.pplDealsCount === 0) return <EmptyCell future={future} />;
+                return (
+                  <MetricCell
+                    value={ae.pplTouchesAvg.toFixed(1)}
+                    sub={`(${ae.pplDealsCount} deal${ae.pplDealsCount !== 1 ? 's' : ''})`}
+                    colorClass={countColor(ae.pplTouchesAvg, goals.pplAvgTouches)}
+                  />
+                );
+              }}
+              renderTotalCell={() => {
+                if (teamTotals.pplDealsCount === 0) return <EmptyCell />;
+                const avg = teamTotals.pplTouchesTotal / teamTotals.pplDealsCount;
+                return (
+                  <MetricCell
+                    value={avg.toFixed(1)}
+                    sub={`(${teamTotals.pplDealsCount} deal${teamTotals.pplDealsCount !== 1 ? 's' : ''})`}
+                    colorClass={countColor(avg, goals.pplAvgTouches)}
+                  />
+                );
+              }}
+              renderAETotalCell={(aeId) => {
+                const totals = weeks.reduce(
+                  (acc, w) => {
+                    const ae = w.byAE.find((a) => a.ownerId === aeId);
+                    return {
+                      touches: acc.touches + (ae?.pplTouchesTotal || 0),
+                      deals: acc.deals + (ae?.pplDealsCount || 0),
+                    };
+                  },
+                  { touches: 0, deals: 0 }
+                );
+                if (totals.deals === 0) return <EmptyCell />;
+                const avg = totals.touches / totals.deals;
+                return (
+                  <MetricCell
+                    value={avg.toFixed(1)}
+                    sub={`(${totals.deals} deal${totals.deals !== 1 ? 's' : ''})`}
+                    colorClass={countColor(avg, goals.pplAvgTouches)}
                   />
                 );
               }}

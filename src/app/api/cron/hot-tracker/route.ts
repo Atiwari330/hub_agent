@@ -64,6 +64,8 @@ export async function GET(request: Request) {
           calls_to_sql_with_phone: week.callsToSqlWithPhone,
           proposal_deals_count: week.proposalDealsCount,
           proposal_deals_with_gift: week.proposalDealsWithGift,
+          ppl_deals_count: week.pplDealsCount,
+          ppl_touches_total: week.pplTouchesTotal,
           computed_at: new Date().toISOString(),
         });
     }
@@ -88,6 +90,8 @@ export async function GET(request: Request) {
               calls_to_sql_with_phone: week.callsToSqlWithPhone,
               proposal_deals_count: week.proposalDealsCount,
               proposal_deals_with_gift: week.proposalDealsWithGift,
+              ppl_deals_count: week.pplDealsCount,
+              ppl_touches_total: week.pplTouchesTotal,
               computed_at: new Date().toISOString(),
             },
             {

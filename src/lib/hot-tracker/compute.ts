@@ -1,16 +1,18 @@
 /**
  * Hot Tracker computation engine.
  *
- * Computes three weekly metrics per AE for a given quarter:
+ * Computes four weekly metrics per AE for a given quarter:
  *   1. % of SQLs contacted within 15 minutes of entering Discovery stage
  *   2. # of calls to SQLs with a phone number
  *   3. # of proposal deals that received a gift/incentive
+ *   4. Avg first-week touches on PPL deals (goal: 6/deal)
  */
 
 import { createServiceClient } from '@/lib/supabase/client';
 import { getQuarterInfo } from '@/lib/utils/quarter';
 import { batchFetchDealEngagements } from '@/lib/hubspot/batch-engagements';
 import { fetchCallsByOwner } from '@/lib/hubspot/calls';
+import { countTouchesInRange } from '@/lib/utils/touch-counter';
 import { chunk } from '@/lib/utils/chunk';
 import { getHubSpotClient } from '@/lib/hubspot/client';
 import { SYNC_CONFIG } from '@/lib/hubspot/sync-config';
@@ -57,6 +59,10 @@ export interface WeekMetrics {
   // Metric 3
   proposalDealsCount: number;
   proposalDealsWithGift: number;
+
+  // Metric 4
+  pplDealsCount: number;
+  pplTouchesTotal: number;
 }
 
 export interface OwnerWeekMetrics extends WeekMetrics {
@@ -125,6 +131,8 @@ function emptyWeekMetrics(w: { weekNumber: number; weekStart: string; weekEnd: s
     callsToSqlWithPhone: 0,
     proposalDealsCount: 0,
     proposalDealsWithGift: 0,
+    pplDealsCount: 0,
+    pplTouchesTotal: 0,
   };
 }
 
@@ -331,6 +339,74 @@ export async function computeHotTrackerForQuarter(
   }
 
   // ─────────────────────────────────────────────────
+  // Metric 4: Avg PPL first-week touches
+  // ─────────────────────────────────────────────────
+  const metric4ByOwnerWeek = new Map<string, Map<number, { dealCount: number; touchesTotal: number }>>();
+
+  const now = new Date();
+
+  // Query PPL deals created during this quarter
+  const { data: pplDeals } = await supabase
+    .from('deals')
+    .select('id, hubspot_deal_id, deal_name, hubspot_created_at, owner_id')
+    .eq('lead_source', 'Paid Lead')
+    .eq('pipeline', SYNC_CONFIG.TARGET_PIPELINE_ID)
+    .not('hubspot_created_at', 'is', null)
+    .gte('hubspot_created_at', qi.startDate.toISOString())
+    .lte('hubspot_created_at', qi.endDate.toISOString());
+
+  if (pplDeals && pplDeals.length > 0) {
+    // Filter to only deals whose first week is complete (created_at + 7 days <= now)
+    const eligibleDeals = pplDeals.filter((d) => {
+      const created = new Date(d.hubspot_created_at!);
+      const week1End = new Date(created);
+      week1End.setDate(week1End.getDate() + 7);
+      return week1End <= now;
+    });
+
+    if (eligibleDeals.length > 0) {
+      // Batch-fetch engagements for eligible PPL deals
+      const pplDealIds = eligibleDeals.map((d) => d.hubspot_deal_id);
+      const pplEngagements = await batchFetchDealEngagements(pplDealIds);
+
+      for (const deal of eligibleDeals) {
+        const ownerId = deal.owner_id;
+        if (!ownerId) continue;
+
+        const createdDate = new Date(deal.hubspot_created_at!);
+        const weekNum = getWeekNumberInQuarter(createdDate, qi.startDate);
+
+        // Compute first-week touches using the shared utility
+        const week1Start = new Date(createdDate);
+        week1Start.setHours(0, 0, 0, 0);
+        const week1End = new Date(week1Start);
+        week1End.setDate(week1End.getDate() + 6);
+        week1End.setHours(23, 59, 59, 999);
+
+        const dealEngagements = pplEngagements.get(deal.hubspot_deal_id);
+        const touches = countTouchesInRange(
+          dealEngagements?.calls || [],
+          dealEngagements?.emails || [],
+          week1Start,
+          week1End
+        );
+
+        // Bucket by owner and week
+        if (!metric4ByOwnerWeek.has(ownerId)) {
+          metric4ByOwnerWeek.set(ownerId, new Map());
+        }
+        const ownerWeeks = metric4ByOwnerWeek.get(ownerId)!;
+        if (!ownerWeeks.has(weekNum)) {
+          ownerWeeks.set(weekNum, { dealCount: 0, touchesTotal: 0 });
+        }
+        const bucket = ownerWeeks.get(weekNum)!;
+        bucket.dealCount++;
+        bucket.touchesTotal += touches.total;
+      }
+    }
+  }
+
+  // ─────────────────────────────────────────────────
   // Assemble results
   // ─────────────────────────────────────────────────
   const byOwner = new Map<string, OwnerWeekMetrics[]>();
@@ -340,6 +416,7 @@ export async function computeHotTrackerForQuarter(
       const m1 = metric1ByOwnerWeek.get(owner.id)?.get(w.weekNumber);
       const m2 = metric2ByOwnerWeek.get(owner.id)?.get(w.weekNumber);
       const m3 = metric3ByOwnerWeek.get(owner.id)?.get(w.weekNumber);
+      const m4 = metric4ByOwnerWeek.get(owner.id)?.get(w.weekNumber);
 
       return {
         ...emptyWeekMetrics(w),
@@ -351,6 +428,8 @@ export async function computeHotTrackerForQuarter(
         callsToSqlWithPhone: m2 || 0,
         proposalDealsCount: m3?.total || 0,
         proposalDealsWithGift: m3?.withGift || 0,
+        pplDealsCount: m4?.dealCount || 0,
+        pplTouchesTotal: m4?.touchesTotal || 0,
       };
     });
     byOwner.set(owner.id, ownerWeeks);
@@ -368,6 +447,8 @@ export async function computeHotTrackerForQuarter(
         team.callsToSqlWithPhone += ow.callsToSqlWithPhone;
         team.proposalDealsCount += ow.proposalDealsCount;
         team.proposalDealsWithGift += ow.proposalDealsWithGift;
+        team.pplDealsCount += ow.pplDealsCount;
+        team.pplTouchesTotal += ow.pplTouchesTotal;
       }
     }
     return team;
