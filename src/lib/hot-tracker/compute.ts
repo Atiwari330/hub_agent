@@ -97,7 +97,8 @@ function formatDateUTC(date: Date): string {
 }
 
 function getWeekNumberInQuarter(date: Date, quarterStart: Date): number {
-  const diffMs = date.getTime() - quarterStart.getTime();
+  const weekAlignedStart = getWeekStart(quarterStart);
+  const diffMs = date.getTime() - weekAlignedStart.getTime();
   const diffWeeks = Math.floor(diffMs / (7 * 24 * 60 * 60 * 1000));
   return Math.max(1, Math.min(14, diffWeeks + 1));
 }
