@@ -17,6 +17,7 @@ interface AEMetrics {
   pplTouchesAvg: number;
   pplTouchesTotal: number;
   pplDealsCount: number;
+  pplComplianceDealsCount: number;
   pplComplianceAvg: number;
   pplComplianceSum: number;
 }
@@ -32,6 +33,7 @@ interface TeamMetrics {
   pplTouchesAvg: number;
   pplTouchesTotal: number;
   pplDealsCount: number;
+  pplComplianceDealsCount: number;
   pplComplianceAvg: number;
   pplComplianceSum: number;
 }
@@ -202,9 +204,10 @@ export function HotTrackerView() {
       proposalTotal: acc.proposalTotal + w.team.proposalTotal,
       pplTouchesTotal: acc.pplTouchesTotal + w.team.pplTouchesTotal,
       pplDealsCount: acc.pplDealsCount + w.team.pplDealsCount,
+      pplComplianceDealsCount: acc.pplComplianceDealsCount + (w.team.pplComplianceDealsCount || 0),
       pplComplianceSum: acc.pplComplianceSum + (w.team.pplComplianceSum || 0),
     }),
-    { sqlContacted: 0, sqlTotal: 0, callsToSqlWithPhone: 0, proposalWithGift: 0, proposalTotal: 0, pplTouchesTotal: 0, pplDealsCount: 0, pplComplianceSum: 0 }
+    { sqlContacted: 0, sqlTotal: 0, callsToSqlWithPhone: 0, proposalWithGift: 0, proposalTotal: 0, pplTouchesTotal: 0, pplDealsCount: 0, pplComplianceDealsCount: 0, pplComplianceSum: 0 }
   );
 
   return (
@@ -516,11 +519,11 @@ export function HotTrackerView() {
               aeList={aeList}
               renderTeamCell={(w) => {
                 const future = isFutureWeek(w.weekStart);
-                if (future || w.team.pplDealsCount === 0) return <EmptyCell future={future} />;
+                if (future || (w.team.pplComplianceDealsCount || 0) === 0) return <EmptyCell future={future} />;
                 return (
                   <MetricCell
                     value={formatPct(w.team.pplComplianceAvg)}
-                    sub={`(${w.team.pplDealsCount} deal${w.team.pplDealsCount !== 1 ? 's' : ''})`}
+                    sub={`(${w.team.pplComplianceDealsCount} deal${w.team.pplComplianceDealsCount !== 1 ? 's' : ''})`}
                     colorClass={pctColor(w.team.pplComplianceAvg, goals.pplDailyCompliance)}
                   />
                 );
@@ -528,22 +531,22 @@ export function HotTrackerView() {
               renderAECell={(w, aeId) => {
                 const future = isFutureWeek(w.weekStart);
                 const ae = w.byAE.find((a) => a.ownerId === aeId);
-                if (future || !ae || ae.pplDealsCount === 0) return <EmptyCell future={future} />;
+                if (future || !ae || (ae.pplComplianceDealsCount || 0) === 0) return <EmptyCell future={future} />;
                 return (
                   <MetricCell
                     value={formatPct(ae.pplComplianceAvg)}
-                    sub={`(${ae.pplDealsCount} deal${ae.pplDealsCount !== 1 ? 's' : ''})`}
+                    sub={`(${ae.pplComplianceDealsCount} deal${ae.pplComplianceDealsCount !== 1 ? 's' : ''})`}
                     colorClass={pctColor(ae.pplComplianceAvg, goals.pplDailyCompliance)}
                   />
                 );
               }}
               renderTotalCell={() => {
-                if (teamTotals.pplDealsCount === 0) return <EmptyCell />;
-                const avg = teamTotals.pplComplianceSum / teamTotals.pplDealsCount;
+                if (teamTotals.pplComplianceDealsCount === 0) return <EmptyCell />;
+                const avg = teamTotals.pplComplianceSum / teamTotals.pplComplianceDealsCount;
                 return (
                   <MetricCell
                     value={formatPct(avg)}
-                    sub={`(${teamTotals.pplDealsCount} deal${teamTotals.pplDealsCount !== 1 ? 's' : ''})`}
+                    sub={`(${teamTotals.pplComplianceDealsCount} deal${teamTotals.pplComplianceDealsCount !== 1 ? 's' : ''})`}
                     colorClass={pctColor(avg, goals.pplDailyCompliance)}
                   />
                 );
@@ -554,7 +557,7 @@ export function HotTrackerView() {
                     const ae = w.byAE.find((a) => a.ownerId === aeId);
                     return {
                       complianceSum: acc.complianceSum + (ae?.pplComplianceSum || 0),
-                      deals: acc.deals + (ae?.pplDealsCount || 0),
+                      deals: acc.deals + (ae?.pplComplianceDealsCount || 0),
                     };
                   },
                   { complianceSum: 0, deals: 0 }

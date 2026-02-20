@@ -64,7 +64,8 @@ export interface WeekMetrics {
   pplDealsCount: number;
   pplTouchesTotal: number;
 
-  // Metric 5: Daily touch compliance (sum of per-deal uniqueTouchDays/7 ratios)
+  // Metric 5: Daily touch compliance (sum of per-deal uniqueTouchDays/daysElapsed ratios)
+  pplComplianceDealsCount: number;
   pplComplianceSum: number;
 }
 
@@ -136,6 +137,7 @@ function emptyWeekMetrics(w: { weekNumber: number; weekStart: string; weekEnd: s
     proposalDealsWithGift: 0,
     pplDealsCount: 0,
     pplTouchesTotal: 0,
+    pplComplianceDealsCount: 0,
     pplComplianceSum: 0,
   };
 }
@@ -345,7 +347,7 @@ export async function computeHotTrackerForQuarter(
   // ─────────────────────────────────────────────────
   // Metric 4: Avg PPL first-week touches
   // ─────────────────────────────────────────────────
-  const metric4ByOwnerWeek = new Map<string, Map<number, { dealCount: number; touchesTotal: number; complianceSum: number }>>();
+  const metric4ByOwnerWeek = new Map<string, Map<number, { dealCount: number; touchesTotal: number }>>();
 
   const now = new Date();
 
@@ -359,6 +361,11 @@ export async function computeHotTrackerForQuarter(
     .gte('hubspot_created_at', qi.startDate.toISOString())
     .lte('hubspot_created_at', qi.endDate.toISOString());
 
+  // Batch-fetch engagements for ALL PPL deals (used by both Metric 4 and Metric 5)
+  const pplEngagements = pplDeals && pplDeals.length > 0
+    ? await batchFetchDealEngagements(pplDeals.map((d) => d.hubspot_deal_id))
+    : await batchFetchDealEngagements([]);
+
   if (pplDeals && pplDeals.length > 0) {
     // Filter to only deals whose first week is complete (created_at + 7 days <= now)
     const eligibleDeals = pplDeals.filter((d) => {
@@ -368,48 +375,93 @@ export async function computeHotTrackerForQuarter(
       return week1End <= now;
     });
 
-    if (eligibleDeals.length > 0) {
-      // Batch-fetch engagements for eligible PPL deals
-      const pplDealIds = eligibleDeals.map((d) => d.hubspot_deal_id);
-      const pplEngagements = await batchFetchDealEngagements(pplDealIds);
+    for (const deal of eligibleDeals) {
+      const ownerId = deal.owner_id;
+      if (!ownerId) continue;
 
-      for (const deal of eligibleDeals) {
-        const ownerId = deal.owner_id;
-        if (!ownerId) continue;
+      const createdDate = new Date(deal.hubspot_created_at!);
+      const weekNum = getWeekNumberInQuarter(createdDate, qi.startDate);
 
-        const createdDate = new Date(deal.hubspot_created_at!);
-        const weekNum = getWeekNumberInQuarter(createdDate, qi.startDate);
+      // Compute first-week touches using the shared utility
+      const week1Start = new Date(createdDate);
+      week1Start.setHours(0, 0, 0, 0);
+      const week1End = new Date(week1Start);
+      week1End.setDate(week1End.getDate() + 6);
+      week1End.setHours(23, 59, 59, 999);
 
-        // Compute first-week touches using the shared utility
-        const week1Start = new Date(createdDate);
-        week1Start.setHours(0, 0, 0, 0);
-        const week1End = new Date(week1Start);
-        week1End.setDate(week1End.getDate() + 6);
-        week1End.setHours(23, 59, 59, 999);
+      const dealEngagements = pplEngagements.get(deal.hubspot_deal_id);
+      const calls = dealEngagements?.calls || [];
+      const emails = dealEngagements?.emails || [];
 
-        const dealEngagements = pplEngagements.get(deal.hubspot_deal_id);
-        const calls = dealEngagements?.calls || [];
-        const emails = dealEngagements?.emails || [];
+      const touches = countTouchesInRange(calls, emails, week1Start, week1End);
 
-        const touches = countTouchesInRange(calls, emails, week1Start, week1End);
-
-        // Count unique days with at least one touch for compliance
-        const uniqueTouchDays = countUniqueTouchDays(calls, emails, week1Start, week1End);
-        const dealCompliance = uniqueTouchDays / 7;
-
-        // Bucket by owner and week
-        if (!metric4ByOwnerWeek.has(ownerId)) {
-          metric4ByOwnerWeek.set(ownerId, new Map());
-        }
-        const ownerWeeks = metric4ByOwnerWeek.get(ownerId)!;
-        if (!ownerWeeks.has(weekNum)) {
-          ownerWeeks.set(weekNum, { dealCount: 0, touchesTotal: 0, complianceSum: 0 });
-        }
-        const bucket = ownerWeeks.get(weekNum)!;
-        bucket.dealCount++;
-        bucket.touchesTotal += touches.total;
-        bucket.complianceSum += dealCompliance;
+      // Bucket by owner and week
+      if (!metric4ByOwnerWeek.has(ownerId)) {
+        metric4ByOwnerWeek.set(ownerId, new Map());
       }
+      const ownerWeeks = metric4ByOwnerWeek.get(ownerId)!;
+      if (!ownerWeeks.has(weekNum)) {
+        ownerWeeks.set(weekNum, { dealCount: 0, touchesTotal: 0 });
+      }
+      const bucket = ownerWeeks.get(weekNum)!;
+      bucket.dealCount++;
+      bucket.touchesTotal += touches.total;
+    }
+  }
+
+  // ─────────────────────────────────────────────────
+  // Metric 5: PPL Daily Touch Compliance (real-time)
+  // ─────────────────────────────────────────────────
+  const metric5ByOwnerWeek = new Map<string, Map<number, { dealCount: number; complianceSum: number }>>();
+
+  if (pplDeals && pplDeals.length > 0) {
+    const todayStart = new Date();
+    todayStart.setUTCHours(0, 0, 0, 0);
+
+    // Include ALL PPL deals with at least 1 full day elapsed (no first-week-complete filter)
+    const complianceDeals = pplDeals.filter((d) => {
+      const created = new Date(d.hubspot_created_at!);
+      created.setUTCHours(0, 0, 0, 0);
+      return created < todayStart;
+    });
+
+    for (const deal of complianceDeals) {
+      const ownerId = deal.owner_id;
+      if (!ownerId) continue;
+
+      const createdDate = new Date(deal.hubspot_created_at!);
+      createdDate.setUTCHours(0, 0, 0, 0);
+      const weekNum = getWeekNumberInQuarter(createdDate, qi.startDate);
+
+      // Dynamic denominator: days elapsed since creation, capped at 7
+      const daysElapsed = Math.min(7,
+        Math.floor((todayStart.getTime() - createdDate.getTime()) / (24 * 60 * 60 * 1000))
+      );
+      if (daysElapsed <= 0) continue;
+
+      // Count touches from creation through (creation + daysElapsed - 1)
+      const week1Start = new Date(createdDate);
+      week1Start.setHours(0, 0, 0, 0);
+      const week1End = new Date(createdDate);
+      week1End.setDate(week1End.getDate() + daysElapsed - 1);
+      week1End.setHours(23, 59, 59, 999);
+
+      const dealEngagements = pplEngagements.get(deal.hubspot_deal_id);
+      const uniqueTouchDays = countUniqueTouchDays(
+        dealEngagements?.calls || [],
+        dealEngagements?.emails || [],
+        week1Start, week1End
+      );
+
+      const dealCompliance = uniqueTouchDays / daysElapsed;
+
+      // Bucket by owner and week
+      if (!metric5ByOwnerWeek.has(ownerId)) metric5ByOwnerWeek.set(ownerId, new Map());
+      const ownerWeeks = metric5ByOwnerWeek.get(ownerId)!;
+      if (!ownerWeeks.has(weekNum)) ownerWeeks.set(weekNum, { dealCount: 0, complianceSum: 0 });
+      const bucket = ownerWeeks.get(weekNum)!;
+      bucket.dealCount++;
+      bucket.complianceSum += dealCompliance;
     }
   }
 
@@ -424,6 +476,7 @@ export async function computeHotTrackerForQuarter(
       const m2 = metric2ByOwnerWeek.get(owner.id)?.get(w.weekNumber);
       const m3 = metric3ByOwnerWeek.get(owner.id)?.get(w.weekNumber);
       const m4 = metric4ByOwnerWeek.get(owner.id)?.get(w.weekNumber);
+      const m5 = metric5ByOwnerWeek.get(owner.id)?.get(w.weekNumber);
 
       return {
         ...emptyWeekMetrics(w),
@@ -437,7 +490,8 @@ export async function computeHotTrackerForQuarter(
         proposalDealsWithGift: m3?.withGift || 0,
         pplDealsCount: m4?.dealCount || 0,
         pplTouchesTotal: m4?.touchesTotal || 0,
-        pplComplianceSum: m4?.complianceSum || 0,
+        pplComplianceDealsCount: m5?.dealCount || 0,
+        pplComplianceSum: m5?.complianceSum || 0,
       };
     });
     byOwner.set(owner.id, ownerWeeks);
@@ -457,6 +511,7 @@ export async function computeHotTrackerForQuarter(
         team.proposalDealsWithGift += ow.proposalDealsWithGift;
         team.pplDealsCount += ow.pplDealsCount;
         team.pplTouchesTotal += ow.pplTouchesTotal;
+        team.pplComplianceDealsCount += ow.pplComplianceDealsCount;
         team.pplComplianceSum += ow.pplComplianceSum;
       }
     }
