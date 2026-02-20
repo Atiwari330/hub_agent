@@ -86,6 +86,8 @@ export async function GET(request: NextRequest) {
       pplTouchesTotal: number;
       pplDealsCount: number;
       pplTouchesAvg: number;
+      pplComplianceSum: number;
+      pplComplianceAvg: number;
     };
     byAE: {
       ownerId: string;
@@ -99,6 +101,8 @@ export async function GET(request: NextRequest) {
       pplTouchesTotal: number;
       pplDealsCount: number;
       pplTouchesAvg: number;
+      pplComplianceSum: number;
+      pplComplianceAvg: number;
     }[];
   }>();
 
@@ -119,6 +123,8 @@ export async function GET(request: NextRequest) {
           pplTouchesTotal: 0,
           pplDealsCount: 0,
           pplTouchesAvg: 0,
+          pplComplianceSum: 0,
+          pplComplianceAvg: 0,
         },
         byAE: [],
       });
@@ -139,6 +145,8 @@ export async function GET(request: NextRequest) {
         pplTouchesTotal: snap.ppl_touches_total,
         pplDealsCount: snap.ppl_deals_count,
         pplTouchesAvg: snap.ppl_deals_count > 0 ? snap.ppl_touches_total / snap.ppl_deals_count : 0,
+        pplComplianceSum: snap.ppl_compliance_sum || 0,
+        pplComplianceAvg: snap.ppl_deals_count > 0 ? (snap.ppl_compliance_sum || 0) / snap.ppl_deals_count : 0,
       };
     } else {
       // Per-AE row
@@ -154,6 +162,8 @@ export async function GET(request: NextRequest) {
         pplTouchesTotal: snap.ppl_touches_total,
         pplDealsCount: snap.ppl_deals_count,
         pplTouchesAvg: snap.ppl_deals_count > 0 ? snap.ppl_touches_total / snap.ppl_deals_count : 0,
+        pplComplianceSum: snap.ppl_compliance_sum || 0,
+        pplComplianceAvg: snap.ppl_deals_count > 0 ? (snap.ppl_compliance_sum || 0) / snap.ppl_deals_count : 0,
       });
     }
   }
@@ -165,7 +175,8 @@ export async function GET(request: NextRequest) {
       sqlContactedPct: 1.0,
       callsToSqlWithPhone: 180,
       proposalWithGift: 4,
-      pplAvgTouches: 6,
+      pplAvgTouches: 3,
+      pplDailyCompliance: 1.0,
     },
     weeks: Array.from(weekMap.values()).sort((a, b) => a.weekNumber - b.weekNumber),
   });

@@ -98,6 +98,51 @@ export function countTouchesInRange(
 }
 
 /**
+ * Count unique calendar days with at least one touch (call or outbound email)
+ * within a date range. Used for daily touch compliance calculation.
+ *
+ * @param calls - Array of HubSpot calls
+ * @param emails - Array of HubSpot emails
+ * @param startDate - Start of the range (inclusive)
+ * @param endDate - End of the range (inclusive)
+ * @returns Number of unique days with at least one touch
+ */
+export function countUniqueTouchDays(
+  calls: HubSpotCall[],
+  emails: HubSpotEmail[],
+  startDate: Date,
+  endDate: Date
+): number {
+  const startMs = startDate.getTime();
+  const endMs = endDate.getTime();
+  const touchDays = new Set<string>();
+
+  // Collect days from calls in range
+  for (const call of calls) {
+    if (!call.properties.hs_timestamp) continue;
+    const timestamp = new Date(call.properties.hs_timestamp).getTime();
+    if (timestamp >= startMs && timestamp <= endMs) {
+      touchDays.add(new Date(call.properties.hs_timestamp).toISOString().split('T')[0]);
+    }
+  }
+
+  // Collect days from outbound emails in range
+  for (const email of emails) {
+    if (!email.timestamp) continue;
+    const isOutbound =
+      email.direction === 'OUTGOING_EMAIL' ||
+      (email.direction === 'EMAIL' && email.fromEmail?.endsWith('@opusbehavioral.com'));
+    if (!isOutbound) continue;
+    const timestamp = new Date(email.timestamp).getTime();
+    if (timestamp >= startMs && timestamp <= endMs) {
+      touchDays.add(new Date(email.timestamp).toISOString().split('T')[0]);
+    }
+  }
+
+  return touchDays.size;
+}
+
+/**
  * Calculate Week 1 touch compliance for a deal
  *
  * Week 1 = first 7 calendar days after deal creation (day 0 through day 6)

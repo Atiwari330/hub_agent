@@ -17,6 +17,8 @@ interface AEMetrics {
   pplTouchesAvg: number;
   pplTouchesTotal: number;
   pplDealsCount: number;
+  pplComplianceAvg: number;
+  pplComplianceSum: number;
 }
 
 interface TeamMetrics {
@@ -30,6 +32,8 @@ interface TeamMetrics {
   pplTouchesAvg: number;
   pplTouchesTotal: number;
   pplDealsCount: number;
+  pplComplianceAvg: number;
+  pplComplianceSum: number;
 }
 
 interface WeekData {
@@ -48,6 +52,7 @@ interface HotTrackerData {
     callsToSqlWithPhone: number;
     proposalWithGift: number;
     pplAvgTouches: number;
+    pplDailyCompliance: number;
   };
   weeks: WeekData[];
 }
@@ -197,8 +202,9 @@ export function HotTrackerView() {
       proposalTotal: acc.proposalTotal + w.team.proposalTotal,
       pplTouchesTotal: acc.pplTouchesTotal + w.team.pplTouchesTotal,
       pplDealsCount: acc.pplDealsCount + w.team.pplDealsCount,
+      pplComplianceSum: acc.pplComplianceSum + (w.team.pplComplianceSum || 0),
     }),
-    { sqlContacted: 0, sqlTotal: 0, callsToSqlWithPhone: 0, proposalWithGift: 0, proposalTotal: 0, pplTouchesTotal: 0, pplDealsCount: 0 }
+    { sqlContacted: 0, sqlTotal: 0, callsToSqlWithPhone: 0, proposalWithGift: 0, proposalTotal: 0, pplTouchesTotal: 0, pplDealsCount: 0, pplComplianceSum: 0 }
   );
 
   return (
@@ -497,6 +503,69 @@ export function HotTrackerView() {
                     value={avg.toFixed(1)}
                     sub={`(${totals.deals} deal${totals.deals !== 1 ? 's' : ''})`}
                     colorClass={countColor(avg, goals.pplAvgTouches)}
+                  />
+                );
+              }}
+            />
+
+            {/* ─── Metric 5: PPL First Week Daily Touch Compliance ─── */}
+            <MetricSection
+              title="PPL First Week Daily Touch Compliance"
+              goal={`Goal: ${formatPct(goals.pplDailyCompliance)}`}
+              weeks={weeks}
+              aeList={aeList}
+              renderTeamCell={(w) => {
+                const future = isFutureWeek(w.weekStart);
+                if (future || w.team.pplDealsCount === 0) return <EmptyCell future={future} />;
+                return (
+                  <MetricCell
+                    value={formatPct(w.team.pplComplianceAvg)}
+                    sub={`(${w.team.pplDealsCount} deal${w.team.pplDealsCount !== 1 ? 's' : ''})`}
+                    colorClass={pctColor(w.team.pplComplianceAvg, goals.pplDailyCompliance)}
+                  />
+                );
+              }}
+              renderAECell={(w, aeId) => {
+                const future = isFutureWeek(w.weekStart);
+                const ae = w.byAE.find((a) => a.ownerId === aeId);
+                if (future || !ae || ae.pplDealsCount === 0) return <EmptyCell future={future} />;
+                return (
+                  <MetricCell
+                    value={formatPct(ae.pplComplianceAvg)}
+                    sub={`(${ae.pplDealsCount} deal${ae.pplDealsCount !== 1 ? 's' : ''})`}
+                    colorClass={pctColor(ae.pplComplianceAvg, goals.pplDailyCompliance)}
+                  />
+                );
+              }}
+              renderTotalCell={() => {
+                if (teamTotals.pplDealsCount === 0) return <EmptyCell />;
+                const avg = teamTotals.pplComplianceSum / teamTotals.pplDealsCount;
+                return (
+                  <MetricCell
+                    value={formatPct(avg)}
+                    sub={`(${teamTotals.pplDealsCount} deal${teamTotals.pplDealsCount !== 1 ? 's' : ''})`}
+                    colorClass={pctColor(avg, goals.pplDailyCompliance)}
+                  />
+                );
+              }}
+              renderAETotalCell={(aeId) => {
+                const totals = weeks.reduce(
+                  (acc, w) => {
+                    const ae = w.byAE.find((a) => a.ownerId === aeId);
+                    return {
+                      complianceSum: acc.complianceSum + (ae?.pplComplianceSum || 0),
+                      deals: acc.deals + (ae?.pplDealsCount || 0),
+                    };
+                  },
+                  { complianceSum: 0, deals: 0 }
+                );
+                if (totals.deals === 0) return <EmptyCell />;
+                const avg = totals.complianceSum / totals.deals;
+                return (
+                  <MetricCell
+                    value={formatPct(avg)}
+                    sub={`(${totals.deals} deal${totals.deals !== 1 ? 's' : ''})`}
+                    colorClass={pctColor(avg, goals.pplDailyCompliance)}
                   />
                 );
               }}

@@ -66,6 +66,7 @@ export async function GET(request: Request) {
           proposal_deals_with_gift: week.proposalDealsWithGift,
           ppl_deals_count: week.pplDealsCount,
           ppl_touches_total: week.pplTouchesTotal,
+          ppl_compliance_sum: week.pplComplianceSum,
           computed_at: new Date().toISOString(),
         });
     }
@@ -92,6 +93,7 @@ export async function GET(request: Request) {
               proposal_deals_with_gift: week.proposalDealsWithGift,
               ppl_deals_count: week.pplDealsCount,
               ppl_touches_total: week.pplTouchesTotal,
+              ppl_compliance_sum: week.pplComplianceSum,
               computed_at: new Date().toISOString(),
             },
             {
