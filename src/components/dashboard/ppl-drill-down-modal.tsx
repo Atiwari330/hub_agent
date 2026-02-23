@@ -14,6 +14,7 @@ interface PplDeal {
   emails: number;
   compliance: number;
   firstWeekComplete: boolean;
+  meetingBooked: boolean;
   hubspotUrl: string;
 }
 
@@ -59,11 +60,15 @@ function complianceColor(compliance: number): { text: string; bg: string } {
 }
 
 function DealCard({ deal, showOwner }: { deal: PplDeal; showOwner: boolean }) {
-  const colors = complianceColor(deal.compliance);
+  const colors = deal.meetingBooked
+    ? { text: 'text-blue-700', bg: 'bg-blue-100' }
+    : complianceColor(deal.compliance);
   const pct = Math.round(deal.compliance * 100);
 
   return (
-    <div className="border border-gray-200 rounded-lg p-4 hover:border-gray-300 transition-colors">
+    <div className={`border rounded-lg p-4 hover:border-gray-300 transition-colors ${
+      deal.meetingBooked ? 'border-blue-200 bg-blue-50/30' : 'border-gray-200'
+    }`}>
       {/* Deal header */}
       <div className="flex items-center justify-between gap-4 mb-2">
         <a
@@ -76,7 +81,7 @@ function DealCard({ deal, showOwner }: { deal: PplDeal; showOwner: boolean }) {
           <ExternalLinkIcon className="text-indigo-400" />
         </a>
         <span className={`px-2 py-0.5 rounded text-xs font-medium ${colors.text} ${colors.bg}`}>
-          {pct}%
+          {deal.meetingBooked ? 'Meeting Booked' : `${pct}%`}
         </span>
       </div>
 
@@ -88,18 +93,24 @@ function DealCard({ deal, showOwner }: { deal: PplDeal; showOwner: boolean }) {
       )}
 
       {/* Compliance details */}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-600">
-        <span>
-          <span className="font-medium text-gray-900">{deal.uniqueTouchDays}</span>/{deal.daysElapsed} days touched
-        </span>
-        <span className="text-gray-300">|</span>
-        <span>
-          <span className="font-medium text-gray-900">{deal.totalTouches}</span> touches
-          <span className="text-gray-400 text-xs ml-1">
-            ({deal.calls} call{deal.calls !== 1 ? 's' : ''}, {deal.emails} email{deal.emails !== 1 ? 's' : ''})
+      {deal.meetingBooked ? (
+        <div className="text-sm text-blue-600">
+          Outreach goal met — not counted in compliance
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-600">
+          <span>
+            <span className="font-medium text-gray-900">{deal.uniqueTouchDays}</span>/{deal.daysElapsed} days touched
           </span>
-        </span>
-      </div>
+          <span className="text-gray-300">|</span>
+          <span>
+            <span className="font-medium text-gray-900">{deal.totalTouches}</span> touches
+            <span className="text-gray-400 text-xs ml-1">
+              ({deal.calls} call{deal.calls !== 1 ? 's' : ''}, {deal.emails} email{deal.emails !== 1 ? 's' : ''})
+            </span>
+          </span>
+        </div>
+      )}
 
       {/* Footer: created date + status */}
       <div className="flex items-center justify-between mt-3 text-xs">
@@ -107,11 +118,13 @@ function DealCard({ deal, showOwner }: { deal: PplDeal; showOwner: boolean }) {
           Created {new Date(deal.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
         </span>
         <span className={`px-2 py-0.5 rounded font-medium ${
-          deal.firstWeekComplete
-            ? 'bg-gray-100 text-gray-600'
-            : 'bg-blue-50 text-blue-600'
+          deal.meetingBooked
+            ? 'bg-blue-100 text-blue-700'
+            : deal.firstWeekComplete
+              ? 'bg-gray-100 text-gray-600'
+              : 'bg-blue-50 text-blue-600'
         }`}>
-          {deal.firstWeekComplete ? 'Week Complete' : 'In Progress'}
+          {deal.meetingBooked ? 'Meeting Booked' : deal.firstWeekComplete ? 'Week Complete' : 'In Progress'}
         </span>
       </div>
     </div>
@@ -186,7 +199,14 @@ export function PplDrillDownModal({
             <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
             {data && (
               <p className="text-sm text-gray-500 mt-1">
-                {data.weekLabel} — {data.deals.length} deal{data.deals.length !== 1 ? 's' : ''}
+                {data.weekLabel} — {(() => {
+                  const meetingCount = data.deals.filter((d) => d.meetingBooked).length;
+                  const activeCount = data.deals.length - meetingCount;
+                  if (meetingCount === 0) {
+                    return `${data.deals.length} deal${data.deals.length !== 1 ? 's' : ''}`;
+                  }
+                  return `${activeCount} active deal${activeCount !== 1 ? 's' : ''} + ${meetingCount} with meeting${meetingCount !== 1 ? 's' : ''} booked`;
+                })()}
               </p>
             )}
           </div>

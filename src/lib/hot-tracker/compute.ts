@@ -448,6 +448,11 @@ export async function computeHotTrackerForQuarter(
       week1End.setHours(23, 59, 59, 999);
 
       const dealEngagements = pplEngagements.get(deal.hubspot_deal_id);
+
+      // Skip deals that already have a meeting booked — goal accomplished
+      const meetings = dealEngagements?.meetings || [];
+      if (meetings.length > 0) continue;
+
       const uniqueTouchDays = countUniqueTouchDays(
         dealEngagements?.calls || [],
         dealEngagements?.emails || [],

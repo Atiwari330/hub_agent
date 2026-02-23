@@ -118,6 +118,7 @@ export async function GET(request: NextRequest) {
       const dealEngagements = engagements.get(deal.hubspot_deal_id);
       const calls = dealEngagements?.calls || [];
       const emails = dealEngagements?.emails || [];
+      const meetingBooked = (dealEngagements?.meetings || []).length > 0;
 
       const uniqueTouchDays = countUniqueTouchDays(calls, emails, week1Start, week1End);
       const touches = countTouchesInRange(calls, emails, week1Start, week1End);
@@ -140,11 +141,17 @@ export async function GET(request: NextRequest) {
         emails: touches.emails,
         compliance,
         firstWeekComplete,
+        meetingBooked,
         hubspotUrl: `https://app.hubspot.com/contacts/${HUBSPOT_PORTAL_ID}/deal/${deal.hubspot_deal_id}/`,
       };
     })
     .filter((d): d is NonNullable<typeof d> => d !== null)
-    .sort((a, b) => a.compliance - b.compliance); // worst first
+    .sort((a, b) => {
+      // Meeting-booked deals go to the bottom
+      if (a.meetingBooked !== b.meetingBooked) return a.meetingBooked ? 1 : -1;
+      // Within each group, worst compliance first
+      return a.compliance - b.compliance;
+    });
 
   return NextResponse.json({
     deals,
