@@ -8,3 +8,7 @@ export function getHubSpotDealUrl(dealId: string): string {
 export function getHubSpotCompanyUrl(companyId: string): string {
   return `https://app.hubspot.com/contacts/${HUBSPOT_PORTAL_ID}/company/${companyId}/`;
 }
+
+export function getHubSpotTicketUrl(ticketId: string): string {
+  return `https://app.hubspot.com/contacts/${HUBSPOT_PORTAL_ID}/ticket/${ticketId}/`;
+}

@@ -22,6 +22,10 @@
       "schedule": "0 13 * * 1"
     },
     {
+      "path": "/api/cron/sync-tickets",
+      "schedule": "45 2 * * *"
+    },
+    {
       "path": "/api/cron/hot-tracker",
       "schedule": "30 3 * * *"
     }

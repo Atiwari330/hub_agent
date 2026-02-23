@@ -23,6 +23,7 @@ export const RESOURCES = {
   QUEUE_AT_RISK: 'queue:at-risk',
   QUEUE_CS_HYGIENE: 'queue:cs-hygiene',
   QUEUE_PRE_DEMO_PIPELINE: 'queue:pre-demo-pipeline',
+  QUEUE_SUPPORT_PULSE: 'queue:support-pulse',
   API_AGENT: 'api:agent',
   PORTAL: 'portal',
   HOT_TRACKER: 'hot_tracker',
@@ -76,6 +77,8 @@ export function getResourceFromPath(pathname: string): Resource | null {
     return RESOURCES.QUEUE_CS_HYGIENE;
   if (pathname.includes('/queues/pre-demo-pipeline'))
     return RESOURCES.QUEUE_PRE_DEMO_PIPELINE;
+  if (pathname.includes('/queues/support-pulse'))
+    return RESOURCES.QUEUE_SUPPORT_PULSE;
 
   // Hot Tracker
   if (pathname.includes('/dashboard/hot-tracker')) return RESOURCES.HOT_TRACKER;
@@ -109,6 +112,8 @@ export function getResourceFromPath(pathname: string): Resource | null {
     return RESOURCES.QUEUE_CS_HYGIENE;
   if (pathname.includes('/api/queues/pre-demo-pipeline'))
     return RESOURCES.QUEUE_PRE_DEMO_PIPELINE;
+  if (pathname.includes('/api/queues/support-pulse'))
+    return RESOURCES.QUEUE_SUPPORT_PULSE;
   if (pathname.includes('/api/queues/create-cs-task'))
     return RESOURCES.QUEUE_CS_HYGIENE;
   if (pathname.includes('/api/hot-tracker')) return RESOURCES.HOT_TRACKER;
