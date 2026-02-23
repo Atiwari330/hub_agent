@@ -45,5 +45,13 @@ next-env.d.ts
 *.csv
 *.pdf
 *.xlsx
+*.docx
 src/scripts/analyze-*.ts
 src/scripts/export-*.ts
+
+# Windows/system artifacts
+NUL
+*.stackdump
+
+# Investigation output
+pitch-opportunity-analysis-output.txt
