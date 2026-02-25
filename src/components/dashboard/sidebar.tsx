@@ -187,6 +187,7 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
   // Support queues
   const isOnSupportPulse = pathname === '/dashboard/queues/support-pulse';
   const isOnPitchQueue = pathname === '/dashboard/queues/pitch-queue';
+  const isOnSupportIntel = pathname === '/dashboard/queues/support-intel';
   // Hot Tracker
   const isOnHotTracker = pathname === '/dashboard/hot-tracker';
 
@@ -326,7 +327,8 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
           hasPermission(user, RESOURCES.QUEUE_AT_RISK) ||
           hasPermission(user, RESOURCES.QUEUE_CS_HYGIENE) ||
           hasPermission(user, RESOURCES.QUEUE_SUPPORT_PULSE) ||
-          hasPermission(user, RESOURCES.QUEUE_PITCH_QUEUE)) && (
+          hasPermission(user, RESOURCES.QUEUE_PITCH_QUEUE) ||
+          hasPermission(user, RESOURCES.QUEUE_SUPPORT_INTEL)) && (
         <div className="mt-4">
           {!isCollapsed && (
             <button
@@ -639,7 +641,8 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
 
               {/* Support Section */}
               {(hasPermission(user, RESOURCES.QUEUE_SUPPORT_PULSE) ||
-                hasPermission(user, RESOURCES.QUEUE_PITCH_QUEUE)) && (
+                hasPermission(user, RESOURCES.QUEUE_PITCH_QUEUE) ||
+                hasPermission(user, RESOURCES.QUEUE_SUPPORT_INTEL)) && (
               <>
                 {!isCollapsed && (
                   <div className="px-4 pl-11 py-1.5 mt-2">
@@ -693,6 +696,31 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
                         </svg>
                       ) : (
                         <span>Pitch Queue</span>
+                      )}
+                    </Link>
+                  </li>
+                  )}
+                  {hasPermission(user, RESOURCES.QUEUE_SUPPORT_INTEL) && (
+                  <li>
+                    <Link
+                      href="/dashboard/queues/support-intel"
+                      className={`flex items-center py-2 text-sm transition-colors ${
+                        isCollapsed
+                          ? 'px-0 justify-center'
+                          : 'px-4 pl-14'
+                      } ${
+                        isOnSupportIntel
+                          ? 'bg-indigo-600 text-white'
+                          : 'text-slate-300 hover:bg-slate-800'
+                      }`}
+                      title={isCollapsed ? 'Support Intel' : undefined}
+                    >
+                      {isCollapsed ? (
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                        </svg>
+                      ) : (
+                        <span>Support Intel</span>
                       )}
                     </Link>
                   </li>
