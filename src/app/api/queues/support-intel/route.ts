@@ -1,7 +1,8 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/client';
 import { checkApiAuth } from '@/lib/auth/api';
 import { RESOURCES } from '@/lib/auth';
+import { OPEN_TICKET_STAGE_IDS } from '@/lib/hubspot/ticket-stage-config';
 
 // --- Types ---
 
@@ -52,25 +53,54 @@ export interface SupportIntelResponse {
 
 // --- Route Handler ---
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const authResult = await checkApiAuth(RESOURCES.QUEUE_SUPPORT_INTEL);
   if (authResult instanceof NextResponse) return authResult;
 
   const supabase = await createServerSupabaseClient();
 
-  try {
-    // Fetch all tickets (open + closed for trend analysis)
-    const { data: allTickets, error: ticketsError } = await supabase
-      .from('support_tickets')
-      .select('*');
+  // Parse closedDays param: 0 = open only (default), 30/60/90 = also include closed tickets
+  const closedDaysParam = parseInt(request.nextUrl.searchParams.get('closedDays') || '0', 10);
+  const closedDays = Math.min(Math.max(isNaN(closedDaysParam) ? 0 : closedDaysParam, 0), 90);
 
-    if (ticketsError) {
-      console.error('Error fetching tickets:', ticketsError);
+  try {
+    // Always fetch open tickets
+    const { data: openTickets, error: openError } = await supabase
+      .from('support_tickets')
+      .select('*')
+      .eq('is_closed', false)
+      .in('pipeline_stage', Array.from(OPEN_TICKET_STAGE_IDS));
+
+    if (openError) {
+      console.error('Error fetching open tickets:', openError);
       return NextResponse.json(
-        { error: 'Failed to fetch tickets', details: ticketsError.message },
+        { error: 'Failed to fetch tickets', details: openError.message },
         { status: 500 }
       );
     }
+
+    // Optionally fetch closed tickets within the date window
+    let closedTickets: typeof openTickets = [];
+    if (closedDays > 0) {
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - closedDays);
+      const cutoffISO = cutoffDate.toISOString();
+
+      const { data: closedRows, error: closedError } = await supabase
+        .from('support_tickets')
+        .select('*')
+        .eq('is_closed', true)
+        .gte('closed_date', cutoffISO);
+
+      if (closedError) {
+        console.error('Error fetching closed tickets:', closedError);
+        // Non-fatal: continue with just open tickets
+      } else {
+        closedTickets = closedRows || [];
+      }
+    }
+
+    const allTickets = [...(openTickets || []), ...closedTickets];
 
     // Fetch all ticket categorizations
     const ticketIds = (allTickets || []).map((t) => t.hubspot_ticket_id);

@@ -125,7 +125,14 @@ export function SupportIntelView() {
   const [severityFilter, setSeverityFilter] = useState<string>('all');
   const [issueTypeFilter, setIssueTypeFilter] = useState<string>('all');
   const [companyFilter, setCompanyFilter] = useState<string>('all');
-  const [closedFilter, setClosedFilter] = useState<string>('all');
+  const [closedFilter, setClosedFilter] = useState<string>('open');
+  const [closedDays, setClosedDays] = useState<number>(0);
+
+  // Chart-specific filters (independent from table)
+  const [chartClosedDays, setChartClosedDays] = useState<number>(0);
+  const [chartScope, setChartScope] = useState<string>('all');
+  const [chartData, setChartData] = useState<SupportIntelResponse | null>(null);
+  const [chartLoading, setChartLoading] = useState(false);
 
   // Sorting
   const [sortColumn, setSortColumn] = useState<SortColumn>('ageDays');
@@ -136,7 +143,8 @@ export function SupportIntelView() {
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/queues/support-intel');
+      const params = closedDays > 0 ? `?closedDays=${closedDays}` : '';
+      const response = await fetch(`/api/queues/support-intel${params}`);
       if (!response.ok) throw new Error('Failed to fetch support intel data');
       const json: SupportIntelResponse = await response.json();
       setData(json);
@@ -146,7 +154,7 @@ export function SupportIntelView() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [closedDays]);
 
   const fetchTrends = useCallback(async () => {
     try {
@@ -181,6 +189,34 @@ export function SupportIntelView() {
     fetchTrends();
     fetchSummary();
   }, [fetchData, fetchTrends, fetchSummary]);
+
+  // Fetch independent chart data when chart range differs from table range
+  useEffect(() => {
+    if (chartClosedDays === closedDays) {
+      setChartData(null); // Reuse main data
+      return;
+    }
+
+    let cancelled = false;
+    const fetchChartData = async () => {
+      setChartLoading(true);
+      try {
+        const params = chartClosedDays > 0 ? `?closedDays=${chartClosedDays}` : '';
+        const response = await fetch(`/api/queues/support-intel${params}`);
+        if (!response.ok) throw new Error('Failed to fetch chart data');
+        const json: SupportIntelResponse = await response.json();
+        if (!cancelled) setChartData(json);
+      } catch {
+        // Non-critical: charts will fall back to main data
+        if (!cancelled) setChartData(null);
+      } finally {
+        if (!cancelled) setChartLoading(false);
+      }
+    };
+
+    fetchChartData();
+    return () => { cancelled = true; };
+  }, [chartClosedDays, closedDays]);
 
   // --- Actions ---
 
@@ -419,20 +455,51 @@ export function SupportIntelView() {
     return Array.from(values).sort();
   }, [data]);
 
+  const chartSourceTickets = useMemo(() => {
+    const source = chartData ?? data;
+    if (!source) return [];
+    let tickets = source.tickets.filter((t) => t.categorization);
+    if (chartScope === 'open') {
+      tickets = tickets.filter((t) => !t.isClosed);
+    } else if (chartScope === 'closed') {
+      tickets = tickets.filter((t) => t.isClosed);
+    }
+    return tickets;
+  }, [chartData, data, chartScope]);
+
   const categoryDistribution = useMemo(() => {
-    if (!data) return [];
     const counts: Record<string, number> = {};
-    for (const t of data.tickets) {
-      if (t.categorization) {
-        const cat = t.categorization.primary_category;
-        counts[cat] = (counts[cat] || 0) + 1;
-      }
+    for (const t of chartSourceTickets) {
+      const cat = t.categorization!.primary_category;
+      counts[cat] = (counts[cat] || 0) + 1;
     }
     return Object.entries(counts)
       .sort(([, a], [, b]) => b - a)
       .slice(0, 10)
       .map(([name, count]) => ({ name, count }));
-  }, [data]);
+  }, [chartSourceTickets]);
+
+  const issueTypeDistribution = useMemo(() => {
+    const labels: Record<string, string> = {
+      bug: 'Bug',
+      feature_request: 'Feature Request',
+      how_to: 'How-To',
+      configuration: 'Configuration',
+      data_issue: 'Data Issue',
+      access_issue: 'Access Issue',
+      integration: 'Integration',
+      performance: 'Performance',
+    };
+    const counts: Record<string, number> = {};
+    for (const t of chartSourceTickets) {
+      const raw = t.categorization!.issue_type;
+      const label = labels[raw] || raw;
+      counts[label] = (counts[label] || 0) + 1;
+    }
+    return Object.entries(counts)
+      .sort(([, a], [, b]) => b - a)
+      .map(([name, count]) => ({ name, count }));
+  }, [chartSourceTickets]);
 
   const processedTickets = useMemo(() => {
     if (!data) return [];
@@ -516,7 +583,7 @@ export function SupportIntelView() {
     }
   };
 
-  const hasActiveFilters = statusFilter !== 'all' || categoryFilter !== 'all' || severityFilter !== 'all' || issueTypeFilter !== 'all' || companyFilter !== 'all' || closedFilter !== 'all';
+  const hasActiveFilters = statusFilter !== 'all' || categoryFilter !== 'all' || severityFilter !== 'all' || issueTypeFilter !== 'all' || companyFilter !== 'all' || closedFilter !== 'open' || closedDays !== 0;
 
   const clearFilters = () => {
     setStatusFilter('all');
@@ -524,7 +591,8 @@ export function SupportIntelView() {
     setSeverityFilter('all');
     setIssueTypeFilter('all');
     setCompanyFilter('all');
-    setClosedFilter('all');
+    setClosedDays(0);
+    setClosedFilter('open');
   };
 
   const toggleRow = (key: string) => {
@@ -643,20 +711,135 @@ export function SupportIntelView() {
       )}
 
       {/* Category Distribution */}
-      {!loading && categoryDistribution.length > 0 && (
+      {!loading && (
         <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
-          <h2 className="text-sm font-semibold text-gray-900 mb-3">Category Distribution (Top 10)</h2>
-          <div className="space-y-1">
-            {categoryDistribution.map(({ name, count }) => (
-              <CategoryBar
-                key={name}
-                name={name}
-                count={count}
-                maxCount={categoryDistribution[0]?.count || 1}
-                onClick={() => setCategoryFilter(categoryFilter === name ? 'all' : name)}
-              />
-            ))}
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold text-gray-900">Category Distribution (Top 10)</h2>
+            <div className="flex items-center gap-2">
+              {chartLoading && (
+                <svg className="animate-spin h-4 w-4 text-indigo-600" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+              )}
+              <select
+                value={chartClosedDays}
+                onChange={(e) => {
+                  const val = parseInt(e.target.value, 10);
+                  setChartClosedDays(val);
+                  if (val === 0) setChartScope('all');
+                }}
+                className="text-xs border border-gray-300 rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              >
+                <option value={0}>Open Only</option>
+                <option value={30}>+ Closed (30d)</option>
+                <option value={60}>+ Closed (60d)</option>
+                <option value={90}>+ Closed (90d)</option>
+              </select>
+              <select
+                value={chartScope}
+                onChange={(e) => setChartScope(e.target.value)}
+                disabled={chartClosedDays === 0}
+                className="text-xs border border-gray-300 rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <option value="all">All</option>
+                <option value="open">Open Only</option>
+                <option value="closed">Closed Only</option>
+              </select>
+            </div>
           </div>
+          {chartLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-600"></div>
+            </div>
+          ) : categoryDistribution.length > 0 ? (
+            <div className="space-y-1">
+              {categoryDistribution.map(({ name, count }) => (
+                <CategoryBar
+                  key={name}
+                  name={name}
+                  count={count}
+                  maxCount={categoryDistribution[0]?.count || 1}
+                  onClick={() => setCategoryFilter(categoryFilter === name ? 'all' : name)}
+                />
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-gray-500 text-center py-4">No categorized tickets in this range</p>
+          )}
+        </div>
+      )}
+
+      {/* Issue Type Distribution */}
+      {!loading && (
+        <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold text-gray-900">Issue Type Distribution</h2>
+            <div className="flex items-center gap-2">
+              {chartLoading && (
+                <svg className="animate-spin h-4 w-4 text-indigo-600" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+              )}
+              <select
+                value={chartClosedDays}
+                onChange={(e) => {
+                  const val = parseInt(e.target.value, 10);
+                  setChartClosedDays(val);
+                  if (val === 0) setChartScope('all');
+                }}
+                className="text-xs border border-gray-300 rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              >
+                <option value={0}>Open Only</option>
+                <option value={30}>+ Closed (30d)</option>
+                <option value={60}>+ Closed (60d)</option>
+                <option value={90}>+ Closed (90d)</option>
+              </select>
+              <select
+                value={chartScope}
+                onChange={(e) => setChartScope(e.target.value)}
+                disabled={chartClosedDays === 0}
+                className="text-xs border border-gray-300 rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <option value="all">All</option>
+                <option value="open">Open Only</option>
+                <option value="closed">Closed Only</option>
+              </select>
+            </div>
+          </div>
+          {chartLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-600"></div>
+            </div>
+          ) : issueTypeDistribution.length > 0 ? (
+            <div className="space-y-1">
+              {issueTypeDistribution.map(({ name, count }) => {
+                const reverseLabels: Record<string, string> = {
+                  'Bug': 'bug',
+                  'Feature Request': 'feature_request',
+                  'How-To': 'how_to',
+                  'Configuration': 'configuration',
+                  'Data Issue': 'data_issue',
+                  'Access Issue': 'access_issue',
+                  'Integration': 'integration',
+                  'Performance': 'performance',
+                };
+                const rawKey = reverseLabels[name] || name;
+                return (
+                  <CategoryBar
+                    key={name}
+                    name={name}
+                    count={count}
+                    maxCount={issueTypeDistribution[0]?.count || 1}
+                    onClick={() => setIssueTypeFilter(issueTypeFilter === rawKey ? 'all' : rawKey)}
+                  />
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-sm text-gray-500 text-center py-4">No categorized tickets in this range</p>
+          )}
         </div>
       )}
 
@@ -862,13 +1045,37 @@ export function SupportIntelView() {
         </div>
 
         <div className="flex items-center gap-2">
-          <label className="text-sm text-gray-600">Ticket:</label>
+          <label className="text-sm text-gray-600">Data Range:</label>
+          <select
+            value={closedDays}
+            onChange={(e) => {
+              const val = parseInt(e.target.value, 10);
+              setClosedDays(val);
+              // Auto-set show filter: if including closed, show all; if open only, show open
+              if (val === 0) {
+                setClosedFilter('open');
+              } else if (closedFilter === 'open') {
+                setClosedFilter('all');
+              }
+            }}
+            className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          >
+            <option value={0}>Open Only</option>
+            <option value={30}>+ Closed (30 days)</option>
+            <option value={60}>+ Closed (60 days)</option>
+            <option value={90}>+ Closed (90 days)</option>
+          </select>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <label className="text-sm text-gray-600">Show:</label>
           <select
             value={closedFilter}
             onChange={(e) => setClosedFilter(e.target.value)}
-            className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            disabled={closedDays === 0}
+            className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <option value="all">Open + Closed</option>
+            <option value="all">All (Open + Closed)</option>
             <option value="open">Open Only</option>
             <option value="closed">Closed Only</option>
           </select>
