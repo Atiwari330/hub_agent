@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/client';
 import { getOpenTickets, getRecentlyClosedTickets } from '@/lib/hubspot/tickets';
+import { isOpenTicketStage } from '@/lib/hubspot/ticket-stage-config';
 
 // Convert empty strings to null for timestamp fields
 const toTimestamp = (value: string | undefined | null): string | null => {
@@ -82,7 +83,7 @@ export async function GET(request: Request) {
       hubspot_owner_id: ticket.properties.hubspot_owner_id,
       hs_primary_company_id: ticket.properties.hs_primary_company_id,
       hs_primary_company_name: ticket.properties.hs_primary_company_name,
-      is_closed: ticket.properties.hs_is_closed === 'true',
+      is_closed: !isOpenTicketStage(ticket.properties.hs_pipeline_stage),
       time_to_close: toBigInt(ticket.properties.time_to_close),
       time_to_first_reply: toBigInt(
         ticket.properties.time_to_first_agent_reply
@@ -121,6 +122,34 @@ export async function GET(request: Request) {
       }
     }
 
+    // Orphan reconciliation: mark any DB ticket that claims to be open
+    // but wasn't in the fresh HubSpot open list as closed.
+    // This catches tickets closed in HubSpot between syncs, deleted tickets, etc.
+    const freshOpenIds = openTickets.map((t) => t.id);
+    let orphansClosed = 0;
+
+    if (freshOpenIds.length > 0) {
+      const { count } = await supabase
+        .from('support_tickets')
+        .update({ is_closed: true, synced_at: new Date().toISOString() })
+        .eq('is_closed', false)
+        .not('hubspot_ticket_id', 'in', `(${freshOpenIds.join(',')})`);
+
+      orphansClosed = count || 0;
+    } else {
+      // No open tickets from HubSpot — mark ALL currently-open DB tickets as closed
+      const { count } = await supabase
+        .from('support_tickets')
+        .update({ is_closed: true, synced_at: new Date().toISOString() })
+        .eq('is_closed', false);
+
+      orphansClosed = count || 0;
+    }
+
+    if (orphansClosed > 0) {
+      console.log(`Marked ${orphansClosed} orphaned tickets as closed`);
+    }
+
     // Clean up: remove closed tickets older than 90 days (no longer in sync window)
     const ninetyDaysAgo = new Date();
     ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
@@ -144,6 +173,7 @@ export async function GET(request: Request) {
           totalUnique: allTickets.length,
           ticketsSync: ticketSuccess,
           ticketErrors,
+          orphansClosed,
           deletedStale: deletedCount || 0,
           durationMs: duration,
         },
@@ -151,7 +181,7 @@ export async function GET(request: Request) {
       .eq('id', workflowId);
 
     console.log(
-      `Ticket sync complete in ${duration}ms: ${ticketSuccess} synced (${ticketErrors} errors), ${deletedCount || 0} stale deleted`
+      `Ticket sync complete in ${duration}ms: ${ticketSuccess} synced (${ticketErrors} errors), ${orphansClosed} orphans closed, ${deletedCount || 0} stale deleted`
     );
 
     return NextResponse.json({
@@ -160,6 +190,7 @@ export async function GET(request: Request) {
       closedFetched: closedTickets.length,
       ticketsSynced: ticketSuccess,
       ticketErrors,
+      orphansClosed,
       deletedStale: deletedCount || 0,
       durationMs: duration,
     });

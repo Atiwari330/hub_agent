@@ -1,5 +1,6 @@
 import { getHubSpotClient } from './client';
 import { FilterOperatorEnum } from '@hubspot/api-client/lib/codegen/crm/tickets';
+import { SUPPORT_PIPELINE_ID } from './ticket-stage-config';
 
 const TICKET_PROPERTIES = [
   'subject',
@@ -23,9 +24,6 @@ const TICKET_PROPERTIES = [
   'support__flag_nrt_breached',
   'support__linear_task',
 ];
-
-// Support Pipeline ID in HubSpot
-const SUPPORT_PIPELINE_ID = '0';
 
 export interface HubSpotTicket {
   id: string;
