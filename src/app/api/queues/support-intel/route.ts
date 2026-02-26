@@ -59,48 +59,71 @@ export async function GET(request: NextRequest) {
 
   const supabase = await createServerSupabaseClient();
 
-  // Parse closedDays param: 0 = open only (default), 30/60/90 = also include closed tickets
+  // Parse query params
+  const mode = request.nextUrl.searchParams.get('mode');
   const closedDaysParam = parseInt(request.nextUrl.searchParams.get('closedDays') || '0', 10);
   const closedDays = Math.min(Math.max(isNaN(closedDaysParam) ? 0 : closedDaysParam, 0), 90);
 
   try {
-    // Always fetch open tickets
-    const { data: openTickets, error: openError } = await supabase
-      .from('support_tickets')
-      .select('*')
-      .eq('is_closed', false)
-      .in('pipeline_stage', Array.from(OPEN_TICKET_STAGE_IDS));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let allTickets: any[] = [];
 
-    if (openError) {
-      console.error('Error fetching open tickets:', openError);
-      return NextResponse.json(
-        { error: 'Failed to fetch tickets', details: openError.message },
-        { status: 500 }
-      );
-    }
-
-    // Optionally fetch closed tickets within the date window
-    let closedTickets: typeof openTickets = [];
-    if (closedDays > 0) {
-      const cutoffDate = new Date();
-      cutoffDate.setDate(cutoffDate.getDate() - closedDays);
-      const cutoffISO = cutoffDate.toISOString();
-
-      const { data: closedRows, error: closedError } = await supabase
+    if (mode === 'last200') {
+      // Fetch the 200 most recent tickets regardless of open/closed status
+      const { data: recentTickets, error: recentError } = await supabase
         .from('support_tickets')
         .select('*')
-        .eq('is_closed', true)
-        .gte('closed_date', cutoffISO);
+        .order('hubspot_created_at', { ascending: false })
+        .limit(200);
 
-      if (closedError) {
-        console.error('Error fetching closed tickets:', closedError);
-        // Non-fatal: continue with just open tickets
-      } else {
-        closedTickets = closedRows || [];
+      if (recentError) {
+        console.error('Error fetching recent tickets:', recentError);
+        return NextResponse.json(
+          { error: 'Failed to fetch tickets', details: recentError.message },
+          { status: 500 }
+        );
       }
-    }
 
-    const allTickets = [...(openTickets || []), ...closedTickets];
+      allTickets = recentTickets || [];
+    } else {
+      // Default behavior: always fetch open tickets
+      const { data: openTickets, error: openError } = await supabase
+        .from('support_tickets')
+        .select('*')
+        .eq('is_closed', false)
+        .in('pipeline_stage', Array.from(OPEN_TICKET_STAGE_IDS));
+
+      if (openError) {
+        console.error('Error fetching open tickets:', openError);
+        return NextResponse.json(
+          { error: 'Failed to fetch tickets', details: openError.message },
+          { status: 500 }
+        );
+      }
+
+      // Optionally fetch closed tickets within the date window
+      let closedTickets: typeof openTickets = [];
+      if (closedDays > 0) {
+        const cutoffDate = new Date();
+        cutoffDate.setDate(cutoffDate.getDate() - closedDays);
+        const cutoffISO = cutoffDate.toISOString();
+
+        const { data: closedRows, error: closedError } = await supabase
+          .from('support_tickets')
+          .select('*')
+          .eq('is_closed', true)
+          .gte('closed_date', cutoffISO);
+
+        if (closedError) {
+          console.error('Error fetching closed tickets:', closedError);
+          // Non-fatal: continue with just open tickets
+        } else {
+          closedTickets = closedRows || [];
+        }
+      }
+
+      allTickets = [...(openTickets || []), ...closedTickets];
+    }
 
     // Fetch all ticket categorizations
     const ticketIds = (allTickets || []).map((t) => t.hubspot_ticket_id);

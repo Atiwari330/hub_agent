@@ -7,8 +7,6 @@ import type {
   TicketCategorizationResponse,
 } from '@/app/api/queues/support-intel/route';
 import type { TrendsResponse } from '@/app/api/queues/support-intel/trends/route';
-import type { SupportIntelSummary } from '@/app/api/queues/support-intel/summary/route';
-
 // --- Types ---
 
 type SortColumn =
@@ -103,11 +101,6 @@ export function SupportIntelView() {
   const [trends, setTrends] = useState<TrendsResponse | null>(null);
   const [trendsLoading, setTrendsLoading] = useState(false);
 
-  // Summary state
-  const [summary, setSummary] = useState<SupportIntelSummary | null>(null);
-  const [summaryLoading, setSummaryLoading] = useState(false);
-  const [generatingSummary, setGeneratingSummary] = useState(false);
-
   // Batch analyze state
   const [isBatchAnalyzing, setIsBatchAnalyzing] = useState(false);
   const [batchProgress, setBatchProgress] = useState<{
@@ -127,6 +120,7 @@ export function SupportIntelView() {
   const [companyFilter, setCompanyFilter] = useState<string>('all');
   const [closedFilter, setClosedFilter] = useState<string>('open');
   const [closedDays, setClosedDays] = useState<number>(0);
+  const [dataMode, setDataMode] = useState<'normal' | 'last200'>('normal');
 
   // Chart-specific filters (independent from table)
   const [chartClosedDays, setChartClosedDays] = useState<number>(0);
@@ -143,7 +137,9 @@ export function SupportIntelView() {
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const params = closedDays > 0 ? `?closedDays=${closedDays}` : '';
+      const params = dataMode === 'last200'
+        ? '?mode=last200'
+        : closedDays > 0 ? `?closedDays=${closedDays}` : '';
       const response = await fetch(`/api/queues/support-intel${params}`);
       if (!response.ok) throw new Error('Failed to fetch support intel data');
       const json: SupportIntelResponse = await response.json();
@@ -154,7 +150,7 @@ export function SupportIntelView() {
     } finally {
       setLoading(false);
     }
-  }, [closedDays]);
+  }, [closedDays, dataMode]);
 
   const fetchTrends = useCallback(async () => {
     try {
@@ -170,25 +166,10 @@ export function SupportIntelView() {
     }
   }, []);
 
-  const fetchSummary = useCallback(async () => {
-    try {
-      setSummaryLoading(true);
-      const response = await fetch('/api/queues/support-intel/summary?periodType=weekly');
-      if (!response.ok) return;
-      const json = await response.json();
-      setSummary(json.summary || null);
-    } catch {
-      // Non-critical
-    } finally {
-      setSummaryLoading(false);
-    }
-  }, []);
-
   useEffect(() => {
     fetchData();
     fetchTrends();
-    fetchSummary();
-  }, [fetchData, fetchTrends, fetchSummary]);
+  }, [fetchData, fetchTrends]);
 
   // Fetch independent chart data when chart range differs from table range
   useEffect(() => {
@@ -295,96 +276,131 @@ export function SupportIntelView() {
 
     if (uncategorizedIds.length === 0) return;
 
+    const BATCH_SIZE = 100;
+    const totalTickets = uncategorizedIds.length;
+
     setIsBatchAnalyzing(true);
-    setBatchProgress({ current: 0, total: uncategorizedIds.length, currentTicket: '', successful: 0, failed: 0 });
+    setBatchProgress({ current: 0, total: totalTickets, currentTicket: '', successful: 0, failed: 0 });
 
     const abortController = new AbortController();
     batchAbortRef.current = abortController;
 
+    // Split into chunks of BATCH_SIZE
+    const chunks: string[][] = [];
+    for (let i = 0; i < uncategorizedIds.length; i += BATCH_SIZE) {
+      chunks.push(uncategorizedIds.slice(i, i + BATCH_SIZE));
+    }
+
+    let globalSuccessful = 0;
+    let globalFailed = 0;
+    let globalProcessed = 0;
+
     try {
-      const response = await fetch('/api/queues/support-intel/batch-analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ticketIds: uncategorizedIds }),
-        signal: abortController.signal,
-      });
+      for (const chunk of chunks) {
+        if (abortController.signal.aborted) break;
 
-      if (!response.ok) throw new Error('Batch categorization failed to start');
+        const chunkOffset = globalProcessed;
 
-      const reader = response.body?.getReader();
-      if (!reader) throw new Error('No response stream');
+        const response = await fetch('/api/queues/support-intel/batch-analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ticketIds: chunk }),
+          signal: abortController.signal,
+        });
 
-      const decoder = new TextDecoder();
-      let buffer = '';
+        if (!response.ok) throw new Error('Batch categorization failed to start');
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+        const reader = response.body?.getReader();
+        if (!reader) throw new Error('No response stream');
 
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n\n');
-        buffer = lines.pop() || '';
+        const decoder = new TextDecoder();
+        let buffer = '';
 
-        for (const line of lines) {
-          const dataLine = line.trim();
-          if (!dataLine.startsWith('data: ')) continue;
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
 
-          try {
-            const event = JSON.parse(dataLine.slice(6));
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n\n');
+          buffer = lines.pop() || '';
 
-            if (event.type === 'progress') {
-              setBatchProgress((prev) => ({
-                current: event.index,
-                total: event.total,
-                currentTicket: event.ticketSubject || '',
-                successful: event.status === 'success' ? (prev?.successful ?? 0) + 1 : (prev?.successful ?? 0),
-                failed: event.status === 'error' ? (prev?.failed ?? 0) + 1 : (prev?.failed ?? 0),
-              }));
+          for (const line of lines) {
+            const dataLine = line.trim();
+            if (!dataLine.startsWith('data: ')) continue;
 
-              if (event.status === 'success' && event.categorization) {
-                const categorization: TicketCategorizationResponse = {
-                  hubspot_ticket_id: event.ticketId,
-                  primary_category: event.categorization.primary_category,
-                  subcategory: event.categorization.subcategory,
-                  affected_module: event.categorization.affected_module,
-                  issue_type: event.categorization.issue_type,
-                  severity: event.categorization.severity,
-                  customer_impact: event.categorization.customer_impact,
-                  root_cause_hint: event.categorization.root_cause_hint,
-                  summary: event.categorization.summary,
-                  tags: event.categorization.tags,
-                  ticket_subject: event.ticketSubject,
-                  company_id: null,
-                  company_name: null,
-                  ticket_created_at: null,
-                  is_closed: false,
-                  confidence: event.categorization.confidence,
-                  analyzed_at: event.categorization.analyzed_at,
-                };
+            try {
+              const event = JSON.parse(dataLine.slice(6));
 
-                setData((prev) => {
-                  if (!prev) return prev;
-                  const updatedTickets = prev.tickets.map((t) =>
-                    t.ticketId === event.ticketId ? { ...t, categorization } : t
-                  );
-                  return { tickets: updatedTickets, counts: recomputeCounts(updatedTickets) };
+              if (event.type === 'progress') {
+                const globalIndex = chunkOffset + event.index;
+                if (event.status === 'success') globalSuccessful++;
+                if (event.status === 'error') globalFailed++;
+
+                setBatchProgress({
+                  current: globalIndex,
+                  total: totalTickets,
+                  currentTicket: event.ticketSubject || '',
+                  successful: globalSuccessful,
+                  failed: globalFailed,
                 });
-              }
-            }
 
-            if (event.type === 'done') {
-              setBatchProgress((prev) => prev ? {
-                ...prev,
-                current: event.processed,
-                successful: event.successful,
-                failed: event.failed,
-              } : null);
+                if (event.status === 'success' && event.categorization) {
+                  const categorization: TicketCategorizationResponse = {
+                    hubspot_ticket_id: event.ticketId,
+                    primary_category: event.categorization.primary_category,
+                    subcategory: event.categorization.subcategory,
+                    affected_module: event.categorization.affected_module,
+                    issue_type: event.categorization.issue_type,
+                    severity: event.categorization.severity,
+                    customer_impact: event.categorization.customer_impact,
+                    root_cause_hint: event.categorization.root_cause_hint,
+                    summary: event.categorization.summary,
+                    tags: event.categorization.tags,
+                    ticket_subject: event.ticketSubject,
+                    company_id: null,
+                    company_name: null,
+                    ticket_created_at: null,
+                    is_closed: false,
+                    confidence: event.categorization.confidence,
+                    analyzed_at: event.categorization.analyzed_at,
+                  };
+
+                  setData((prev) => {
+                    if (!prev) return prev;
+                    const updatedTickets = prev.tickets.map((t) =>
+                      t.ticketId === event.ticketId ? { ...t, categorization } : t
+                    );
+                    return { tickets: updatedTickets, counts: recomputeCounts(updatedTickets) };
+                  });
+                }
+              }
+
+              if (event.type === 'done') {
+                globalProcessed = chunkOffset + event.processed;
+                globalSuccessful = chunkOffset > 0
+                  ? globalSuccessful - event.successful + event.successful
+                  : event.successful;
+                // Keep running totals consistent at chunk boundaries
+                globalSuccessful = (globalProcessed - globalFailed) > 0 ? globalProcessed - globalFailed : 0;
+              }
+            } catch {
+              // Skip malformed events
             }
-          } catch {
-            // Skip malformed events
           }
         }
+
+        // Update globalProcessed after chunk finishes
+        globalProcessed = chunkOffset + chunk.length;
       }
+
+      // Final progress update
+      setBatchProgress({
+        current: totalTickets,
+        total: totalTickets,
+        currentTicket: '',
+        successful: globalSuccessful,
+        failed: globalFailed,
+      });
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {
         // User cancelled
@@ -399,31 +415,6 @@ export function SupportIntelView() {
 
   const cancelBatch = () => {
     batchAbortRef.current?.abort();
-  };
-
-  const generateSummary = async () => {
-    setGeneratingSummary(true);
-    try {
-      const now = new Date();
-      const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      const response = await fetch('/api/queues/support-intel/summary', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          periodStart: weekAgo.toISOString().slice(0, 10),
-          periodEnd: now.toISOString().slice(0, 10),
-        }),
-      });
-
-      if (!response.ok) throw new Error('Failed to generate summary');
-
-      const json = await response.json();
-      setSummary(json.summary || null);
-    } catch (err) {
-      console.error('Summary generation failed:', err);
-    } finally {
-      setGeneratingSummary(false);
-    }
   };
 
   const exportCsv = () => {
@@ -583,7 +574,7 @@ export function SupportIntelView() {
     }
   };
 
-  const hasActiveFilters = statusFilter !== 'all' || categoryFilter !== 'all' || severityFilter !== 'all' || issueTypeFilter !== 'all' || companyFilter !== 'all' || closedFilter !== 'open' || closedDays !== 0;
+  const hasActiveFilters = statusFilter !== 'all' || categoryFilter !== 'all' || severityFilter !== 'all' || issueTypeFilter !== 'all' || companyFilter !== 'all' || closedFilter !== 'open' || closedDays !== 0 || dataMode !== 'normal';
 
   const clearFilters = () => {
     setStatusFilter('all');
@@ -593,6 +584,7 @@ export function SupportIntelView() {
     setCompanyFilter('all');
     setClosedDays(0);
     setClosedFilter('open');
+    setDataMode('normal');
   };
 
   const toggleRow = (key: string) => {
@@ -610,75 +602,6 @@ export function SupportIntelView() {
           LLM-powered issue categorization and trend analysis across all support tickets.
         </p>
       </div>
-
-      {/* Executive Summary Card */}
-      {!loading && (
-        <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-lg font-semibold text-gray-900">Weekly Summary</h2>
-            <button
-              onClick={generateSummary}
-              disabled={generatingSummary || summaryLoading}
-              className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition-colors disabled:opacity-50"
-            >
-              {generatingSummary ? (
-                <>
-                  <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                  </svg>
-                  Generating...
-                </>
-              ) : (
-                <>
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                  </svg>
-                  {summary ? 'Regenerate' : 'Generate Summary'}
-                </>
-              )}
-            </button>
-          </div>
-
-          {summaryLoading ? (
-            <div className="flex items-center justify-center py-8">
-              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-600"></div>
-            </div>
-          ) : summary ? (
-            <div className="space-y-4">
-              <div className="prose prose-sm max-w-none text-gray-700">
-                {summary.summary_text.split('\n\n').map((paragraph, i) => (
-                  <p key={i}>{paragraph}</p>
-                ))}
-              </div>
-
-              {summary.key_insights && summary.key_insights.length > 0 && (
-                <div className="border-t border-gray-100 pt-3">
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">Key Insights</h3>
-                  <ul className="space-y-1">
-                    {summary.key_insights.map((insight, i) => (
-                      <li key={i} className="flex items-start gap-2 text-sm text-gray-600">
-                        <span className="text-indigo-500 mt-0.5">-</span>
-                        <span>{insight}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              <div className="flex items-center gap-4 text-xs text-gray-400 border-t border-gray-100 pt-2">
-                <span>Period: {summary.period_start} to {summary.period_end}</span>
-                <span>{summary.total_tickets_analyzed} tickets analyzed</span>
-                <span>Generated {new Date(summary.generated_at).toLocaleString()}</span>
-              </div>
-            </div>
-          ) : (
-            <p className="text-sm text-gray-500 py-4 text-center">
-              No summary generated yet. Click &quot;Generate Summary&quot; to create a weekly executive summary.
-            </p>
-          )}
-        </div>
-      )}
 
       {/* Summary Cards */}
       {!loading && data && (
@@ -1047,23 +970,32 @@ export function SupportIntelView() {
         <div className="flex items-center gap-2">
           <label className="text-sm text-gray-600">Data Range:</label>
           <select
-            value={closedDays}
+            value={dataMode === 'last200' ? 'last200' : String(closedDays)}
             onChange={(e) => {
-              const val = parseInt(e.target.value, 10);
-              setClosedDays(val);
-              // Auto-set show filter: if including closed, show all; if open only, show open
-              if (val === 0) {
-                setClosedFilter('open');
-              } else if (closedFilter === 'open') {
+              const val = e.target.value;
+              if (val === 'last200') {
+                setDataMode('last200');
+                setClosedDays(0);
                 setClosedFilter('all');
+              } else {
+                setDataMode('normal');
+                const days = parseInt(val, 10);
+                setClosedDays(days);
+                // Auto-set show filter: if including closed, show all; if open only, show open
+                if (days === 0) {
+                  setClosedFilter('open');
+                } else if (closedFilter === 'open') {
+                  setClosedFilter('all');
+                }
               }
             }}
             className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
           >
-            <option value={0}>Open Only</option>
-            <option value={30}>+ Closed (30 days)</option>
-            <option value={60}>+ Closed (60 days)</option>
-            <option value={90}>+ Closed (90 days)</option>
+            <option value="0">Open Only</option>
+            <option value="30">+ Closed (30 days)</option>
+            <option value="60">+ Closed (60 days)</option>
+            <option value="90">+ Closed (90 days)</option>
+            <option value="last200">Last 200 (All)</option>
           </select>
         </div>
 
@@ -1072,7 +1004,7 @@ export function SupportIntelView() {
           <select
             value={closedFilter}
             onChange={(e) => setClosedFilter(e.target.value)}
-            disabled={closedDays === 0}
+            disabled={closedDays === 0 && dataMode !== 'last200'}
             className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <option value="all">All (Open + Closed)</option>
