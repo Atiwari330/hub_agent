@@ -4,22 +4,8 @@
  */
 
 import { generateText } from 'ai';
-import { createAnthropic } from '@ai-sdk/anthropic';
+import { getModel } from './provider';
 import type { ExceptionContext, ExceptionContextInput, ExceptionUrgency } from '@/types/exception-context';
-
-// Create Anthropic provider via AI Gateway
-function getAnthropicProvider() {
-  const apiKey = process.env.AI_GATEWAY_API_KEY;
-
-  if (!apiKey) {
-    throw new Error('AI_GATEWAY_API_KEY is not configured');
-  }
-
-  return createAnthropic({
-    apiKey,
-    baseURL: 'https://ai-gateway.vercel.sh/v1',
-  });
-}
 
 const SYSTEM_PROMPT = `You are a RevOps analyst diagnosing why deals need attention.
 
@@ -158,9 +144,8 @@ export async function generateExceptionContext(
   const prompt = buildPrompt(input);
 
   try {
-    const anthropic = getAnthropicProvider();
     const result = await generateText({
-      model: anthropic('claude-sonnet-4-20250514'),
+      model: getModel(),
       system: SYSTEM_PROMPT,
       prompt,
     });

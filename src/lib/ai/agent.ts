@@ -1,5 +1,5 @@
 import { generateText, streamText, stepCountIs } from 'ai';
-import { createAnthropic } from '@ai-sdk/anthropic';
+import { getModel } from './provider';
 import {
   listOwnersTool,
   getOwnerByEmailTool,
@@ -52,26 +52,10 @@ export const revOpsTools = {
   getPipelines: getPipelinesTool,
 };
 
-// Create Anthropic provider via AI Gateway
-function getAnthropicProvider() {
-  const apiKey = process.env.AI_GATEWAY_API_KEY;
-
-  if (!apiKey) {
-    throw new Error('AI_GATEWAY_API_KEY is not configured');
-  }
-
-  return createAnthropic({
-    apiKey,
-    baseURL: 'https://ai-gateway.vercel.sh/v1',
-  });
-}
-
 // Generate a response using the agent (non-streaming)
 export async function runAgent(prompt: string, maxSteps = 10) {
-  const anthropic = getAnthropicProvider();
-
   const result = await generateText({
-    model: anthropic('claude-sonnet-4-20250514'),
+    model: getModel(),
     system: REVOPS_AGENT_SYSTEM_PROMPT,
     prompt,
     tools: revOpsTools,
@@ -88,10 +72,8 @@ export async function runAgent(prompt: string, maxSteps = 10) {
 
 // Stream a response using the agent
 export function streamAgent(prompt: string, maxSteps = 10) {
-  const anthropic = getAnthropicProvider();
-
   return streamText({
-    model: anthropic('claude-sonnet-4-20250514'),
+    model: getModel(),
     system: REVOPS_AGENT_SYSTEM_PROMPT,
     prompt,
     tools: revOpsTools,
@@ -104,10 +86,8 @@ export function streamAgentWithMessages(
   messages: Array<{ role: 'user' | 'assistant'; content: string }>,
   maxSteps = 10
 ) {
-  const anthropic = getAnthropicProvider();
-
   return streamText({
-    model: anthropic('claude-sonnet-4-20250514'),
+    model: getModel(),
     system: REVOPS_AGENT_SYSTEM_PROMPT,
     messages,
     tools: revOpsTools,

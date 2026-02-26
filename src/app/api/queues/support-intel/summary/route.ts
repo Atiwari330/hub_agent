@@ -4,18 +4,7 @@ import { createServiceClient } from '@/lib/supabase/client';
 import { checkApiAuth } from '@/lib/auth/api';
 import { RESOURCES } from '@/lib/auth';
 import { generateText } from 'ai';
-import { createAnthropic } from '@ai-sdk/anthropic';
-
-function getAnthropicProvider() {
-  const apiKey = process.env.AI_GATEWAY_API_KEY;
-  if (!apiKey) {
-    throw new Error('AI_GATEWAY_API_KEY is not configured');
-  }
-  return createAnthropic({
-    apiKey,
-    baseURL: 'https://ai-gateway.vercel.sh/v1',
-  });
-}
+import { getModel } from '@/lib/ai/provider';
 
 export interface SupportIntelSummary {
   id: string;
@@ -175,8 +164,6 @@ export async function POST(request: Request) {
     }
 
     // Generate LLM summary
-    const anthropic = getAnthropicProvider();
-
     const summaryPrompt = `You are a VP of Support Operations at a healthcare SaaS company.
 Generate a brief executive summary of support trends for the period ${periodStart} to ${periodEnd}.
 
@@ -206,7 +193,7 @@ Write a 3-5 paragraph executive summary that:
 Also provide 3-5 key insights as a JSON array of strings at the end, on its own line prefixed with KEY_INSIGHTS:`;
 
     const result = await generateText({
-      model: anthropic('claude-sonnet-4-20250514'),
+      model: getModel(),
       prompt: summaryPrompt,
     });
 

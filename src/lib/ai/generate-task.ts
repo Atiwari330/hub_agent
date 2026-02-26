@@ -6,22 +6,8 @@
  */
 
 import { generateText } from 'ai';
-import { createAnthropic } from '@ai-sdk/anthropic';
+import { getModel } from './provider';
 import { z } from 'zod';
-
-// Create Anthropic provider via AI Gateway
-function getAnthropicProvider() {
-  const apiKey = process.env.AI_GATEWAY_API_KEY;
-
-  if (!apiKey) {
-    throw new Error('AI_GATEWAY_API_KEY is not configured');
-  }
-
-  return createAnthropic({
-    apiKey,
-    baseURL: 'https://ai-gateway.vercel.sh/v1',
-  });
-}
 
 // Input schema for task generation
 export const GenerateTaskInputSchema = z.object({
@@ -164,11 +150,10 @@ export async function generateTaskContent(
   const validated = GenerateTaskInputSchema.parse(input);
 
   try {
-    const anthropic = getAnthropicProvider();
     const prompt = buildTaskPrompt(validated);
 
     const result = await generateText({
-      model: anthropic('claude-sonnet-4-20250514'),
+      model: getModel(),
       prompt,
     });
 

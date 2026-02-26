@@ -6,27 +6,13 @@
  */
 
 import { generateText } from 'ai';
-import { createAnthropic } from '@ai-sdk/anthropic';
+import { getModel } from './provider';
 import type {
   NextStepAnalysis,
   NextStepStatus,
   NextStepActionType,
   NextStepExtractionInput,
 } from '@/types/next-step-analysis';
-
-// Create Anthropic provider via AI Gateway
-function getAnthropicProvider() {
-  const apiKey = process.env.AI_GATEWAY_API_KEY;
-
-  if (!apiKey) {
-    throw new Error('AI_GATEWAY_API_KEY is not configured');
-  }
-
-  return createAnthropic({
-    apiKey,
-    baseURL: 'https://ai-gateway.vercel.sh/v1',
-  });
-}
 
 /**
  * Format a date as YYYY-MM-DD
@@ -271,11 +257,10 @@ export async function analyzeNextStep(
   }
 
   try {
-    const anthropic = getAnthropicProvider();
     const prompt = buildExtractionPrompt(trimmed, referenceDate);
 
     const result = await generateText({
-      model: anthropic('claude-sonnet-4-20250514'),
+      model: getModel(),
       prompt,
     });
 

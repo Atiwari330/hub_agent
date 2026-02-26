@@ -2,20 +2,7 @@ import { createServerSupabaseClient } from '@/lib/supabase/client';
 import { createServiceClient } from '@/lib/supabase/client';
 import { getTicketEngagementTimeline } from '@/lib/hubspot/ticket-engagements';
 import { generateText } from 'ai';
-import { createAnthropic } from '@ai-sdk/anthropic';
-
-// --- Anthropic provider ---
-
-function getAnthropicProvider() {
-  const apiKey = process.env.AI_GATEWAY_API_KEY;
-  if (!apiKey) {
-    throw new Error('AI_GATEWAY_API_KEY is not configured');
-  }
-  return createAnthropic({
-    apiKey,
-    baseURL: 'https://ai-gateway.vercel.sh/v1',
-  });
-}
+import { getModel } from '@/lib/ai/provider';
 
 // --- Types ---
 
@@ -190,9 +177,8 @@ FULL ENGAGEMENT TIMELINE (${timeline.counts.total} items: ${timeline.counts.emai
 ${engagementText}`;
 
     // 5. Call LLM
-    const anthropic = getAnthropicProvider();
     const result = await generateText({
-      model: anthropic('claude-sonnet-4-20250514'),
+      model: getModel(),
       system: systemPrompt,
       prompt: userPrompt,
     });

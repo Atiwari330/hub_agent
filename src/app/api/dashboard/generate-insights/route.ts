@@ -1,20 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateText } from 'ai';
-import { createAnthropic } from '@ai-sdk/anthropic';
-
-// Create Anthropic provider via AI Gateway
-function getAnthropicProvider() {
-  const apiKey = process.env.AI_GATEWAY_API_KEY;
-
-  if (!apiKey) {
-    throw new Error('AI_GATEWAY_API_KEY is not configured');
-  }
-
-  return createAnthropic({
-    apiKey,
-    baseURL: 'https://ai-gateway.vercel.sh/v1',
-  });
-}
+import { getModel } from '@/lib/ai/provider';
 
 const SYSTEM_PROMPT = `You are a RevOps AI assistant generating executive insights for a VP of Revenue Operations at a behavioral health EHR software company.
 
@@ -123,10 +109,8 @@ ${JSON.stringify(data.riskFactors, null, 2)}`;
         );
     }
 
-    const anthropic = getAnthropicProvider();
-
     const result = await generateText({
-      model: anthropic('claude-sonnet-4-20250514'),
+      model: getModel(),
       system: SYSTEM_PROMPT,
       prompt,
     });

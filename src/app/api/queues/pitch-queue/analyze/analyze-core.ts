@@ -2,21 +2,8 @@ import { createServerSupabaseClient } from '@/lib/supabase/client';
 import { createServiceClient } from '@/lib/supabase/client';
 import { getHubSpotClient } from '@/lib/hubspot/client';
 import { generateText } from 'ai';
-import { createAnthropic } from '@ai-sdk/anthropic';
+import { getModel } from '@/lib/ai/provider';
 import type { PitchAnalysis } from '../../pitch-queue/route';
-
-// --- Anthropic provider (same pattern as agent.ts) ---
-
-function getAnthropicProvider() {
-  const apiKey = process.env.AI_GATEWAY_API_KEY;
-  if (!apiKey) {
-    throw new Error('AI_GATEWAY_API_KEY is not configured');
-  }
-  return createAnthropic({
-    apiKey,
-    baseURL: 'https://ai-gateway.vercel.sh/v1',
-  });
-}
 
 // --- Types ---
 
@@ -204,9 +191,8 @@ CONTACT:
 CONVERSATION THREAD:
 ${conversationText}`;
 
-    const anthropic = getAnthropicProvider();
     const result = await generateText({
-      model: anthropic('claude-sonnet-4-20250514'),
+      model: getModel(),
       system: systemPrompt,
       prompt: userPrompt,
     });
