@@ -98,6 +98,9 @@ export async function GET(request: Request) {
       nrt_sla_breached: ticket.properties.nrt_sla_breached === 'true',
       linear_task: ticket.properties.linear_task,
       hubspot_created_at: toTimestamp(ticket.properties.createdate),
+      last_customer_message_at: toTimestamp(ticket.properties.hs_last_message_received_at),
+      last_agent_message_at: toTimestamp(ticket.properties.hs_last_message_sent_at),
+      last_contacted_at: toTimestamp(ticket.properties.hs_lastcontacted),
       synced_at: new Date().toISOString(),
     }));
 

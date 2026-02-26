@@ -186,6 +186,7 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
   const isOnCSHygieneQueue = pathname === '/dashboard/queues/cs-hygiene';
   // Support queues
   const isOnSupportPulse = pathname === '/dashboard/queues/support-pulse';
+  const isOnFollowUpQueue = pathname === '/dashboard/queues/follow-up-queue';
   const isOnPitchQueue = pathname === '/dashboard/queues/pitch-queue';
   const isOnSupportIntel = pathname === '/dashboard/queues/support-intel';
   // Hot Tracker
@@ -327,6 +328,7 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
           hasPermission(user, RESOURCES.QUEUE_AT_RISK) ||
           hasPermission(user, RESOURCES.QUEUE_CS_HYGIENE) ||
           hasPermission(user, RESOURCES.QUEUE_SUPPORT_PULSE) ||
+          hasPermission(user, RESOURCES.QUEUE_FOLLOW_UP) ||
           hasPermission(user, RESOURCES.QUEUE_PITCH_QUEUE) ||
           hasPermission(user, RESOURCES.QUEUE_SUPPORT_INTEL)) && (
         <div className="mt-4">
@@ -641,6 +643,7 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
 
               {/* Support Section */}
               {(hasPermission(user, RESOURCES.QUEUE_SUPPORT_PULSE) ||
+                hasPermission(user, RESOURCES.QUEUE_FOLLOW_UP) ||
                 hasPermission(user, RESOURCES.QUEUE_PITCH_QUEUE) ||
                 hasPermission(user, RESOURCES.QUEUE_SUPPORT_INTEL)) && (
               <>
@@ -671,6 +674,31 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
                         </svg>
                       ) : (
                         <span>Support Pulse</span>
+                      )}
+                    </Link>
+                  </li>
+                  )}
+                  {hasPermission(user, RESOURCES.QUEUE_FOLLOW_UP) && (
+                  <li>
+                    <Link
+                      href="/dashboard/queues/follow-up-queue"
+                      className={`flex items-center py-2 text-sm transition-colors ${
+                        isCollapsed
+                          ? 'px-0 justify-center'
+                          : 'px-4 pl-14'
+                      } ${
+                        isOnFollowUpQueue
+                          ? 'bg-indigo-600 text-white'
+                          : 'text-slate-300 hover:bg-slate-800'
+                      }`}
+                      title={isCollapsed ? 'Follow-Up Queue' : undefined}
+                    >
+                      {isCollapsed ? (
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                        </svg>
+                      ) : (
+                        <span>Follow-Up Queue</span>
                       )}
                     </Link>
                   </li>

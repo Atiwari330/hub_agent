@@ -23,6 +23,9 @@ const TICKET_PROPERTIES = [
   'support__frt_sla_breached',
   'support__flag_nrt_breached',
   'support__linear_task',
+  'hs_last_message_received_at',
+  'hs_last_message_sent_at',
+  'hs_lastcontacted',
 ];
 
 export interface HubSpotTicket {
@@ -48,6 +51,9 @@ export interface HubSpotTicket {
     frt_sla_breached: string | null;
     nrt_sla_breached: string | null;
     linear_task: string | null;
+    hs_last_message_received_at: string | null;
+    hs_last_message_sent_at: string | null;
+    hs_lastcontacted: string | null;
   };
 }
 
@@ -75,6 +81,9 @@ function mapTicketProperties(
     frt_sla_breached: rawProps['support__frt_sla_breached'] || null,
     nrt_sla_breached: rawProps['support__flag_nrt_breached'] || null,
     linear_task: rawProps['support__linear_task'] || null,
+    hs_last_message_received_at: rawProps.hs_last_message_received_at || null,
+    hs_last_message_sent_at: rawProps.hs_last_message_sent_at || null,
+    hs_lastcontacted: rawProps.hs_lastcontacted || null,
   };
 }
 
