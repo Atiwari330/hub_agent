@@ -7,7 +7,7 @@ import type { DealCoachQueueResponse, DealCoachAnalysisResponse } from '@/app/ap
 // --- Types ---
 
 type StatusFilter = 'all' | 'needs_action' | 'on_track' | 'at_risk' | 'stalled' | 'no_action_needed' | 'unanalyzed';
-type SortColumn = 'status' | 'urgency' | 'dealName' | 'amount' | 'stage' | 'daysInStage' | 'closeDate';
+type SortColumn = 'status' | 'urgency' | 'dealName' | 'amount' | 'stage' | 'daysInStage' | 'closeDate' | 'analyzedAt';
 type SortDirection = 'asc' | 'desc';
 
 // --- Helper Components ---
@@ -224,6 +224,12 @@ export function DealCoachView() {
         case 'closeDate':
           comparison = (a.closeDate || '').localeCompare(b.closeDate || '');
           break;
+        case 'analyzedAt': {
+          const aTime = a.analysis?.analyzed_at ? new Date(a.analysis.analyzed_at).getTime() : 0;
+          const bTime = b.analysis?.analyzed_at ? new Date(b.analysis.analyzed_at).getTime() : 0;
+          comparison = aTime - bTime;
+          break;
+        }
       }
       return sortDirection === 'asc' ? comparison : -comparison;
     });
@@ -564,6 +570,31 @@ export function DealCoachView() {
             </button>
           )}
 
+          {/* Export CSV button */}
+          {data.counts.analyzed > 0 && (
+            <button
+              onClick={() => {
+                const params = new URLSearchParams();
+                if (statusFilter !== 'all' && statusFilter !== 'unanalyzed') params.set('status', statusFilter);
+                if (aeFilter !== 'all') params.set('ae', aeFilter);
+                if (stageFilter !== 'all') params.set('stage', stageFilter);
+                const url = `/api/queues/deal-coach/export${params.toString() ? `?${params}` : ''}`;
+                window.open(url, '_blank');
+              }}
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              Export CSV
+              {hasActiveFilters && (
+                <span className="text-xs text-gray-500">
+                  ({statusFilter !== 'all' && statusFilter !== 'unanalyzed' ? statusFilter.replace('_', ' ') : stageFilter !== 'all' ? stageOptions.find(s => s.id === stageFilter)?.label || 'filtered' : aeFilter !== 'all' ? aeFilter : 'filtered'})
+                </span>
+              )}
+            </button>
+          )}
+
           {/* Batch progress indicator */}
           {isBatchAnalyzing && batchProgress && (
             <div className="flex items-center gap-3 bg-indigo-50 border border-indigo-200 rounded-lg px-4 py-2">
@@ -783,6 +814,15 @@ export function DealCoachView() {
                       <SortIcon active={sortColumn === 'closeDate'} direction={sortDirection} />
                     </div>
                   </th>
+                  <th
+                    className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100 select-none whitespace-nowrap"
+                    onClick={() => handleSort('analyzedAt')}
+                  >
+                    <div className="flex items-center gap-1">
+                      <span>Analyzed</span>
+                      <SortIcon active={sortColumn === 'analyzedAt'} direction={sortDirection} />
+                    </div>
+                  </th>
                   <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">
                     Action
                   </th>
@@ -849,6 +889,24 @@ export function DealCoachView() {
                         <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
                           {deal.closeDate ? new Date(deal.closeDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '-'}
                         </td>
+                        <td className="px-4 py-3 text-xs text-gray-400 whitespace-nowrap">
+                          {(() => {
+                            if (!deal.analysis?.analyzed_at) return <span className="text-gray-300">&mdash;</span>;
+                            const analyzed = new Date(deal.analysis.analyzed_at);
+                            const now = new Date();
+                            const diffMs = now.getTime() - analyzed.getTime();
+                            const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+                            const isToday = analyzed.toDateString() === now.toDateString();
+                            const yesterday = new Date(now);
+                            yesterday.setDate(yesterday.getDate() - 1);
+                            const isYesterday = analyzed.toDateString() === yesterday.toDateString();
+
+                            if (isToday) return `Today ${analyzed.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
+                            if (isYesterday) return 'Yesterday';
+                            if (diffDays <= 7) return `${diffDays}d ago`;
+                            return analyzed.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                          })()}
+                        </td>
                         <td className="px-4 py-3">
                           <button
                             onClick={(e) => {
@@ -878,7 +936,7 @@ export function DealCoachView() {
                       {/* Expanded Row - Analysis Details */}
                       {isExpanded && (
                         <tr>
-                          <td colSpan={10} className="px-0 py-0">
+                          <td colSpan={11} className="px-0 py-0">
                             <div className="bg-slate-50 border-y border-gray-200 px-8 py-4">
                               {deal.analysis ? (
                                 <div className="space-y-3">
