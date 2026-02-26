@@ -145,6 +145,7 @@ export interface HubSpotCall {
     hs_timestamp: string | null;
     hs_call_duration: string | null;
     hs_call_disposition: string | null;
+    hs_call_direction: string | null;
   };
 }
 
@@ -197,7 +198,7 @@ export async function getCallsByDealId(dealId: string): Promise<HubSpotCall[]> {
       try {
         const call = await client.crm.objects.calls.basicApi.getById(
           callId,
-          ['hs_call_title', 'hs_call_body', 'hs_timestamp', 'hs_call_duration', 'hs_call_disposition']
+          ['hs_call_title', 'hs_call_body', 'hs_timestamp', 'hs_call_duration', 'hs_call_disposition', 'hs_call_direction']
         );
 
         calls.push({
@@ -208,6 +209,7 @@ export async function getCallsByDealId(dealId: string): Promise<HubSpotCall[]> {
             hs_timestamp: call.properties.hs_timestamp || null,
             hs_call_duration: call.properties.hs_call_duration || null,
             hs_call_disposition: call.properties.hs_call_disposition || null,
+            hs_call_direction: call.properties.hs_call_direction || null,
           },
         });
       } catch (error) {

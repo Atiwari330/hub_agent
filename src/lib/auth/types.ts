@@ -27,6 +27,7 @@ export const RESOURCES = {
   QUEUE_PITCH_QUEUE: 'queue:pitch-queue',
   QUEUE_SUPPORT_INTEL: 'queue:support-intel',
   QUEUE_FOLLOW_UP: 'queue:follow-up-queue',
+  QUEUE_DEAL_COACH: 'queue:deal-coach',
   API_AGENT: 'api:agent',
   PORTAL: 'portal',
   HOT_TRACKER: 'hot_tracker',
@@ -88,6 +89,8 @@ export function getResourceFromPath(pathname: string): Resource | null {
     return RESOURCES.QUEUE_SUPPORT_INTEL;
   if (pathname.includes('/queues/follow-up-queue'))
     return RESOURCES.QUEUE_FOLLOW_UP;
+  if (pathname.includes('/queues/deal-coach'))
+    return RESOURCES.QUEUE_DEAL_COACH;
 
   // Hot Tracker
   if (pathname.includes('/dashboard/hot-tracker')) return RESOURCES.HOT_TRACKER;
@@ -129,6 +132,8 @@ export function getResourceFromPath(pathname: string): Resource | null {
     return RESOURCES.QUEUE_SUPPORT_INTEL;
   if (pathname.includes('/api/queues/follow-up-queue'))
     return RESOURCES.QUEUE_FOLLOW_UP;
+  if (pathname.includes('/api/queues/deal-coach'))
+    return RESOURCES.QUEUE_DEAL_COACH;
   if (pathname.includes('/api/queues/create-cs-task'))
     return RESOURCES.QUEUE_CS_HYGIENE;
   if (pathname.includes('/api/hot-tracker')) return RESOURCES.HOT_TRACKER;

@@ -78,6 +78,7 @@ async function batchFetchCallDetails(callIds: string[]): Promise<Map<string, Hub
           'hs_call_body',
           'hs_call_duration',
           'hs_call_disposition',
+          'hs_call_direction',
         ],
         propertiesWithHistory: [],
       });
@@ -91,6 +92,7 @@ async function batchFetchCallDetails(callIds: string[]): Promise<Map<string, Hub
             hs_timestamp: call.properties.hs_timestamp || null,
             hs_call_duration: call.properties.hs_call_duration || null,
             hs_call_disposition: call.properties.hs_call_disposition || null,
+            hs_call_direction: call.properties.hs_call_direction || null,
           },
         });
       }
