@@ -12,6 +12,17 @@
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createDeepSeek } from '@ai-sdk/deepseek';
 
+export function getOpusModel() {
+  const apiKey = process.env.AI_GATEWAY_API_KEY;
+  if (!apiKey) throw new Error('AI_GATEWAY_API_KEY is not configured');
+
+  const anthropic = createAnthropic({
+    apiKey,
+    baseURL: 'https://ai-gateway.vercel.sh/v1',
+  });
+  return anthropic('claude-opus-4-6');
+}
+
 export function getModel() {
   const apiKey = process.env.AI_GATEWAY_API_KEY;
   if (!apiKey) {

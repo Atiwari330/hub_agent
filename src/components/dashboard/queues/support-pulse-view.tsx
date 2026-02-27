@@ -7,6 +7,7 @@ import type {
   SupportPulseAccount,
   SupportPulseResponse,
 } from '@/app/api/queues/support-pulse/route';
+import type { SupportPulseAnalysis } from '@/app/api/queues/support-pulse/analyze/route';
 
 type SortColumn =
   | 'companyName'
@@ -103,6 +104,12 @@ export function SupportPulseView() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
+
+  // AI Analysis
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analysis, setAnalysis] = useState<SupportPulseAnalysis | null>(null);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [analysisOpen, setAnalysisOpen] = useState(true);
 
   // Filters
   const [riskFilter, setRiskFilter] = useState<string>('non-healthy');
@@ -246,15 +253,57 @@ export function SupportPulseView() {
     setExpandedRow(expandedRow === key ? null : key);
   };
 
+  const handleAnalyze = useCallback(async () => {
+    try {
+      setAnalyzing(true);
+      setAnalysisError(null);
+      setAnalysisOpen(true);
+      const response = await fetch('/api/queues/support-pulse/analyze', {
+        method: 'POST',
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.error || 'Failed to analyze');
+      }
+      const result: SupportPulseAnalysis = await response.json();
+      setAnalysis(result);
+    } catch (err) {
+      setAnalysisError(err instanceof Error ? err.message : 'Unknown error');
+    } finally {
+      setAnalyzing(false);
+    }
+  }, []);
+
   return (
     <div className="p-6">
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Support Pulse</h1>
-        <p className="text-sm text-gray-600 mt-1">
-          Account-level support health — which accounts have the most support
-          pain right now?
-        </p>
+      <div className="mb-6 flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Support Pulse</h1>
+          <p className="text-sm text-gray-600 mt-1">
+            Account-level support health — which accounts have the most support
+            pain right now?
+          </p>
+        </div>
+        <button
+          onClick={handleAnalyze}
+          disabled={analyzing || loading}
+          className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        >
+          {analyzing ? (
+            <>
+              <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
+              Analyzing...
+            </>
+          ) : (
+            <>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+              </svg>
+              Analyze with AI
+            </>
+          )}
+        </button>
       </div>
 
       {/* Summary Banner */}
@@ -308,6 +357,185 @@ export function SupportPulseView() {
               </span>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* AI Analysis Error */}
+      {analysisError && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+          <p className="text-sm text-red-700">Analysis failed: {analysisError}</p>
+          <button
+            onClick={handleAnalyze}
+            className="mt-2 text-sm text-red-600 hover:text-red-800 font-medium"
+          >
+            Try again
+          </button>
+        </div>
+      )}
+
+      {/* AI Analysis Results */}
+      {analysis && !analysisError && (
+        <div className="mb-6 bg-indigo-50 border border-indigo-200 rounded-xl overflow-hidden">
+          {/* Collapsible header */}
+          <button
+            onClick={() => setAnalysisOpen(!analysisOpen)}
+            className="w-full flex items-center justify-between px-5 py-3 hover:bg-indigo-100 transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+              </svg>
+              <span className="text-sm font-semibold text-indigo-900">AI Analysis</span>
+              <span className="text-xs text-indigo-600">
+                Analyzed {new Date(analysis.analyzedAt).toLocaleString()}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleAnalyze();
+                }}
+                className="text-xs text-indigo-600 hover:text-indigo-800 font-medium px-2 py-1 rounded hover:bg-indigo-200 transition-colors"
+              >
+                Re-analyze
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setAnalysis(null);
+                }}
+                className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1 rounded hover:bg-indigo-200 transition-colors"
+              >
+                Dismiss
+              </button>
+              <svg
+                className={`w-4 h-4 text-indigo-600 transition-transform ${analysisOpen ? 'rotate-180' : ''}`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
+          </button>
+
+          {/* Collapsible content */}
+          {analysisOpen && (
+            <div className="px-5 pb-5 space-y-5">
+              {/* Executive Summary */}
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900 mb-2">Executive Summary</h3>
+                <p className="text-sm text-gray-700 leading-relaxed">{analysis.summary}</p>
+              </div>
+
+              {/* Prioritized Actions */}
+              {analysis.prioritizedActions.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-900 mb-2">
+                    Prioritized Actions ({analysis.prioritizedActions.length})
+                  </h3>
+                  <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-gray-200">
+                          <th className="text-left px-3 py-2 text-xs font-medium text-slate-500 uppercase">Priority</th>
+                          <th className="text-left px-3 py-2 text-xs font-medium text-slate-500 uppercase">Action</th>
+                          <th className="text-left px-3 py-2 text-xs font-medium text-slate-500 uppercase">Owner</th>
+                          <th className="text-left px-3 py-2 text-xs font-medium text-slate-500 uppercase">Account</th>
+                          <th className="text-left px-3 py-2 text-xs font-medium text-slate-500 uppercase">Reasoning</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {analysis.prioritizedActions.map((item, i) => (
+                          <tr key={i} className="hover:bg-slate-50">
+                            <td className="px-3 py-2">
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                                item.priority === 'critical' ? 'bg-red-100 text-red-700' :
+                                item.priority === 'high' ? 'bg-orange-100 text-orange-700' :
+                                item.priority === 'medium' ? 'bg-yellow-100 text-yellow-700' :
+                                'bg-gray-100 text-gray-700'
+                              }`}>
+                                {item.priority}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2 text-sm text-gray-900">{item.action}</td>
+                            <td className="px-3 py-2 text-sm text-gray-600 whitespace-nowrap">{item.owner}</td>
+                            <td className="px-3 py-2 text-sm text-gray-600 whitespace-nowrap">{item.account}</td>
+                            <td className="px-3 py-2 text-sm text-gray-500">{item.reasoning}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Escalations */}
+              {analysis.escalations.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-900 mb-2">
+                    Recommended Escalations ({analysis.escalations.length})
+                  </h3>
+                  <div className="space-y-2">
+                    {analysis.escalations.map((esc, i) => (
+                      <div key={i} className="bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="w-2 h-2 rounded-full bg-red-500" />
+                          <span className="text-sm font-medium text-red-900">{esc.account}</span>
+                          <span className="text-xs text-red-600">Escalate to: {esc.escalateTo}</span>
+                        </div>
+                        <p className="text-sm text-red-800">{esc.reason}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Meeting Recommendations */}
+              {analysis.meetingRecommendations.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-900 mb-2">
+                    Meeting Recommendations ({analysis.meetingRecommendations.length})
+                  </h3>
+                  <div className="space-y-2">
+                    {analysis.meetingRecommendations.map((mtg, i) => (
+                      <div key={i} className="bg-white border border-gray-200 rounded-lg px-4 py-3">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                            mtg.urgency === 'immediate' ? 'bg-red-100 text-red-700' :
+                            mtg.urgency === 'this_week' ? 'bg-orange-100 text-orange-700' :
+                            'bg-gray-100 text-gray-700'
+                          }`}>
+                            {mtg.urgency.replace('_', ' ')}
+                          </span>
+                          <span className="text-sm font-medium text-gray-900">{mtg.purpose}</span>
+                        </div>
+                        <p className="text-sm text-gray-600">Participants: {mtg.participants}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Hygiene Issues */}
+              {analysis.hygieneIssues.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-900 mb-2">
+                    Hygiene Issues ({analysis.hygieneIssues.length})
+                  </h3>
+                  <ul className="bg-white border border-gray-200 rounded-lg divide-y divide-gray-100">
+                    {analysis.hygieneIssues.map((issue, i) => (
+                      <li key={i} className="px-4 py-2 text-sm text-gray-700 flex items-start gap-2">
+                        <span className="text-amber-500 mt-0.5">!</span>
+                        {issue}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
