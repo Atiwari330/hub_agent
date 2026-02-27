@@ -36,6 +36,8 @@ export interface FollowUpTicket {
   gapDisplay: string;
   recommendedAction: string;
   pipelineStage: string | null;
+  ballInCourt: string | null;
+  linearTask: string | null;
   analysis: FollowUpAnalysisResponse | null;
 }
 
@@ -153,6 +155,8 @@ export async function GET() {
         priority: ticket.priority,
         ageDays,
         pipelineStage: ticket.pipeline_stage,
+        ballInCourt: ticket.ball_in_court || null,
+        linearTask: ticket.linear_task || null,
       };
 
       // Scenario 3: No First Response

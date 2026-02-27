@@ -9,6 +9,7 @@ import type { FollowUpQueueResponse, FollowUpAnalysisResponse } from '@/app/api/
 type SeverityFilter = 'all' | 'critical' | 'warning' | 'watch';
 type ViolationFilter = 'all' | 'no_response' | 'customer_hanging' | 'customer_dark';
 type AnalysisFilter = 'all' | 'unanalyzed' | 'confirmed' | 'false_positive' | 'monitoring';
+type BallInCourtFilter = 'all' | 'engineering' | 'support' | 'customer' | 'csm';
 type SortColumn = 'severity' | 'gap' | 'companyName' | 'priority' | 'ageDays';
 type SortDirection = 'asc' | 'desc';
 
@@ -137,6 +138,7 @@ export function FollowUpQueueView() {
   const [severityFilter, setSeverityFilter] = useState<SeverityFilter>('all');
   const [violationFilter, setViolationFilter] = useState<ViolationFilter>('all');
   const [analysisFilter, setAnalysisFilter] = useState<AnalysisFilter>('all');
+  const [ballInCourtFilter, setBallInCourtFilter] = useState<BallInCourtFilter>('all');
 
   // Sorting
   const [sortColumn, setSortColumn] = useState<SortColumn>('severity');
@@ -186,6 +188,11 @@ export function FollowUpQueueView() {
         result = result.filter((t) => t.analysis?.status === analysisFilter);
       }
     }
+    if (ballInCourtFilter !== 'all') {
+      result = result.filter((t) =>
+        t.ballInCourt?.toLowerCase() === ballInCourtFilter
+      );
+    }
 
     result.sort((a, b) => {
       let comparison = 0;
@@ -210,7 +217,7 @@ export function FollowUpQueueView() {
     });
 
     return result;
-  }, [data, severityFilter, violationFilter, analysisFilter, sortColumn, sortDirection]);
+  }, [data, severityFilter, violationFilter, analysisFilter, ballInCourtFilter, sortColumn, sortDirection]);
 
   const handleSort = (column: SortColumn) => {
     if (sortColumn === column) {
@@ -221,12 +228,13 @@ export function FollowUpQueueView() {
     }
   };
 
-  const hasActiveFilters = severityFilter !== 'all' || violationFilter !== 'all' || analysisFilter !== 'all';
+  const hasActiveFilters = severityFilter !== 'all' || violationFilter !== 'all' || analysisFilter !== 'all' || ballInCourtFilter !== 'all';
 
   const clearFilters = () => {
     setSeverityFilter('all');
     setViolationFilter('all');
     setAnalysisFilter('all');
+    setBallInCourtFilter('all');
   };
 
   const toggleRow = (key: string) => {
@@ -508,6 +516,26 @@ export function FollowUpQueueView() {
                 </button>
               )}
             </div>
+            {(() => {
+              const engineeringCount = data.tickets.filter(
+                (t) => t.ballInCourt?.toLowerCase() === 'engineering'
+              ).length;
+              if (engineeringCount === 0) return null;
+              return (
+                <>
+                  <div className="h-12 w-px bg-gray-200" />
+                  <button
+                    onClick={() => setBallInCourtFilter(ballInCourtFilter === 'engineering' ? 'all' : 'engineering')}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                      ballInCourtFilter === 'engineering' ? 'bg-purple-100 text-purple-800 ring-2 ring-purple-300' : 'bg-purple-50 text-purple-700 hover:bg-purple-100'
+                    }`}
+                  >
+                    <span className="w-2 h-2 rounded-full bg-purple-500" />
+                    {engineeringCount} Engineering
+                  </button>
+                </>
+              );
+            })()}
             <div className="h-12 w-px bg-gray-200" />
             <div className="flex items-center gap-3 text-sm text-gray-500">
               <span>{data.counts.analyzed} analyzed</span>
@@ -623,6 +651,21 @@ export function FollowUpQueueView() {
               <option value="confirmed">Confirmed</option>
               <option value="false_positive">False Positive</option>
               <option value="monitoring">Monitoring</option>
+            </select>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-gray-600">Ball In Court:</label>
+            <select
+              value={ballInCourtFilter}
+              onChange={(e) => setBallInCourtFilter(e.target.value as BallInCourtFilter)}
+              className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              <option value="all">All</option>
+              <option value="engineering">Engineering</option>
+              <option value="support">Support</option>
+              <option value="customer">Customer</option>
+              <option value="csm">CSM</option>
             </select>
           </div>
 
@@ -760,15 +803,31 @@ export function FollowUpQueueView() {
                           </div>
                         </td>
                         <td className="px-4 py-3">
-                          <a
-                            href={getHubSpotTicketUrl(ticket.ticketId)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-sm text-gray-900 hover:text-indigo-600 transition-colors line-clamp-1"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            {ticket.subject || 'No subject'}
-                          </a>
+                          <div className="flex items-center gap-1.5">
+                            <a
+                              href={getHubSpotTicketUrl(ticket.ticketId)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-sm text-gray-900 hover:text-indigo-600 transition-colors line-clamp-1"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {ticket.subject || 'No subject'}
+                            </a>
+                            {ticket.linearTask && (
+                              <a
+                                href={ticket.linearTask}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title="Open in Linear"
+                                className="flex-shrink-0 text-gray-400 hover:text-purple-600 transition-colors"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                </svg>
+                              </a>
+                            )}
+                          </div>
                         </td>
                         <td className="px-4 py-3">
                           {ticket.companyId ? (
