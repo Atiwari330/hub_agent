@@ -6,7 +6,7 @@ import type { DealCoachQueueResponse, DealCoachAnalysisResponse } from '@/app/ap
 
 // --- Types ---
 
-type StatusFilter = 'all' | 'needs_action' | 'on_track' | 'at_risk' | 'stalled' | 'no_action_needed' | 'unanalyzed';
+type StatusFilter = 'all' | 'needs_action' | 'on_track' | 'at_risk' | 'stalled' | 'no_action_needed' | 'nurture' | 'unanalyzed';
 type SortColumn = 'status' | 'urgency' | 'dealName' | 'amount' | 'stage' | 'daysInStage' | 'closeDate' | 'analyzedAt';
 type SortDirection = 'asc' | 'desc';
 
@@ -19,6 +19,7 @@ function StatusBadge({ status }: { status: string }) {
     at_risk: 'bg-red-100 text-red-700',
     stalled: 'bg-gray-100 text-gray-600',
     no_action_needed: 'bg-blue-100 text-blue-700',
+    nurture: 'bg-purple-100 text-purple-700',
   };
   const labels: Record<string, string> = {
     needs_action: 'Needs Action',
@@ -26,6 +27,7 @@ function StatusBadge({ status }: { status: string }) {
     at_risk: 'At Risk',
     stalled: 'Stalled',
     no_action_needed: 'No Action Needed',
+    nurture: 'Nurture',
   };
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${styles[status] || 'bg-gray-100 text-gray-600'}`}>
@@ -100,7 +102,7 @@ function SortIcon({ active, direction }: { active: boolean; direction: SortDirec
 
 // --- Constants ---
 
-const STATUS_ORDER: Record<string, number> = { needs_action: 5, at_risk: 4, stalled: 3, on_track: 2, no_action_needed: 1 };
+const STATUS_ORDER: Record<string, number> = { needs_action: 5, at_risk: 4, stalled: 3, on_track: 2, nurture: 2, no_action_needed: 1 };
 const URGENCY_ORDER: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1 };
 
 // --- Main Component ---
@@ -272,6 +274,7 @@ export function DealCoachView() {
         atRisk: deals.filter((d) => d.analysis?.status === 'at_risk').length,
         stalled: deals.filter((d) => d.analysis?.status === 'stalled').length,
         noActionNeeded: deals.filter((d) => d.analysis?.status === 'no_action_needed').length,
+        nurture: deals.filter((d) => d.analysis?.status === 'nurture').length,
       };
     },
     []
@@ -538,6 +541,17 @@ export function DealCoachView() {
                   {data.counts.onTrack} On Track
                 </button>
               )}
+              {data.counts.nurture > 0 && (
+                <button
+                  onClick={() => setStatusFilter(statusFilter === 'nurture' ? 'all' : 'nurture')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                    statusFilter === 'nurture' ? 'bg-purple-200 text-purple-800 ring-2 ring-purple-400' : 'bg-purple-50 text-purple-700 hover:bg-purple-100'
+                  }`}
+                >
+                  <span className="w-2 h-2 rounded-full bg-purple-500" />
+                  {data.counts.nurture} Nurture
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -658,6 +672,7 @@ export function DealCoachView() {
               <option value="at_risk">At Risk</option>
               <option value="stalled">Stalled</option>
               <option value="no_action_needed">No Action Needed</option>
+              <option value="nurture">Nurture</option>
               <option value="unanalyzed">Unanalyzed</option>
             </select>
           </div>

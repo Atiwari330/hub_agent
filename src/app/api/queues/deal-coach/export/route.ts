@@ -33,7 +33,7 @@ const STAGE_ENTRY_MAP: Record<string, string> = {
  *
  * Export analyzed deal coach results as a downloadable CSV file.
  * Query params:
- *   - status: 'all' | 'needs_action' | 'on_track' | 'at_risk' | 'stalled' | 'no_action_needed' (default: 'all')
+ *   - status: 'all' | 'needs_action' | 'on_track' | 'at_risk' | 'stalled' | 'no_action_needed' | 'nurture' (default: 'all')
  *   - ae: owner name filter (default: 'all')
  *   - stage: stage ID filter (default: 'all')
  */

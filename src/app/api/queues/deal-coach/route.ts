@@ -51,6 +51,7 @@ export interface DealCoachQueueResponse {
     atRisk: number;
     stalled: number;
     noActionNeeded: number;
+    nurture: number;
   };
 }
 
@@ -205,6 +206,7 @@ export async function GET() {
         atRisk: result.filter((d) => d.analysis?.status === 'at_risk').length,
         stalled: result.filter((d) => d.analysis?.status === 'stalled').length,
         noActionNeeded: result.filter((d) => d.analysis?.status === 'no_action_needed').length,
+        nurture: result.filter((d) => d.analysis?.status === 'nurture').length,
       },
     };
 
