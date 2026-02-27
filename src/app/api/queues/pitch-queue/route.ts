@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/client';
 import { checkApiAuth } from '@/lib/auth/api';
 import { RESOURCES } from '@/lib/auth';
-import { OPEN_TICKET_STAGE_IDS } from '@/lib/hubspot/ticket-stage-config';
 
 // --- Types ---
 
@@ -59,8 +58,7 @@ export async function GET() {
     const { data: openTickets, error: ticketsError } = await supabase
       .from('support_tickets')
       .select('*')
-      .eq('is_closed', false)
-      .in('pipeline_stage', Array.from(OPEN_TICKET_STAGE_IDS));
+      .eq('is_closed', false);
 
     if (ticketsError) {
       console.error('Error fetching open tickets:', ticketsError);

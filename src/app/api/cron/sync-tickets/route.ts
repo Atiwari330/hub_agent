@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/client';
 import { getOpenTickets, getRecentlyClosedTickets } from '@/lib/hubspot/tickets';
-import { isOpenTicketStage } from '@/lib/hubspot/ticket-stage-config';
 
 // Convert empty strings to null for timestamp fields
 const toTimestamp = (value: string | undefined | null): string | null => {
@@ -83,7 +82,7 @@ export async function GET(request: Request) {
       hubspot_owner_id: ticket.properties.hubspot_owner_id,
       hs_primary_company_id: ticket.properties.hs_primary_company_id,
       hs_primary_company_name: ticket.properties.hs_primary_company_name,
-      is_closed: !isOpenTicketStage(ticket.properties.hs_pipeline_stage),
+      is_closed: ticket.properties.hs_is_closed === 'true',
       time_to_close: toBigInt(ticket.properties.time_to_close),
       time_to_first_reply: toBigInt(
         ticket.properties.time_to_first_agent_reply

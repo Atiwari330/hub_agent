@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/client';
 import { checkApiAuth } from '@/lib/auth/api';
 import { RESOURCES } from '@/lib/auth';
-import { OPEN_TICKET_STAGE_IDS } from '@/lib/hubspot/ticket-stage-config';
 
 function escapeCsvField(value: string | null | undefined): string {
   if (value == null) return '';
@@ -34,8 +33,7 @@ export async function GET(request: Request) {
     const { data: openTickets, error: ticketsError } = await supabase
       .from('support_tickets')
       .select('hubspot_ticket_id, subject, source_type, priority, hubspot_created_at, hs_primary_company_name')
-      .eq('is_closed', false)
-      .in('pipeline_stage', Array.from(OPEN_TICKET_STAGE_IDS));
+      .eq('is_closed', false);
 
     if (ticketsError) {
       return NextResponse.json(
