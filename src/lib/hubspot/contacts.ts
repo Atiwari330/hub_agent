@@ -166,3 +166,48 @@ export async function fetchProspectCountByOwner(
 
   return Math.max(0, total - excludedCount);
 }
+
+/**
+ * Fetch email addresses of contacts associated with a HubSpot deal.
+ * Used by the domain enrichment pipeline to extract company domains.
+ */
+export async function getContactEmailsByDealId(dealId: string): Promise<string[]> {
+  const client = getHubSpotClient();
+  const emails: string[] = [];
+
+  try {
+    // Get deal → contact associations
+    const associations = await client.crm.associations.v4.basicApi.getPage(
+      'deals',
+      dealId,
+      'contacts',
+      undefined,
+      100
+    );
+
+    if (associations.results.length === 0) return emails;
+
+    // Fetch each contact's email
+    const contactIds = associations.results.map((a) => a.toObjectId);
+
+    for (const contactId of contactIds) {
+      try {
+        const contact = await client.crm.contacts.basicApi.getById(
+          contactId,
+          ['email']
+        );
+
+        const email = contact.properties.email;
+        if (email) {
+          emails.push(email.toLowerCase());
+        }
+      } catch {
+        // Skip contacts that can't be fetched
+      }
+    }
+  } catch (error) {
+    console.warn(`Failed to get contact associations for deal ${dealId}:`, error);
+  }
+
+  return emails;
+}

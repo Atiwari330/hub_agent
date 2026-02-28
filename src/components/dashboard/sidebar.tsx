@@ -179,6 +179,7 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
   const isOnPreDemoPipelineQueue = pathname === '/dashboard/queues/pre-demo-pipeline';
   const isOnPplSequenceQueue = pathname === '/dashboard/queues/ppl-sequence';
   const isOnDealCoachQueue = pathname === '/dashboard/queues/deal-coach';
+  const isOnDomainEnrichmentQueue = pathname === '/dashboard/queues/domain-enrichment';
   // Upsell Pipeline queues
   const isOnUpsellHygieneQueue = pathname === '/dashboard/queues/upsell-hygiene';
   const isOnStalledUpsellsQueue = pathname === '/dashboard/queues/stalled-upsells';
@@ -332,7 +333,8 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
           hasPermission(user, RESOURCES.QUEUE_FOLLOW_UP) ||
           hasPermission(user, RESOURCES.QUEUE_PITCH_QUEUE) ||
           hasPermission(user, RESOURCES.QUEUE_SUPPORT_INTEL) ||
-          hasPermission(user, RESOURCES.QUEUE_DEAL_COACH)) && (
+          hasPermission(user, RESOURCES.QUEUE_DEAL_COACH) ||
+          hasPermission(user, RESOURCES.QUEUE_DOMAIN_ENRICHMENT)) && (
         <div className="mt-4">
           {!isCollapsed && (
             <button
@@ -356,7 +358,8 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
                 hasPermission(user, RESOURCES.QUEUE_STALLED_DEALS) ||
                 hasPermission(user, RESOURCES.QUEUE_PRE_DEMO_PIPELINE) ||
                 hasPermission(user, RESOURCES.QUEUE_PPL_SEQUENCE) ||
-                hasPermission(user, RESOURCES.QUEUE_DEAL_COACH)) && (
+                hasPermission(user, RESOURCES.QUEUE_DEAL_COACH) ||
+                hasPermission(user, RESOURCES.QUEUE_DOMAIN_ENRICHMENT)) && (
               <>
                 {!isCollapsed && (
                   <div className="px-4 pl-11 py-1.5">
@@ -533,6 +536,31 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
                         </svg>
                       ) : (
                         <span>Deal Coach</span>
+                      )}
+                    </Link>
+                  </li>
+                  )}
+                  {hasPermission(user, RESOURCES.QUEUE_DOMAIN_ENRICHMENT) && (
+                  <li>
+                    <Link
+                      href="/dashboard/queues/domain-enrichment"
+                      className={`flex items-center py-2 text-sm transition-colors ${
+                        isCollapsed
+                          ? 'px-0 justify-center'
+                          : 'px-4 pl-14'
+                      } ${
+                        isOnDomainEnrichmentQueue
+                          ? 'bg-indigo-600 text-white'
+                          : 'text-slate-300 hover:bg-slate-800'
+                      }`}
+                      title={isCollapsed ? 'Domain Enrichment' : undefined}
+                    >
+                      {isCollapsed ? (
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+                        </svg>
+                      ) : (
+                        <span>Domain Enrichment</span>
                       )}
                     </Link>
                   </li>

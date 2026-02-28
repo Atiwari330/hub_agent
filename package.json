@@ -14,7 +14,8 @@
     "ask": "tsx src/scripts/test-agent.ts",
     "test:next-step": "tsx src/scripts/test-next-step-analysis.ts",
     "test:all": "npm run test:hubspot && npm run test:owners && npm run test:deals",
-    "test:upsell-pipeline": "tsx src/scripts/discover-upsell-pipeline.ts"
+    "test:upsell-pipeline": "tsx src/scripts/discover-upsell-pipeline.ts",
+    "enrich": "tsx src/scripts/enrich-domain.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.2",
@@ -24,6 +25,7 @@
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.89.0",
     "ai": "^6.0.5",
+    "cheerio": "^1.2.0",
     "next": "15.5.9",
     "react": "19.1.0",
     "react-dom": "19.1.0",
