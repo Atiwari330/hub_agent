@@ -50,10 +50,11 @@ export async function analyzeComplianceResearch(
       .single();
 
     if (enrichError || !enrichment || enrichment.status !== 'enriched' || !enrichment.domain) {
+      console.error(`Deal not enriched: dealId=${dealId}, enrichError=${enrichError?.message}, status=${enrichment?.status}, domain=${enrichment?.domain}`);
       return {
         success: false,
         error: 'Deal not enriched',
-        details: 'Domain enrichment must be completed before compliance research',
+        details: `Domain enrichment must be completed before compliance research (status: ${enrichment?.status || 'missing'}, domain: ${enrichment?.domain || 'none'})`,
         statusCode: 422,
       };
     }

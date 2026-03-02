@@ -47,7 +47,7 @@ export const companyAnalysisSchema = z.object({
     .describe('Community events, webinars, conferences mentioned'),
   locations: z
     .array(z.string())
-    .describe('Physical locations, offices, or service areas'),
+    .describe('Physical locations (city, state), office addresses, or stated service areas. Include the state name or abbreviation.'),
   is_parked_domain: z
     .boolean()
     .describe('True if this appears to be a parked, for-sale, or placeholder domain'),
@@ -68,6 +68,12 @@ rather than the homepage — include all team members found across all pages.
 Extract information ONLY from what is explicitly stated on the page(s).
 Do NOT fabricate, infer, or hallucinate information that isn't present.
 If a category has no information on the page, return an empty array or null.
+
+For locations, look carefully for:
+- Addresses in page content, footers, or contact sections
+- "Serving [city/state]" or "Located in [city/state]" language
+- Phone numbers with area codes that suggest a region
+- City/state pairs (e.g., "Austin, TX" or "Portland, Oregon")
 
 For is_parked_domain, return true if the page content suggests:
 - A domain parking page ("this domain is for sale", generic ads)

@@ -380,7 +380,7 @@ async function discoverFromFirecrawl(
       },
       body: JSON.stringify({
         url: `https://${domain}`,
-        search: 'team about leadership staff',
+        search: 'team about leadership staff contact locations',
         limit: 20,
       }),
       signal: controller.signal,

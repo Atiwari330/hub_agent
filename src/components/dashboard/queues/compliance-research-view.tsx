@@ -621,10 +621,18 @@ export function ComplianceResearchView() {
         body: JSON.stringify({ dealId: deal.dealId, force }),
       });
 
-      if (!response.ok) throw new Error('Research failed');
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.details || errData.error || 'Research failed');
+      }
       await fetchData();
     } catch (err) {
-      console.error('Research failed:', err);
+      const message = err instanceof Error ? err.message : 'Research failed';
+      console.error('Research failed:', message);
+      const isLocationError = message.toLowerCase().includes('location') || message.toLowerCase().includes('state');
+      alert(isLocationError
+        ? `No location data found. Try re-enriching this deal in the Domain Enrichment queue first, then retry research.`
+        : `Research failed: ${message}`);
     } finally {
       setResearchingDeals((prev) => {
         const next = new Set(prev);

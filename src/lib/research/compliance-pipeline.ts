@@ -127,12 +127,23 @@ export async function researchCompliance(
       ? (enrichment.locations as string[])
       : [];
 
-    const state = extractState(locations);
+    let state = extractState(locations);
+
+    // Fallback: try extracting state from company_overview text
+    if (!state && enrichment.company_overview) {
+      const overviewState = extractState([enrichment.company_overview as string]);
+      if (overviewState) {
+        console.log(`Extracted state "${overviewState}" from company_overview for ${domain}`);
+        state = overviewState;
+      }
+    }
+
     if (!state) {
+      console.error(`No state found for domain ${domain}. Locations:`, locations);
       return {
         success: false,
         error: 'Could not determine state',
-        details: `No US state found in locations: ${locations.join(', ')}`,
+        details: `No location data found for this deal. Try re-enriching the domain first to discover location/contact pages.`,
         statusCode: 422,
       };
     }

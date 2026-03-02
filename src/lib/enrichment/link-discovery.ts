@@ -20,16 +20,19 @@ export const URL_KEYWORDS_HIGH: string[] = [
 
 export const URL_KEYWORDS_MED: string[] = [
   'about', 'about-us', 'who-we-are', 'our-story', 'company',
+  'contact', 'contact-us', 'locations', 'location',
 ];
 
 export const URL_KEYWORDS_LOW: string[] = [
   'careers', 'providers', 'clinicians', 'therapists',
+  'find-us', 'offices', 'directions',
 ];
 
 // Link text keywords (case-insensitive matching)
 export const TEXT_KEYWORDS: string[] = [
   'team', 'staff', 'people', 'leadership', 'about',
   'meet', 'providers', 'founders', 'board', 'management',
+  'contact', 'location', 'locations', 'offices',
 ];
 
 // File extensions to reject
