@@ -31,6 +31,7 @@ export const RESOURCES = {
   QUEUE_DOMAIN_ENRICHMENT: 'queue:domain-enrichment',
   QUEUE_COMPLIANCE_RESEARCH: 'queue:compliance-research',
   QUEUE_DEAL_HEALTH: 'queue:deal-health',
+  QUEUE_SUPPORT_QUALITY: 'queue:support-quality',
   API_AGENT: 'api:agent',
   PORTAL: 'portal',
   HOT_TRACKER: 'hot_tracker',
@@ -98,6 +99,8 @@ export function getResourceFromPath(pathname: string): Resource | null {
     return RESOURCES.QUEUE_DOMAIN_ENRICHMENT;
   if (pathname.includes('/queues/compliance-research'))
     return RESOURCES.QUEUE_COMPLIANCE_RESEARCH;
+  if (pathname.includes('/queues/support-quality'))
+    return RESOURCES.QUEUE_SUPPORT_QUALITY;
   if (pathname.includes('/queues/deal-health'))
     return RESOURCES.QUEUE_DEAL_HEALTH;
   if (pathname.includes('/queues/deal-intelligence'))
@@ -149,6 +152,8 @@ export function getResourceFromPath(pathname: string): Resource | null {
     return RESOURCES.QUEUE_DOMAIN_ENRICHMENT;
   if (pathname.includes('/api/queues/compliance-research'))
     return RESOURCES.QUEUE_COMPLIANCE_RESEARCH;
+  if (pathname.includes('/api/queues/support-quality'))
+    return RESOURCES.QUEUE_SUPPORT_QUALITY;
   if (pathname.includes('/api/queues/deal-intelligence'))
     return RESOURCES.QUEUE_DEAL_HEALTH;
   if (pathname.includes('/api/queues/create-cs-task'))
