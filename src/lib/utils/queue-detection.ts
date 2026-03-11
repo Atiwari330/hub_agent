@@ -16,6 +16,12 @@ export const HYGIENE_REQUIRED_FIELDS = [
   { field: 'products', label: 'Products' },
 ] as const;
 
+// Early-stage deals (pre Demo Completed) only need these 2 fields
+export const EARLY_STAGE_HYGIENE_REQUIRED_FIELDS = [
+  { field: 'close_date', label: 'Close Date' },
+  { field: 'amount', label: 'Amount' },
+] as const;
+
 // Upsell Pipeline required fields (3 fields)
 export const UPSELL_HYGIENE_REQUIRED_FIELDS = [
   { field: 'amount', label: 'Amount' },

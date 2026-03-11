@@ -30,6 +30,7 @@ export const RESOURCES = {
   QUEUE_DEAL_COACH: 'queue:deal-coach',
   QUEUE_DOMAIN_ENRICHMENT: 'queue:domain-enrichment',
   QUEUE_COMPLIANCE_RESEARCH: 'queue:compliance-research',
+  QUEUE_DEAL_HEALTH: 'queue:deal-health',
   API_AGENT: 'api:agent',
   PORTAL: 'portal',
   HOT_TRACKER: 'hot_tracker',
@@ -97,6 +98,10 @@ export function getResourceFromPath(pathname: string): Resource | null {
     return RESOURCES.QUEUE_DOMAIN_ENRICHMENT;
   if (pathname.includes('/queues/compliance-research'))
     return RESOURCES.QUEUE_COMPLIANCE_RESEARCH;
+  if (pathname.includes('/queues/deal-health'))
+    return RESOURCES.QUEUE_DEAL_HEALTH;
+  if (pathname.includes('/queues/deal-intelligence'))
+    return RESOURCES.QUEUE_DEAL_HEALTH;
 
   // Hot Tracker
   if (pathname.includes('/dashboard/hot-tracker')) return RESOURCES.HOT_TRACKER;
@@ -144,6 +149,8 @@ export function getResourceFromPath(pathname: string): Resource | null {
     return RESOURCES.QUEUE_DOMAIN_ENRICHMENT;
   if (pathname.includes('/api/queues/compliance-research'))
     return RESOURCES.QUEUE_COMPLIANCE_RESEARCH;
+  if (pathname.includes('/api/queues/deal-intelligence'))
+    return RESOURCES.QUEUE_DEAL_HEALTH;
   if (pathname.includes('/api/queues/create-cs-task'))
     return RESOURCES.QUEUE_CS_HYGIENE;
   if (pathname.includes('/api/hot-tracker')) return RESOURCES.HOT_TRACKER;

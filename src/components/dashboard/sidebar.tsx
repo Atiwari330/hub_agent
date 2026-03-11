@@ -178,6 +178,7 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
   const isOnStalledDealsQueue = pathname === '/dashboard/queues/stalled-deals';
   const isOnPreDemoPipelineQueue = pathname === '/dashboard/queues/pre-demo-pipeline';
   const isOnPplSequenceQueue = pathname === '/dashboard/queues/ppl-sequence';
+  const isOnDealHealthQueue = pathname === '/dashboard/queues/deal-health';
   const isOnDealCoachQueue = pathname === '/dashboard/queues/deal-coach';
   const isOnDomainEnrichmentQueue = pathname === '/dashboard/queues/domain-enrichment';
   const isOnComplianceResearchQueue = pathname === '/dashboard/queues/compliance-research';
@@ -336,7 +337,8 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
           hasPermission(user, RESOURCES.QUEUE_SUPPORT_INTEL) ||
           hasPermission(user, RESOURCES.QUEUE_DEAL_COACH) ||
           hasPermission(user, RESOURCES.QUEUE_DOMAIN_ENRICHMENT) ||
-          hasPermission(user, RESOURCES.QUEUE_COMPLIANCE_RESEARCH)) && (
+          hasPermission(user, RESOURCES.QUEUE_COMPLIANCE_RESEARCH) ||
+          hasPermission(user, RESOURCES.QUEUE_DEAL_HEALTH)) && (
         <div className="mt-4">
           {!isCollapsed && (
             <button
@@ -361,6 +363,7 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
                 hasPermission(user, RESOURCES.QUEUE_PRE_DEMO_PIPELINE) ||
                 hasPermission(user, RESOURCES.QUEUE_PPL_SEQUENCE) ||
                 hasPermission(user, RESOURCES.QUEUE_DEAL_COACH) ||
+                hasPermission(user, RESOURCES.QUEUE_DEAL_HEALTH) ||
                 hasPermission(user, RESOURCES.QUEUE_DOMAIN_ENRICHMENT) ||
                 hasPermission(user, RESOURCES.QUEUE_COMPLIANCE_RESEARCH)) && (
               <>
@@ -514,6 +517,31 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
                         </svg>
                       ) : (
                         <span>PPL Sequence</span>
+                      )}
+                    </Link>
+                  </li>
+                  )}
+                  {hasPermission(user, RESOURCES.QUEUE_DEAL_HEALTH) && (
+                  <li>
+                    <Link
+                      href="/dashboard/queues/deal-health"
+                      className={`flex items-center py-2 text-sm transition-colors ${
+                        isCollapsed
+                          ? 'px-0 justify-center'
+                          : 'px-4 pl-14'
+                      } ${
+                        isOnDealHealthQueue
+                          ? 'bg-indigo-600 text-white'
+                          : 'text-slate-300 hover:bg-slate-800'
+                      }`}
+                      title={isCollapsed ? 'Deal Health' : undefined}
+                    >
+                      {isCollapsed ? (
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      ) : (
+                        <span>Deal Health</span>
                       )}
                     </Link>
                   </li>
