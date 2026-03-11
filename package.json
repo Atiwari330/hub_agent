@@ -16,7 +16,8 @@
     "test:all": "npm run test:hubspot && npm run test:owners && npm run test:deals",
     "test:upsell-pipeline": "tsx src/scripts/discover-upsell-pipeline.ts",
     "enrich": "tsx src/scripts/enrich-domain.ts",
-    "quality": "tsx src/scripts/run-support-quality.ts"
+    "quality": "tsx src/scripts/run-support-quality.ts",
+    "sop-audit": "tsx src/scripts/run-sop-audit.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.2",
