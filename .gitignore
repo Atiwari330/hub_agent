@@ -55,3 +55,9 @@ NUL
 
 # Investigation output
 pitch-opportunity-analysis-output.txt
+
+# Generated reports
+report.json
+report.md
+sop-report.json
+sop-report.md
