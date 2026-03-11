@@ -1,0 +1,192 @@
+/**
+ * Deal Intelligence LLM Analysis (Phase 2)
+ *
+ * Expanded Deal Coach prompt that produces momentum/engagement/risk scores (0-100)
+ * in addition to the standard coaching output.
+ *
+ * Runs on: never-analyzed deals, deals >3 days stale, grade D/F deals (daily), stage-changed deals
+ */
+
+import { createServiceClient } from '@/lib/supabase/client';
+import { analyzeDealCoach, type DealCoachAnalysis } from '@/app/api/queues/deal-coach/analyze/analyze-core';
+import { computeGrade, computeOverallScore } from './deal-rules';
+
+// --- Types ---
+
+interface DealIntelligenceRow {
+  hubspot_deal_id: string;
+  hygiene_score: number;
+  momentum_score: number;
+  engagement_score: number;
+  risk_score: number;
+  overall_score: number;
+  overall_grade: string;
+  llm_status: string | null;
+  llm_urgency: string | null;
+  buyer_sentiment: string | null;
+  deal_momentum: string | null;
+  recommended_action: string | null;
+  reasoning: string | null;
+  key_risk: string | null;
+  llm_confidence: number | null;
+  email_count: number;
+  call_count: number;
+  meeting_count: number;
+  note_count: number;
+  llm_analyzed_at: string | null;
+  rules_computed_at: string | null;
+}
+
+// --- Score Mapping from LLM outputs ---
+
+function mapMomentumToScore(momentum: string | null): number {
+  switch (momentum) {
+    case 'accelerating': return 90;
+    case 'steady': return 70;
+    case 'slowing': return 40;
+    case 'stalled': return 15;
+    default: return 50; // neutral baseline
+  }
+}
+
+function mapSentimentToEngagementScore(sentiment: string | null): number {
+  switch (sentiment) {
+    case 'positive': return 95;
+    case 'engaged': return 80;
+    case 'neutral': return 55;
+    case 'unresponsive': return 25;
+    case 'negative': return 15;
+    default: return 50; // neutral baseline
+  }
+}
+
+function mapStatusToRiskScore(status: string | null, urgency: string | null): number {
+  // Higher score = lower risk (healthier)
+  let baseScore: number;
+  switch (status) {
+    case 'on_track': baseScore = 90; break;
+    case 'no_action_needed': baseScore = 85; break;
+    case 'nurture': baseScore = 70; break;
+    case 'needs_action': baseScore = 50; break;
+    case 'at_risk': baseScore = 25; break;
+    case 'stalled': baseScore = 10; break;
+    default: baseScore = 50;
+  }
+
+  // Urgency modifier
+  switch (urgency) {
+    case 'critical': baseScore -= 15; break;
+    case 'high': baseScore -= 5; break;
+    case 'medium': break; // no modifier
+    case 'low': baseScore += 5; break;
+  }
+
+  return Math.max(0, Math.min(100, baseScore));
+}
+
+// --- Main Analysis Function ---
+
+export interface LLMAnalysisResult {
+  success: boolean;
+  dealId: string;
+  error?: string;
+}
+
+export async function analyzeDealIntelligence(dealId: string): Promise<LLMAnalysisResult> {
+  const supabase = createServiceClient();
+
+  try {
+    // Run the existing Deal Coach analysis (it already upserts to deal_coach_analyses)
+    const result = await analyzeDealCoach(dealId);
+
+    if (!result.success) {
+      return { success: false, dealId, error: result.error };
+    }
+
+    const analysis: DealCoachAnalysis = result.analysis;
+
+    // Map LLM outputs to dimension scores
+    const llmMomentumScore = mapMomentumToScore(analysis.deal_momentum);
+    const llmEngagementScore = mapSentimentToEngagementScore(analysis.buyer_sentiment);
+    const llmRiskScore = mapStatusToRiskScore(analysis.status, analysis.urgency);
+
+    // Fetch existing rules-based hygiene score
+    const { data: existing } = await supabase
+      .from('deal_intelligence')
+      .select('hygiene_score')
+      .eq('hubspot_deal_id', dealId)
+      .single();
+
+    const hygieneScore = existing?.hygiene_score ?? 50;
+
+    // Recompute overall with LLM-derived scores
+    const overallScore = computeOverallScore(hygieneScore, llmMomentumScore, llmEngagementScore, llmRiskScore);
+    const overallGrade = computeGrade(overallScore);
+
+    // Update deal_intelligence with LLM results
+    const { error: updateError } = await supabase
+      .from('deal_intelligence')
+      .update({
+        momentum_score: llmMomentumScore,
+        engagement_score: llmEngagementScore,
+        risk_score: llmRiskScore,
+        overall_score: overallScore,
+        overall_grade: overallGrade,
+        llm_status: analysis.status,
+        llm_urgency: analysis.urgency,
+        buyer_sentiment: analysis.buyer_sentiment,
+        deal_momentum: analysis.deal_momentum,
+        recommended_action: analysis.recommended_action,
+        reasoning: analysis.reasoning,
+        key_risk: analysis.key_risk,
+        llm_confidence: analysis.confidence,
+        email_count: analysis.email_count,
+        call_count: analysis.call_count,
+        meeting_count: analysis.meeting_count,
+        note_count: analysis.note_count,
+        llm_analyzed_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('hubspot_deal_id', dealId);
+
+    if (updateError) {
+      console.error(`Error updating deal intelligence for ${dealId}:`, updateError);
+      return { success: false, dealId, error: updateError.message };
+    }
+
+    return { success: true, dealId };
+  } catch (error) {
+    console.error(`LLM analysis error for deal ${dealId}:`, error);
+    return {
+      success: false,
+      dealId,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+  }
+}
+
+/**
+ * Get deals that need LLM analysis refresh
+ */
+export async function getDealsNeedingLLMAnalysis(): Promise<string[]> {
+  const supabase = createServiceClient();
+
+  const threeDaysAgo = new Date();
+  threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+
+  // Get deals that:
+  // 1. Have never been analyzed (llm_analyzed_at is null)
+  // 2. Were analyzed >3 days ago
+  // 3. Have grade D or F
+  const { data: deals, error } = await supabase
+    .from('deal_intelligence')
+    .select('hubspot_deal_id, overall_grade, llm_analyzed_at')
+    .or(`llm_analyzed_at.is.null,llm_analyzed_at.lt.${threeDaysAgo.toISOString()},overall_grade.in.(D,F)`);
+
+  if (error) {
+    console.error('Error fetching deals needing LLM analysis:', error);
+    return [];
+  }
+
+  return (deals || []).map(d => d.hubspot_deal_id);
+}
