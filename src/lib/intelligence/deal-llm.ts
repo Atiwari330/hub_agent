@@ -10,32 +10,10 @@
 import { createServiceClient } from '@/lib/supabase/client';
 import { analyzeDealCoach, type DealCoachAnalysis } from '@/app/api/queues/deal-coach/analyze/analyze-core';
 import { computeGrade, computeOverallScore } from './deal-rules';
-
-// --- Types ---
-
-interface DealIntelligenceRow {
-  hubspot_deal_id: string;
-  hygiene_score: number;
-  momentum_score: number;
-  engagement_score: number;
-  risk_score: number;
-  overall_score: number;
-  overall_grade: string;
-  llm_status: string | null;
-  llm_urgency: string | null;
-  buyer_sentiment: string | null;
-  deal_momentum: string | null;
-  recommended_action: string | null;
-  reasoning: string | null;
-  key_risk: string | null;
-  llm_confidence: number | null;
-  email_count: number;
-  call_count: number;
-  meeting_count: number;
-  note_count: number;
-  llm_analyzed_at: string | null;
-  rules_computed_at: string | null;
-}
+import { PRE_DEMO_STAGE_IDS } from '@/lib/hubspot/stage-config';
+import { SALES_PIPELINE_STAGES } from '@/lib/hubspot/stage-config';
+import { batchFetchDealEngagements } from '@/lib/hubspot/batch-engagements';
+import { analyzePreDemoEffort } from './pre-demo-llm';
 
 // --- Score Mapping from LLM outputs ---
 
@@ -96,7 +74,18 @@ export async function analyzeDealIntelligence(dealId: string): Promise<LLMAnalys
   const supabase = createServiceClient();
 
   try {
-    // Run the existing Deal Coach analysis (it already upserts to deal_coach_analyses)
+    // Check if this is a pre-demo deal
+    const { data: dealData } = await supabase
+      .from('deals')
+      .select('deal_stage, deal_name, hubspot_created_at, pipeline')
+      .eq('hubspot_deal_id', dealId)
+      .single();
+
+    if (dealData && PRE_DEMO_STAGE_IDS.includes(dealData.deal_stage)) {
+      return analyzePreDemoDealIntelligence(dealId, dealData);
+    }
+
+    // Post-demo: run the existing Deal Coach analysis
     const result = await analyzeDealCoach(dealId);
 
     if (!result.success) {
@@ -189,4 +178,70 @@ export async function getDealsNeedingLLMAnalysis(): Promise<string[]> {
   }
 
   return (deals || []).map(d => d.hubspot_deal_id);
+}
+
+// --- Pre-Demo LLM Analysis Helper ---
+
+const STAGE_LABEL_MAP = new Map<string, string>(
+  Object.values(SALES_PIPELINE_STAGES).map((s) => [s.id, s.label])
+);
+
+async function analyzePreDemoDealIntelligence(
+  dealId: string,
+  dealData: { deal_stage: string; deal_name: string | null; hubspot_created_at: string | null; pipeline: string }
+): Promise<LLMAnalysisResult> {
+  const supabase = createServiceClient();
+
+  try {
+    const stageName = STAGE_LABEL_MAP.get(dealData.deal_stage) || dealData.deal_stage || 'Unknown';
+    const daysInPreDemo = dealData.hubspot_created_at
+      ? Math.max(1, Math.round((Date.now() - new Date(dealData.hubspot_created_at).getTime()) / (1000 * 60 * 60 * 24)))
+      : 1;
+
+    // Fetch engagements
+    const engagementsMap = await batchFetchDealEngagements([dealId]);
+    const engagements = engagementsMap.get(dealId) || { calls: [], emails: [], meetings: [] };
+
+    // Fetch notes
+    const { data: dealRow } = await supabase
+      .from('deals')
+      .select('id')
+      .eq('hubspot_deal_id', dealId)
+      .single();
+
+    let notes: { note_body: string; note_timestamp: string; author_name: string | null }[] = [];
+    if (dealRow) {
+      const { data: notesData } = await supabase
+        .from('deal_notes')
+        .select('note_body, note_timestamp, author_name')
+        .eq('deal_id', dealRow.id)
+        .order('note_timestamp', { ascending: false })
+        .limit(10);
+      notes = notesData || [];
+    }
+
+    const result = await analyzePreDemoEffort(
+      dealId,
+      dealData.deal_name || 'Unknown',
+      stageName,
+      daysInPreDemo,
+      engagements.calls,
+      engagements.emails,
+      engagements.meetings,
+      notes
+    );
+
+    if (!result.success) {
+      return { success: false, dealId, error: result.error };
+    }
+
+    return { success: true, dealId };
+  } catch (error) {
+    console.error(`Pre-demo LLM analysis error for deal ${dealId}:`, error);
+    return {
+      success: false,
+      dealId,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+  }
 }

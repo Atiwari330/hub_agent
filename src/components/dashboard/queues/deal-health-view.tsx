@@ -8,12 +8,13 @@ import type { DealIntelligenceResponse, DealIntelligenceItem } from '@/app/api/q
 // --- Types ---
 
 type GradeFilter = 'all' | 'A' | 'B' | 'C' | 'D' | 'F';
+type ViewTab = 'all' | 'pre_demo_effort' | 'deal_health';
 type SortColumn = 'grade' | 'dealName' | 'amount' | 'stage' | 'closeDate' | 'urgency' | 'issues';
 type SortDirection = 'asc' | 'desc';
 
 // --- Helper Components ---
 
-function GradeBadge({ grade, score }: { grade: string; score: number }) {
+function GradeBadge({ grade, score, gradeType }: { grade: string; score: number; gradeType?: string }) {
   const styles: Record<string, string> = {
     A: 'bg-emerald-100 text-emerald-800 border-emerald-300',
     B: 'bg-blue-100 text-blue-800 border-blue-300',
@@ -21,11 +22,15 @@ function GradeBadge({ grade, score }: { grade: string; score: number }) {
     D: 'bg-orange-100 text-orange-800 border-orange-300',
     F: 'bg-red-100 text-red-800 border-red-300',
   };
+  const label = gradeType === 'pre_demo_effort' ? 'Effort' : 'Health';
   return (
-    <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-sm font-bold border ${styles[grade] || 'bg-gray-100 text-gray-800'}`}>
-      {grade}
-      <span className="text-xs font-normal opacity-70">{score}</span>
-    </span>
+    <div className="flex flex-col items-center gap-0.5">
+      <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-sm font-bold border ${styles[grade] || 'bg-gray-100 text-gray-800'}`}>
+        {grade}
+        <span className="text-xs font-normal opacity-70">{score}</span>
+      </span>
+      <span className="text-[10px] text-gray-400 font-medium">{label}</span>
+    </div>
   );
 }
 
@@ -154,6 +159,9 @@ export function DealHealthView() {
     count: number;
   } | null>(null);
 
+  // View tab
+  const [viewTab, setViewTab] = useState<ViewTab>('all');
+
   // Filters
   const [gradeFilter, setGradeFilter] = useState<GradeFilter>('all');
   const [aeFilter, setAeFilter] = useState<string>('all');
@@ -210,6 +218,9 @@ export function DealHealthView() {
 
     let result = [...data.deals];
 
+    if (viewTab !== 'all') {
+      result = result.filter(d => d.grade_type === viewTab);
+    }
     if (gradeFilter !== 'all') {
       result = result.filter(d => d.overall_grade === gradeFilter);
     }
@@ -253,7 +264,7 @@ export function DealHealthView() {
     });
 
     return result;
-  }, [data, gradeFilter, aeFilter, stageFilter, issueTypeFilter, sortColumn, sortDirection]);
+  }, [data, viewTab, gradeFilter, aeFilter, stageFilter, issueTypeFilter, sortColumn, sortDirection]);
 
   const handleSort = (column: SortColumn) => {
     if (sortColumn === column) {
@@ -414,9 +425,11 @@ export function DealHealthView() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Deal Health</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Deal Intelligence</h1>
           <p className="text-sm text-gray-500 mt-1">
-            Consolidated deal intelligence across hygiene, momentum, engagement, and risk
+            {viewTab === 'pre_demo_effort' ? 'Pre-demo AE effort scoring across call cadence, follow-up, tactics, and discipline' :
+             viewTab === 'deal_health' ? 'Post-demo deal health across hygiene, momentum, engagement, and risk' :
+             'Consolidated deal intelligence — effort grades for pre-demo, health grades for post-demo'}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -457,6 +470,31 @@ export function DealHealthView() {
             >
               <div className="text-2xl font-bold">{count}</div>
               <div className="text-xs font-medium">Grade {grade}</div>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* View Tabs */}
+      <div className="flex gap-1 bg-gray-100 p-1 rounded-lg w-fit">
+        {([
+          ['all', 'All Deals'],
+          ['pre_demo_effort', 'Pre-Demo Effort'],
+          ['deal_health', 'Post-Demo Health'],
+        ] as [ViewTab, string][]).map(([tab, label]) => {
+          const count = tab === 'all' ? data.deals.length :
+            data.deals.filter(d => d.grade_type === tab).length;
+          return (
+            <button
+              key={tab}
+              onClick={() => setViewTab(tab)}
+              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                viewTab === tab
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              {label} ({count})
             </button>
           );
         })}
@@ -585,7 +623,7 @@ export function DealHealthView() {
                     className="hover:bg-gray-50 cursor-pointer transition-colors"
                   >
                     <td className="px-4 py-3">
-                      <GradeBadge grade={deal.overall_grade} score={deal.overall_score} />
+                      <GradeBadge grade={deal.overall_grade} score={deal.overall_score} gradeType={deal.grade_type} />
                     </td>
                     <td className="px-4 py-3 max-w-[200px]">
                       <a
@@ -700,45 +738,108 @@ function ExpandedDealDetail({
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       {/* Left: Dimension Scores */}
       <div className="space-y-4">
-        <h4 className="text-sm font-semibold text-gray-700">Dimension Scores</h4>
-        <DimensionBar label="Hygiene (15%)" score={deal.hygiene_score} color="bg-blue-500" />
-        <DimensionBar label="Momentum (30%)" score={deal.momentum_score} color="bg-emerald-500" />
-        <DimensionBar label="Engagement (35%)" score={deal.engagement_score} color="bg-purple-500" />
-        <DimensionBar label="Risk (20%)" score={deal.risk_score} color="bg-orange-500" />
+        <h4 className="text-sm font-semibold text-gray-700">
+          {deal.grade_type === 'pre_demo_effort' ? 'Effort Dimensions' : 'Dimension Scores'}
+        </h4>
+        {deal.grade_type === 'pre_demo_effort' ? (
+          <>
+            <DimensionBar label="Call Cadence (25%)" score={deal.hygiene_score} color="bg-blue-500" />
+            <DimensionBar label="Follow-up (25%)" score={deal.momentum_score} color="bg-emerald-500" />
+            <DimensionBar label="Tactic Mix (30%)" score={deal.engagement_score} color="bg-purple-500" />
+            <DimensionBar label="Discipline (20%)" score={deal.risk_score} color="bg-orange-500" />
+          </>
+        ) : (
+          <>
+            <DimensionBar label="Hygiene (15%)" score={deal.hygiene_score} color="bg-blue-500" />
+            <DimensionBar label="Momentum (30%)" score={deal.momentum_score} color="bg-emerald-500" />
+            <DimensionBar label="Engagement (35%)" score={deal.engagement_score} color="bg-purple-500" />
+            <DimensionBar label="Risk (20%)" score={deal.risk_score} color="bg-orange-500" />
+          </>
+        )}
         <div className="pt-2 border-t border-gray-200">
           <DimensionBar label="Overall" score={deal.overall_score} color="bg-indigo-600" />
         </div>
 
-        {/* Activity Summary */}
-        <div className="pt-3 border-t border-gray-200 space-y-1">
-          <h5 className="text-xs font-semibold text-gray-500 uppercase">Activity</h5>
-          <div className="grid grid-cols-4 gap-2 text-center">
-            <div>
-              <div className="text-lg font-semibold text-gray-900">{deal.email_count}</div>
-              <div className="text-xs text-gray-500">Emails</div>
+        {/* Pre-demo metrics detail */}
+        {deal.grade_type === 'pre_demo_effort' && (
+          <div className="pt-3 border-t border-gray-200 space-y-2">
+            <h5 className="text-xs font-semibold text-gray-500 uppercase">Effort Metrics</h5>
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div>
+                <div className="text-lg font-semibold text-gray-900">{deal.total_calls ?? 0}</div>
+                <div className="text-xs text-gray-500">Calls</div>
+              </div>
+              <div>
+                <div className="text-lg font-semibold text-gray-900">{deal.connected_calls ?? 0}</div>
+                <div className="text-xs text-gray-500">Connected</div>
+              </div>
+              <div>
+                <div className="text-lg font-semibold text-gray-900">{deal.total_outbound_emails ?? 0}</div>
+                <div className="text-xs text-gray-500">Outbound Emails</div>
+              </div>
             </div>
-            <div>
-              <div className="text-lg font-semibold text-gray-900">{deal.call_count}</div>
-              <div className="text-xs text-gray-500">Calls</div>
+            <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
+              <div>Avg call gap: <span className="font-medium">{deal.avg_call_gap_days != null ? `${deal.avg_call_gap_days}d` : '—'}</span></div>
+              <div>Max call gap: <span className="font-medium">{deal.max_call_gap_days != null ? `${deal.max_call_gap_days}d` : '—'}</span></div>
+              <div>Hours tried: <span className="font-medium">{deal.distinct_call_hours ?? '—'}</span></div>
+              <div>Days tried: <span className="font-medium">{deal.distinct_call_days ?? '—'}</span></div>
+              <div>Max touchpoint gap: <span className="font-medium">{deal.max_touchpoint_gap_days != null ? `${deal.max_touchpoint_gap_days}d` : '—'}</span></div>
+              <div>Days in pre-demo: <span className="font-medium">{deal.days_in_pre_demo ?? '—'}</span></div>
             </div>
-            <div>
-              <div className="text-lg font-semibold text-gray-900">{deal.meeting_count}</div>
-              <div className="text-xs text-gray-500">Meetings</div>
-            </div>
-            <div>
-              <div className="text-lg font-semibold text-gray-900">{deal.note_count}</div>
-              <div className="text-xs text-gray-500">Notes</div>
-            </div>
+            {deal.sent_gift && (
+              <div className="flex items-center gap-1 mt-1">
+                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-700 border border-purple-200">
+                  Gift Sent
+                </span>
+              </div>
+            )}
+            {deal.tactics_detected && deal.tactics_detected.length > 0 && (
+              <div className="mt-2">
+                <h6 className="text-xs font-semibold text-gray-500 uppercase mb-1">Tactics Detected</h6>
+                <div className="flex flex-wrap gap-1">
+                  {deal.tactics_detected.map((tactic) => (
+                    <span key={tactic} className="px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded text-xs border border-indigo-200">
+                      {tactic.replace(/_/g, ' ')}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
-          {deal.days_since_activity != null && (
-            <p className="text-xs text-gray-500 mt-1">
-              {deal.days_since_activity === 0
-                ? 'Active today'
-                : `${deal.days_since_activity} days since last activity`}
-              {deal.has_future_activity && ' | Future activity scheduled'}
-            </p>
-          )}
-        </div>
+        )}
+
+        {/* Activity Summary (post-demo) */}
+        {deal.grade_type !== 'pre_demo_effort' && (
+          <div className="pt-3 border-t border-gray-200 space-y-1">
+            <h5 className="text-xs font-semibold text-gray-500 uppercase">Activity</h5>
+            <div className="grid grid-cols-4 gap-2 text-center">
+              <div>
+                <div className="text-lg font-semibold text-gray-900">{deal.email_count}</div>
+                <div className="text-xs text-gray-500">Emails</div>
+              </div>
+              <div>
+                <div className="text-lg font-semibold text-gray-900">{deal.call_count}</div>
+                <div className="text-xs text-gray-500">Calls</div>
+              </div>
+              <div>
+                <div className="text-lg font-semibold text-gray-900">{deal.meeting_count}</div>
+                <div className="text-xs text-gray-500">Meetings</div>
+              </div>
+              <div>
+                <div className="text-lg font-semibold text-gray-900">{deal.note_count}</div>
+                <div className="text-xs text-gray-500">Notes</div>
+              </div>
+            </div>
+            {deal.days_since_activity != null && (
+              <p className="text-xs text-gray-500 mt-1">
+                {deal.days_since_activity === 0
+                  ? 'Active today'
+                  : `${deal.days_since_activity} days since last activity`}
+                {deal.has_future_activity && ' | Future activity scheduled'}
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Middle: Issues */}

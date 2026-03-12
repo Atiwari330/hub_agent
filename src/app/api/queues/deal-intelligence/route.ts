@@ -48,6 +48,25 @@ export interface DealIntelligenceItem {
   top_action_type: string | null;
   llm_analyzed_at: string | null;
   rules_computed_at: string | null;
+  // Pre-demo effort grade fields
+  grade_type: string;
+  call_frequency_score: number | null;
+  call_spacing_score: number | null;
+  followup_regularity_score: number | null;
+  giftology_score: number | null;
+  email_personalization_score: number | null;
+  tactic_diversity_score: number | null;
+  total_calls: number | null;
+  connected_calls: number | null;
+  total_outbound_emails: number | null;
+  avg_call_gap_days: number | null;
+  max_call_gap_days: number | null;
+  distinct_call_hours: number | null;
+  distinct_call_days: number | null;
+  sent_gift: boolean | null;
+  max_touchpoint_gap_days: number | null;
+  days_in_pre_demo: number | null;
+  tactics_detected: string[] | null;
 }
 
 export interface DealIntelligenceResponse {
@@ -148,6 +167,24 @@ export async function GET() {
         top_action_type: d.top_action_type,
         llm_analyzed_at: d.llm_analyzed_at,
         rules_computed_at: d.rules_computed_at,
+        grade_type: d.grade_type || 'deal_health',
+        call_frequency_score: d.call_frequency_score ?? null,
+        call_spacing_score: d.call_spacing_score ?? null,
+        followup_regularity_score: d.followup_regularity_score ?? null,
+        giftology_score: d.giftology_score ?? null,
+        email_personalization_score: d.email_personalization_score ?? null,
+        tactic_diversity_score: d.tactic_diversity_score ?? null,
+        total_calls: d.total_calls ?? null,
+        connected_calls: d.connected_calls ?? null,
+        total_outbound_emails: d.total_outbound_emails ?? null,
+        avg_call_gap_days: d.avg_call_gap_days ? Number(d.avg_call_gap_days) : null,
+        max_call_gap_days: d.max_call_gap_days ? Number(d.max_call_gap_days) : null,
+        distinct_call_hours: d.distinct_call_hours ?? null,
+        distinct_call_days: d.distinct_call_days ?? null,
+        sent_gift: d.sent_gift ?? null,
+        max_touchpoint_gap_days: d.max_touchpoint_gap_days ? Number(d.max_touchpoint_gap_days) : null,
+        days_in_pre_demo: d.days_in_pre_demo ?? null,
+        tactics_detected: d.tactics_detected ?? null,
       }));
 
     const response: DealIntelligenceResponse = {
