@@ -10,7 +10,6 @@ const supabase = createClient(
 
 // Target AE emails from the app
 const TARGET_AE_EMAILS = [
-  'aboyd@opusbehavioral.com',
   'cgarraffa@opusbehavioral.com',
   'jrice@opusbehavioral.com',
   'atiwari@opusbehavioral.com',

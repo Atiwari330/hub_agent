@@ -10,7 +10,7 @@ config({ path: '.env.local' });
  * - VP of RevOps (full access)
  * - 2 CMOs (PPL Sequence + Hot Tracker)
  * - CEO (PPL Sequence + Hot Tracker)
- * - 3 Account Executives (portal only, linked to HubSpot owner)
+ * - 2 Account Executives (portal only, linked to HubSpot owner)
  *
  * NOTE: You can also create users manually in the Supabase Dashboard:
  * Authentication > Users > Add user
@@ -60,12 +60,6 @@ const USERS = [
     displayName: 'Humberto Buniotto',
     role: 'ceo',
     permissions: ['queue:ppl-sequence', 'hot_tracker'],
-  },
-  {
-    email: 'aboyd@opusbehavioral.com',
-    displayName: 'Amos Boyd',
-    role: 'account_executive',
-    permissions: ['portal'],
   },
   {
     email: 'cgarraffa@opusbehavioral.com',
@@ -237,7 +231,6 @@ async function main() {
   console.log('- CMO (eric@): PPL Sequence Queue + Hot Tracker');
   console.log('- CMO (glacap@): PPL Sequence Queue + Hot Tracker');
   console.log('- CEO (hbuniotto@): PPL Sequence Queue + Hot Tracker');
-  console.log('- AE (aboyd@): Portal only');
   console.log('- AE (cgarraffa@): Portal only');
   console.log('- AE (jrice@): Portal only');
 }

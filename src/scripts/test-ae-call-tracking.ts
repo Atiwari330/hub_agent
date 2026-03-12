@@ -18,7 +18,7 @@ import { getCurrentQuarter, getQuarterInfo } from '../lib/utils/quarter';
 import { FilterOperatorEnum } from '@hubspot/api-client/lib/codegen/crm/objects/calls';
 
 // Target AE for testing
-const TARGET_AE_EMAIL = 'aboyd@opusbehavioral.com';
+const TARGET_AE_EMAIL = 'cgarraffa@opusbehavioral.com';
 
 interface CallData {
   id: string;

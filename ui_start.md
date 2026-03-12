@@ -19,7 +19,6 @@ Create a persistent left sidebar (width: 256px / w-64) with dark styling (bg-sla
 │ EHR Sales Intelligence  │
 ├─────────────────────────┤
 │ ▼ Account Executives    │
-│     ○ Amos              │
 │     ○ Christopher       │
 │     ○ Jack              │
 ├─────────────────────────┤
@@ -701,7 +700,6 @@ src/
 For initial testing, seed these quotas:
 ```sql
 INSERT INTO quotas (owner_id, owner_email, quarter, quota_amount) VALUES
-('hubspot_owner_id_for_amos', 'aboyd@opusbehavioral.com', 'Q1 2025', 420000),
 ('hubspot_owner_id_for_christopher', 'cgarraffa@opusbehavioral.com', 'Q1 2025', 420000),
 ('hubspot_owner_id_for_jack', 'jrice@opusbehavioral.com', 'Q1 2025', 420000);
 ```

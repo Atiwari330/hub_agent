@@ -8,9 +8,8 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-// Only the 3 requested AEs
+// Only the 2 requested AEs
 const TARGET_AE_EMAILS = [
-  'aboyd@opusbehavioral.com', // Amos Boyd
   'cgarraffa@opusbehavioral.com', // Christopher Garraffa
   'jrice@opusbehavioral.com', // Jack Rice
 ];

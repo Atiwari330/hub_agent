@@ -116,7 +116,6 @@ NEXT_PUBLIC_APP_URL=   # Optional, for API calls in SSR
 The dashboard sidebar is filtered to show only specific AEs. Target emails are defined in `src/app/dashboard/layout.tsx`:
 ```typescript
 const TARGET_AE_EMAILS = [
-  'aboyd@opusbehavioral.com',
   'cgarraffa@opusbehavioral.com',
   'jrice@opusbehavioral.com',
   'atiwari@opusbehavioral.com',

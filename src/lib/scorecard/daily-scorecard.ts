@@ -15,7 +15,6 @@ import { SALES_PIPELINE_ID } from '@/lib/hubspot/stage-mappings';
 
 // AEs tracked for the SPIFF program
 export const SPIFF_AE_EMAILS = [
-  'aboyd@opusbehavioral.com',
   'cgarraffa@opusbehavioral.com',
   'jrice@opusbehavioral.com',
 ];

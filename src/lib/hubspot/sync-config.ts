@@ -8,7 +8,6 @@
 export const SYNC_CONFIG = {
   // Target AE emails - only sync owners matching these emails
   TARGET_AE_EMAILS: [
-    'aboyd@opusbehavioral.com',
     'cgarraffa@opusbehavioral.com',
     'jrice@opusbehavioral.com',
     'atiwari@opusbehavioral.com',

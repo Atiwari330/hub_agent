@@ -121,13 +121,13 @@ async function main() {
   }
 
   // ============================================
-  // 4. FIND AEs: Jack, Amos, Christopher
+  // 4. FIND AEs: Jack, Christopher
   // ============================================
-  console.log('## 4. ACCOUNT EXECUTIVES: Jack, Amos, Christopher');
+  console.log('## 4. ACCOUNT EXECUTIVES: Jack, Christopher');
   console.log('-'.repeat(50));
 
   const owners = await listAllOwners();
-  const targetAEs = ['jack', 'amos', 'christopher', 'chris'];
+  const targetAEs = ['jack', 'christopher', 'chris'];
 
   const foundAEs = owners.filter(o => {
     const name = `${o.firstName || ''} ${o.lastName || ''}`.toLowerCase();

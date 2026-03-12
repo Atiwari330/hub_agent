@@ -308,7 +308,6 @@ export async function fetchCallAssociations(
 export const DASHBOARD_AE_EMAILS = [
   'esoruco@opusbehavioral.com',
   'zclaussen@opusbehavioral.com',
-  'aboyd@opusbehavioral.com',
   'jrice@opusbehavioral.com',
   'cgarraffa@opusbehavioral.com',
 ];
