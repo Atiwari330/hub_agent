@@ -1,4 +1,5 @@
 import { getHubSpotClient } from './client';
+import { FilterOperatorEnum } from '@hubspot/api-client/lib/codegen/crm/companies';
 
 // HubSpot property names mapped to our DB columns
 const COMPANY_PROPERTIES = [
@@ -146,6 +147,43 @@ export async function getCompaniesByIds(ids: string[]): Promise<HubSpotCompany[]
   }
 
   return companies;
+}
+
+/**
+ * Search for a company by domain name
+ */
+export async function searchCompanyByDomain(domain: string): Promise<HubSpotCompany | null> {
+  const client = getHubSpotClient();
+
+  try {
+    const response = await client.crm.companies.searchApi.doSearch({
+      filterGroups: [
+        {
+          filters: [
+            {
+              propertyName: 'domain',
+              operator: FilterOperatorEnum.Eq,
+              value: domain,
+            },
+          ],
+        },
+      ],
+      properties: COMPANY_PROPERTIES,
+      limit: 1,
+    });
+
+    if (response.results.length === 0) return null;
+
+    const company = response.results[0];
+    return {
+      id: company.id,
+      properties: mapCompanyProperties(company.properties as Record<string, string | null>),
+      createdAt: company.createdAt?.toISOString(),
+      updatedAt: company.updatedAt?.toISOString(),
+    };
+  } catch {
+    return null;
+  }
 }
 
 /**

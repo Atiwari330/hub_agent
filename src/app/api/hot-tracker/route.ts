@@ -89,6 +89,9 @@ export async function GET(request: NextRequest) {
       pplComplianceDealsCount: number;
       pplComplianceSum: number;
       pplComplianceAvg: number;
+      pplCallComplianceDealsCount: number;
+      pplCallComplianceSum: number;
+      pplCallComplianceAvg: number;
     };
     byAE: {
       ownerId: string;
@@ -105,6 +108,9 @@ export async function GET(request: NextRequest) {
       pplComplianceDealsCount: number;
       pplComplianceSum: number;
       pplComplianceAvg: number;
+      pplCallComplianceDealsCount: number;
+      pplCallComplianceSum: number;
+      pplCallComplianceAvg: number;
     }[];
   }>();
 
@@ -128,6 +134,9 @@ export async function GET(request: NextRequest) {
           pplComplianceDealsCount: 0,
           pplComplianceSum: 0,
           pplComplianceAvg: 0,
+          pplCallComplianceDealsCount: 0,
+          pplCallComplianceSum: 0,
+          pplCallComplianceAvg: 0,
         },
         byAE: [],
       });
@@ -151,6 +160,9 @@ export async function GET(request: NextRequest) {
         pplComplianceDealsCount: snap.ppl_compliance_deals_count || 0,
         pplComplianceSum: snap.ppl_compliance_sum || 0,
         pplComplianceAvg: (snap.ppl_compliance_deals_count || 0) > 0 ? (snap.ppl_compliance_sum || 0) / snap.ppl_compliance_deals_count : 0,
+        pplCallComplianceDealsCount: snap.ppl_call_compliance_deals_count || 0,
+        pplCallComplianceSum: snap.ppl_call_compliance_sum || 0,
+        pplCallComplianceAvg: (snap.ppl_call_compliance_deals_count || 0) > 0 ? (snap.ppl_call_compliance_sum || 0) / snap.ppl_call_compliance_deals_count : 0,
       };
     } else {
       // Per-AE row
@@ -169,6 +181,9 @@ export async function GET(request: NextRequest) {
         pplComplianceDealsCount: snap.ppl_compliance_deals_count || 0,
         pplComplianceSum: snap.ppl_compliance_sum || 0,
         pplComplianceAvg: (snap.ppl_compliance_deals_count || 0) > 0 ? (snap.ppl_compliance_sum || 0) / snap.ppl_compliance_deals_count : 0,
+        pplCallComplianceDealsCount: snap.ppl_call_compliance_deals_count || 0,
+        pplCallComplianceSum: snap.ppl_call_compliance_sum || 0,
+        pplCallComplianceAvg: (snap.ppl_call_compliance_deals_count || 0) > 0 ? (snap.ppl_call_compliance_sum || 0) / snap.ppl_call_compliance_deals_count : 0,
       });
     }
   }
@@ -182,6 +197,7 @@ export async function GET(request: NextRequest) {
       proposalWithGift: 4,
       pplAvgTouches: 3,
       pplDailyCompliance: 1.0,
+      pplCallCompliance: 1.0,
     },
     weeks: Array.from(weekMap.values()).sort((a, b) => a.weekNumber - b.weekNumber),
   });

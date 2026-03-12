@@ -2,6 +2,12 @@
 
 import { useEffect, useState } from 'react';
 
+interface DailyCallBreakdown {
+  date: string;
+  callCount: number;
+  compliant: boolean;
+}
+
 interface PplDeal {
   dealId: string;
   dealName: string;
@@ -13,6 +19,11 @@ interface PplDeal {
   calls: number;
   emails: number;
   compliance: number;
+  callCompliance: number;
+  compliantCallDays: number;
+  totalCallDays: number;
+  callsPerDay: DailyCallBreakdown[];
+  lateCreation: boolean;
   firstWeekComplete: boolean;
   meetingBooked: boolean;
   hubspotUrl: string;
@@ -98,17 +109,53 @@ function DealCard({ deal, showOwner }: { deal: PplDeal; showOwner: boolean }) {
           Outreach goal met — not counted in compliance
         </div>
       ) : (
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-600">
-          <span>
-            <span className="font-medium text-gray-900">{deal.uniqueTouchDays}</span>/{deal.daysElapsed} days touched
-          </span>
-          <span className="text-gray-300">|</span>
-          <span>
-            <span className="font-medium text-gray-900">{deal.totalTouches}</span> touches
-            <span className="text-gray-400 text-xs ml-1">
-              ({deal.calls} call{deal.calls !== 1 ? 's' : ''}, {deal.emails} email{deal.emails !== 1 ? 's' : ''})
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-600">
+            <span>
+              <span className="font-medium text-gray-900">{deal.uniqueTouchDays}</span>/{deal.daysElapsed} days touched
             </span>
-          </span>
+            <span className="text-gray-300">|</span>
+            <span>
+              <span className="font-medium text-gray-900">{deal.totalTouches}</span> touches
+              <span className="text-gray-400 text-xs ml-1">
+                ({deal.calls} call{deal.calls !== 1 ? 's' : ''}, {deal.emails} email{deal.emails !== 1 ? 's' : ''})
+              </span>
+            </span>
+          </div>
+
+          {/* Call compliance (Metric 6) */}
+          {deal.callsPerDay && deal.callsPerDay.length > 0 && (
+            <div className="border-t border-gray-100 pt-2">
+              <div className="flex items-center gap-2 text-sm text-gray-600 mb-1">
+                <span className="font-medium text-gray-700">Call compliance:</span>
+                <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
+                  complianceColor(deal.callCompliance).text
+                } ${complianceColor(deal.callCompliance).bg}`}>
+                  {deal.compliantCallDays}/{deal.totalCallDays} compliant days (2+ calls/day)
+                </span>
+                {deal.lateCreation && (
+                  <span className="text-xs text-amber-600" title="Deal created after 5pm EST — day 0 excluded">
+                    (late creation)
+                  </span>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {deal.callsPerDay.map((day) => (
+                  <span
+                    key={day.date}
+                    className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-mono ${
+                      day.compliant
+                        ? 'bg-green-100 text-green-700'
+                        : 'bg-red-100 text-red-700'
+                    }`}
+                    title={`${day.date}: ${day.callCount} call${day.callCount !== 1 ? 's' : ''}`}
+                  >
+                    {new Date(day.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}: {day.callCount}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

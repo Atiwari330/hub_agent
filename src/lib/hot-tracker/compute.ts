@@ -12,7 +12,7 @@ import { createServiceClient } from '@/lib/supabase/client';
 import { getQuarterInfo } from '@/lib/utils/quarter';
 import { batchFetchDealEngagements } from '@/lib/hubspot/batch-engagements';
 import { fetchCallsByOwner } from '@/lib/hubspot/calls';
-import { countTouchesInRange, countUniqueTouchDays } from '@/lib/utils/touch-counter';
+import { countTouchesInRange, countUniqueTouchDays, countCompliantCallDays } from '@/lib/utils/touch-counter';
 import { chunk } from '@/lib/utils/chunk';
 import { getHubSpotClient } from '@/lib/hubspot/client';
 import { SYNC_CONFIG } from '@/lib/hubspot/sync-config';
@@ -67,6 +67,10 @@ export interface WeekMetrics {
   // Metric 5: Daily touch compliance (sum of per-deal uniqueTouchDays/daysElapsed ratios)
   pplComplianceDealsCount: number;
   pplComplianceSum: number;
+
+  // Metric 6: PPL daily call compliance (2 calls/day)
+  pplCallComplianceDealsCount: number;
+  pplCallComplianceSum: number;
 }
 
 export interface OwnerWeekMetrics extends WeekMetrics {
@@ -140,6 +144,8 @@ function emptyWeekMetrics(w: { weekNumber: number; weekStart: string; weekEnd: s
     pplTouchesTotal: 0,
     pplComplianceDealsCount: 0,
     pplComplianceSum: 0,
+    pplCallComplianceDealsCount: 0,
+    pplCallComplianceSum: 0,
   };
 }
 
@@ -472,6 +478,67 @@ export async function computeHotTrackerForQuarter(
   }
 
   // ─────────────────────────────────────────────────
+  // Metric 6: PPL Daily Call Compliance (2 calls/day)
+  // ─────────────────────────────────────────────────
+  const metric6ByOwnerWeek = new Map<string, Map<number, { dealCount: number; complianceSum: number }>>();
+
+  if (pplDeals && pplDeals.length > 0) {
+    const todayStart6 = new Date();
+    todayStart6.setUTCHours(0, 0, 0, 0);
+
+    // Include ALL PPL deals with at least 1 full day elapsed
+    const callComplianceDeals = pplDeals.filter((d) => {
+      const created = new Date(d.hubspot_created_at!);
+      created.setUTCHours(0, 0, 0, 0);
+      return created < todayStart6;
+    });
+
+    for (const deal of callComplianceDeals) {
+      const ownerId = deal.owner_id;
+      if (!ownerId) continue;
+
+      const createdDate = new Date(deal.hubspot_created_at!);
+      createdDate.setUTCHours(0, 0, 0, 0);
+      const weekNum = getWeekNumberInQuarter(createdDate, qi.startDate);
+
+      const daysElapsed = Math.min(7,
+        Math.floor((todayStart6.getTime() - createdDate.getTime()) / (24 * 60 * 60 * 1000))
+      );
+      if (daysElapsed <= 0) continue;
+
+      const week1Start = new Date(createdDate);
+      week1Start.setHours(0, 0, 0, 0);
+      const week1End = new Date(createdDate);
+      week1End.setDate(week1End.getDate() + daysElapsed - 1);
+      week1End.setHours(23, 59, 59, 999);
+
+      const dealEngagements = pplEngagements.get(deal.hubspot_deal_id);
+
+      // Skip deals that already have a meeting booked
+      const meetings = dealEngagements?.meetings || [];
+      if (meetings.length > 0) continue;
+
+      const result = countCompliantCallDays(
+        dealEngagements?.calls || [],
+        week1Start,
+        week1End,
+        daysElapsed,
+        deal.hubspot_created_at!
+      );
+
+      // Only count if there are accountable days (totalDays > 0)
+      if (result.totalDays <= 0) continue;
+
+      if (!metric6ByOwnerWeek.has(ownerId)) metric6ByOwnerWeek.set(ownerId, new Map());
+      const ownerWeeks = metric6ByOwnerWeek.get(ownerId)!;
+      if (!ownerWeeks.has(weekNum)) ownerWeeks.set(weekNum, { dealCount: 0, complianceSum: 0 });
+      const bucket = ownerWeeks.get(weekNum)!;
+      bucket.dealCount++;
+      bucket.complianceSum += result.compliance;
+    }
+  }
+
+  // ─────────────────────────────────────────────────
   // Assemble results
   // ─────────────────────────────────────────────────
   const byOwner = new Map<string, OwnerWeekMetrics[]>();
@@ -483,6 +550,7 @@ export async function computeHotTrackerForQuarter(
       const m3 = metric3ByOwnerWeek.get(owner.id)?.get(w.weekNumber);
       const m4 = metric4ByOwnerWeek.get(owner.id)?.get(w.weekNumber);
       const m5 = metric5ByOwnerWeek.get(owner.id)?.get(w.weekNumber);
+      const m6 = metric6ByOwnerWeek.get(owner.id)?.get(w.weekNumber);
 
       return {
         ...emptyWeekMetrics(w),
@@ -498,6 +566,8 @@ export async function computeHotTrackerForQuarter(
         pplTouchesTotal: m4?.touchesTotal || 0,
         pplComplianceDealsCount: m5?.dealCount || 0,
         pplComplianceSum: m5?.complianceSum || 0,
+        pplCallComplianceDealsCount: m6?.dealCount || 0,
+        pplCallComplianceSum: m6?.complianceSum || 0,
       };
     });
     byOwner.set(owner.id, ownerWeeks);
@@ -519,6 +589,8 @@ export async function computeHotTrackerForQuarter(
         team.pplTouchesTotal += ow.pplTouchesTotal;
         team.pplComplianceDealsCount += ow.pplComplianceDealsCount;
         team.pplComplianceSum += ow.pplComplianceSum;
+        team.pplCallComplianceDealsCount += ow.pplCallComplianceDealsCount;
+        team.pplCallComplianceSum += ow.pplCallComplianceSum;
       }
     }
     return team;

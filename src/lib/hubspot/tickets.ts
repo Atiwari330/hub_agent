@@ -134,6 +134,47 @@ export async function getOpenTickets(): Promise<HubSpotTicket[]> {
 }
 
 /**
+ * Fetch ALL tickets (open + closed, all pipelines) for a specific company
+ */
+export async function getTicketsByCompanyId(companyId: string): Promise<HubSpotTicket[]> {
+  const client = getHubSpotClient();
+  const tickets: HubSpotTicket[] = [];
+  let after: string | undefined;
+
+  do {
+    const response = await client.crm.tickets.searchApi.doSearch({
+      filterGroups: [
+        {
+          filters: [
+            {
+              propertyName: 'hs_primary_company_id',
+              operator: FilterOperatorEnum.Eq,
+              value: companyId,
+            },
+          ],
+        },
+      ],
+      properties: TICKET_PROPERTIES,
+      limit: 100,
+      after: after ? after : undefined,
+    });
+
+    for (const ticket of response.results) {
+      tickets.push({
+        id: ticket.id,
+        properties: mapTicketProperties(
+          ticket.properties as Record<string, string | null>
+        ),
+      });
+    }
+
+    after = response.paging?.next?.after;
+  } while (after);
+
+  return tickets;
+}
+
+/**
  * Fetch recently closed tickets (last 90 days) in the Support Pipeline
  */
 export async function getRecentlyClosedTickets(): Promise<HubSpotTicket[]> {
