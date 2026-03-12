@@ -8,8 +8,8 @@ config({ path: '.env.local' });
  *
  * This script creates users:
  * - VP of RevOps (full access)
- * - CMO (PPL Sequence only)
- * - CEO (PPL Sequence only)
+ * - 2 CMOs (PPL Sequence + Hot Tracker)
+ * - CEO (PPL Sequence + Hot Tracker)
  * - 3 Account Executives (portal only, linked to HubSpot owner)
  *
  * NOTE: You can also create users manually in the Supabase Dashboard:
@@ -46,6 +46,12 @@ const USERS = [
   {
     email: 'eric@opusbehavioral.com',
     displayName: 'Eric Brandman',
+    role: 'cmo',
+    permissions: ['queue:ppl-sequence', 'hot_tracker'],
+  },
+  {
+    email: 'glacap@opusbehavioral.com',
+    displayName: 'Gabriel Lacap',
     role: 'cmo',
     permissions: ['queue:ppl-sequence', 'hot_tracker'],
   },
@@ -228,8 +234,9 @@ async function main() {
   console.log('\nUsers can now login at /login with their email and password.');
   console.log('\nPermissions summary:');
   console.log('- VP of RevOps (atiwari@): Full access to everything');
-  console.log('- CMO (eric@): PPL Sequence Queue only');
-  console.log('- CEO (hbuniotto@): PPL Sequence Queue only');
+  console.log('- CMO (eric@): PPL Sequence Queue + Hot Tracker');
+  console.log('- CMO (glacap@): PPL Sequence Queue + Hot Tracker');
+  console.log('- CEO (hbuniotto@): PPL Sequence Queue + Hot Tracker');
   console.log('- AE (aboyd@): Portal only');
   console.log('- AE (cgarraffa@): Portal only');
   console.log('- AE (jrice@): Portal only');

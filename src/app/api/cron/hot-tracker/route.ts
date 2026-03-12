@@ -68,6 +68,8 @@ export async function GET(request: Request) {
           ppl_touches_total: week.pplTouchesTotal,
           ppl_compliance_deals_count: week.pplComplianceDealsCount,
           ppl_compliance_sum: week.pplComplianceSum,
+          ppl_call_compliance_deals_count: week.pplCallComplianceDealsCount,
+          ppl_call_compliance_sum: week.pplCallComplianceSum,
           computed_at: new Date().toISOString(),
         });
     }
@@ -96,6 +98,8 @@ export async function GET(request: Request) {
               ppl_touches_total: week.pplTouchesTotal,
               ppl_compliance_deals_count: week.pplComplianceDealsCount,
               ppl_compliance_sum: week.pplComplianceSum,
+              ppl_call_compliance_deals_count: week.pplCallComplianceDealsCount,
+              ppl_call_compliance_sum: week.pplCallComplianceSum,
               computed_at: new Date().toISOString(),
             },
             {

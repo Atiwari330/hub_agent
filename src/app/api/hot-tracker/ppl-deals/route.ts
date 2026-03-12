@@ -3,7 +3,7 @@ import { createServerSupabaseClient } from '@/lib/supabase/client';
 import { getQuarterInfo, getCurrentQuarter } from '@/lib/utils/quarter';
 import { getWeekStart, getWeekNumberInQuarter, formatDateUTC } from '@/lib/hot-tracker/compute';
 import { batchFetchDealEngagements } from '@/lib/hubspot/batch-engagements';
-import { countTouchesInRange, countUniqueTouchDays } from '@/lib/utils/touch-counter';
+import { countTouchesInRange, countUniqueTouchDays, countCompliantCallDays } from '@/lib/utils/touch-counter';
 import { SYNC_CONFIG } from '@/lib/hubspot/sync-config';
 import { checkApiAuth } from '@/lib/auth/api';
 import { RESOURCES } from '@/lib/auth';
@@ -124,6 +124,11 @@ export async function GET(request: NextRequest) {
       const touches = countTouchesInRange(calls, emails, week1Start, week1End);
       const compliance = uniqueTouchDays / daysElapsed;
 
+      // Call compliance (Metric 6)
+      const callComplianceResult = countCompliantCallDays(
+        calls, week1Start, week1End, daysElapsed, deal.hubspot_created_at!
+      );
+
       // Check if first week is complete
       const week1EndFull = new Date(createdDate);
       week1EndFull.setDate(week1EndFull.getDate() + 7);
@@ -140,6 +145,11 @@ export async function GET(request: NextRequest) {
         calls: touches.calls,
         emails: touches.emails,
         compliance,
+        callCompliance: callComplianceResult.compliance,
+        compliantCallDays: callComplianceResult.compliantDays,
+        totalCallDays: callComplianceResult.totalDays,
+        callsPerDay: callComplianceResult.dailyBreakdown,
+        lateCreation: callComplianceResult.lateCreation,
         firstWeekComplete,
         meetingBooked,
         hubspotUrl: `https://app.hubspot.com/contacts/${HUBSPOT_PORTAL_ID}/deal/${deal.hubspot_deal_id}/`,

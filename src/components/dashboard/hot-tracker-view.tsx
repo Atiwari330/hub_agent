@@ -21,6 +21,9 @@ interface AEMetrics {
   pplComplianceDealsCount: number;
   pplComplianceAvg: number;
   pplComplianceSum: number;
+  pplCallComplianceDealsCount: number;
+  pplCallComplianceAvg: number;
+  pplCallComplianceSum: number;
 }
 
 interface TeamMetrics {
@@ -37,6 +40,9 @@ interface TeamMetrics {
   pplComplianceDealsCount: number;
   pplComplianceAvg: number;
   pplComplianceSum: number;
+  pplCallComplianceDealsCount: number;
+  pplCallComplianceAvg: number;
+  pplCallComplianceSum: number;
 }
 
 interface WeekData {
@@ -56,6 +62,7 @@ interface HotTrackerData {
     proposalWithGift: number;
     pplAvgTouches: number;
     pplDailyCompliance: number;
+    pplCallCompliance: number;
   };
   weeks: WeekData[];
 }
@@ -212,8 +219,10 @@ export function HotTrackerView() {
       pplDealsCount: acc.pplDealsCount + w.team.pplDealsCount,
       pplComplianceDealsCount: acc.pplComplianceDealsCount + (w.team.pplComplianceDealsCount || 0),
       pplComplianceSum: acc.pplComplianceSum + (w.team.pplComplianceSum || 0),
+      pplCallComplianceDealsCount: acc.pplCallComplianceDealsCount + (w.team.pplCallComplianceDealsCount || 0),
+      pplCallComplianceSum: acc.pplCallComplianceSum + (w.team.pplCallComplianceSum || 0),
     }),
-    { sqlContacted: 0, sqlTotal: 0, callsToSqlWithPhone: 0, proposalWithGift: 0, proposalTotal: 0, pplTouchesTotal: 0, pplDealsCount: 0, pplComplianceDealsCount: 0, pplComplianceSum: 0 }
+    { sqlContacted: 0, sqlTotal: 0, callsToSqlWithPhone: 0, proposalWithGift: 0, proposalTotal: 0, pplTouchesTotal: 0, pplDealsCount: 0, pplComplianceDealsCount: 0, pplComplianceSum: 0, pplCallComplianceDealsCount: 0, pplCallComplianceSum: 0 }
   );
 
   return (
@@ -586,6 +595,80 @@ export function HotTrackerView() {
                     value={formatPct(avg)}
                     sub={`(${totals.deals} deal${totals.deals !== 1 ? 's' : ''})`}
                     colorClass={pctColor(avg, goals.pplDailyCompliance)}
+                  />
+                );
+              }}
+            />
+
+            {/* ─── Metric 6: PPL Daily Call Compliance (2 calls/day) ─── */}
+            <MetricSection
+              title="PPL Daily Call Compliance (2 calls/day)"
+              goal={`Goal: ${formatPct(goals.pplCallCompliance)}`}
+              weeks={weeks}
+              aeList={aeList}
+              renderTeamCell={(w) => {
+                const future = isFutureWeek(w.weekStart);
+                if (future || (w.team.pplCallComplianceDealsCount || 0) === 0) return <EmptyCell future={future} />;
+                return (
+                  <button
+                    className="w-full text-left cursor-pointer"
+                    onClick={() => setPplModal({ weekNumber: w.weekNumber })}
+                  >
+                    <MetricCell
+                      value={formatPct(w.team.pplCallComplianceAvg)}
+                      sub={`(${w.team.pplCallComplianceDealsCount} deal${w.team.pplCallComplianceDealsCount !== 1 ? 's' : ''})`}
+                      colorClass={pctColor(w.team.pplCallComplianceAvg, goals.pplCallCompliance)}
+                    />
+                  </button>
+                );
+              }}
+              renderAECell={(w, aeId) => {
+                const future = isFutureWeek(w.weekStart);
+                const ae = w.byAE.find((a) => a.ownerId === aeId);
+                if (future || !ae || (ae.pplCallComplianceDealsCount || 0) === 0) return <EmptyCell future={future} />;
+                const aeName = aeMap.get(aeId) || 'Unknown';
+                return (
+                  <button
+                    className="w-full text-left cursor-pointer"
+                    onClick={() => setPplModal({ weekNumber: w.weekNumber, ownerId: aeId, ownerName: aeName })}
+                  >
+                    <MetricCell
+                      value={formatPct(ae.pplCallComplianceAvg)}
+                      sub={`(${ae.pplCallComplianceDealsCount} deal${ae.pplCallComplianceDealsCount !== 1 ? 's' : ''})`}
+                      colorClass={pctColor(ae.pplCallComplianceAvg, goals.pplCallCompliance)}
+                    />
+                  </button>
+                );
+              }}
+              renderTotalCell={() => {
+                if (teamTotals.pplCallComplianceDealsCount === 0) return <EmptyCell />;
+                const avg = teamTotals.pplCallComplianceSum / teamTotals.pplCallComplianceDealsCount;
+                return (
+                  <MetricCell
+                    value={formatPct(avg)}
+                    sub={`(${teamTotals.pplCallComplianceDealsCount} deal${teamTotals.pplCallComplianceDealsCount !== 1 ? 's' : ''})`}
+                    colorClass={pctColor(avg, goals.pplCallCompliance)}
+                  />
+                );
+              }}
+              renderAETotalCell={(aeId) => {
+                const totals = weeks.reduce(
+                  (acc, w) => {
+                    const ae = w.byAE.find((a) => a.ownerId === aeId);
+                    return {
+                      complianceSum: acc.complianceSum + (ae?.pplCallComplianceSum || 0),
+                      deals: acc.deals + (ae?.pplCallComplianceDealsCount || 0),
+                    };
+                  },
+                  { complianceSum: 0, deals: 0 }
+                );
+                if (totals.deals === 0) return <EmptyCell />;
+                const avg = totals.complianceSum / totals.deals;
+                return (
+                  <MetricCell
+                    value={formatPct(avg)}
+                    sub={`(${totals.deals} deal${totals.deals !== 1 ? 's' : ''})`}
+                    colorClass={pctColor(avg, goals.pplCallCompliance)}
                   />
                 );
               }}

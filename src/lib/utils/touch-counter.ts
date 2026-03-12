@@ -12,6 +12,23 @@
 
 import type { HubSpotCall, HubSpotEmail, HubSpotMeeting } from '@/lib/hubspot/engagements';
 
+/** PPL daily call compliance requires 2 phone calls per day */
+export const PPL_CALLS_PER_DAY = 2;
+
+export interface DailyCallBreakdown {
+  date: string; // YYYY-MM-DD
+  callCount: number;
+  compliant: boolean; // callCount >= PPL_CALLS_PER_DAY
+}
+
+export interface CallComplianceResult {
+  compliantDays: number;
+  totalDays: number;
+  compliance: number; // compliantDays / totalDays (0-1)
+  dailyBreakdown: DailyCallBreakdown[];
+  lateCreation: boolean; // deal created after 5pm EST, day 0 excluded
+}
+
 export interface TouchCounts {
   calls: number;
   emails: number;
@@ -233,5 +250,88 @@ export function analyzeWeek1Touches(
     isInWeek1,
     meetingBooked,
     meetingBookedDate,
+  };
+}
+
+/**
+ * Check if a timestamp falls after 5pm EST (Eastern Time).
+ * Handles both EST (UTC-5) and EDT (UTC-4) based on date.
+ */
+export function isAfter5pmEST(dateStr: string): boolean {
+  const d = new Date(dateStr);
+  // Use Intl to get the correct EST/EDT offset for this date
+  const estStr = d.toLocaleString('en-US', { timeZone: 'America/New_York', hour12: false });
+  const hour = parseInt(estStr.split(', ')[1].split(':')[0]);
+  return hour >= 17;
+}
+
+/**
+ * Count compliant call days for PPL daily call compliance.
+ *
+ * Rules:
+ * - 2 phone calls per day per PPL deal for first 7 days
+ * - If deal created after 5pm EST, day 0 is excluded from compliance
+ * - Only counts calls (not emails)
+ *
+ * @param calls - Array of HubSpot calls for the deal
+ * @param startDate - Start of analysis range (deal creation date, midnight UTC)
+ * @param endDate - End of analysis range (capped at days elapsed)
+ * @param daysElapsed - Number of full days elapsed since creation (capped at 7)
+ * @param createdAtRaw - Raw deal creation timestamp (for 5pm EST check)
+ * @returns Call compliance result with daily breakdown
+ */
+export function countCompliantCallDays(
+  calls: HubSpotCall[],
+  startDate: Date,
+  endDate: Date,
+  daysElapsed: number,
+  createdAtRaw: string
+): CallComplianceResult {
+  const lateCreation = isAfter5pmEST(createdAtRaw);
+
+  // Build a map of calls per calendar day (YYYY-MM-DD)
+  const callsByDay = new Map<string, number>();
+  const startMs = startDate.getTime();
+  const endMs = endDate.getTime();
+
+  for (const call of calls) {
+    if (!call.properties.hs_timestamp) continue;
+    const ts = new Date(call.properties.hs_timestamp).getTime();
+    if (ts >= startMs && ts <= endMs) {
+      const dayKey = new Date(call.properties.hs_timestamp).toISOString().split('T')[0];
+      callsByDay.set(dayKey, (callsByDay.get(dayKey) || 0) + 1);
+    }
+  }
+
+  // Build daily breakdown for each day in the range
+  const dailyBreakdown: DailyCallBreakdown[] = [];
+  let compliantDays = 0;
+  let totalDays = 0;
+
+  const cursor = new Date(startDate);
+  for (let day = 0; day < daysElapsed; day++) {
+    const dayKey = cursor.toISOString().split('T')[0];
+
+    // Skip day 0 if late creation (after 5pm EST)
+    if (day === 0 && lateCreation) {
+      cursor.setDate(cursor.getDate() + 1);
+      continue;
+    }
+
+    totalDays++;
+    const callCount = callsByDay.get(dayKey) || 0;
+    const compliant = callCount >= PPL_CALLS_PER_DAY;
+    if (compliant) compliantDays++;
+
+    dailyBreakdown.push({ date: dayKey, callCount, compliant });
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  return {
+    compliantDays,
+    totalDays,
+    compliance: totalDays > 0 ? compliantDays / totalDays : 0,
+    dailyBreakdown,
+    lateCreation,
   };
 }
