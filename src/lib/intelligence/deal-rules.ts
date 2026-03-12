@@ -24,6 +24,8 @@ import {
 import { SALES_PIPELINE_STAGES, ALL_OPEN_STAGE_IDS, PRE_DEMO_STAGE_IDS } from '@/lib/hubspot/stage-config';
 import { SYNC_CONFIG } from '@/lib/hubspot/sync-config';
 import { TRACKED_STAGES } from '@/lib/hubspot/stage-mappings';
+import { batchFetchDealEngagements } from '@/lib/hubspot/batch-engagements';
+import { computePreDemoEffortScores, type PreDemoDealInput } from './pre-demo-rules';
 
 // --- Types ---
 
@@ -47,6 +49,7 @@ interface DealRow {
   lead_source: string | null;
   products: string | null;
   deal_collaborator: string | null;
+  sent_gift_or_incentive: string | null;
   [key: string]: unknown;
 }
 
@@ -86,6 +89,25 @@ export interface DealIntelligenceRow {
   top_action_type: string | null;
   rules_computed_at: string;
   updated_at: string;
+  // Pre-demo effort grade fields
+  grade_type?: string;
+  call_frequency_score?: number;
+  call_spacing_score?: number;
+  followup_regularity_score?: number;
+  giftology_score?: number;
+  email_personalization_score?: number;
+  tactic_diversity_score?: number;
+  total_calls?: number;
+  connected_calls?: number;
+  total_outbound_emails?: number;
+  avg_call_gap_days?: number | null;
+  max_call_gap_days?: number | null;
+  distinct_call_hours?: number;
+  distinct_call_days?: number;
+  sent_gift?: boolean;
+  max_touchpoint_gap_days?: number | null;
+  days_in_pre_demo?: number;
+  tactics_detected?: string[];
 }
 
 // --- Constants ---
@@ -468,17 +490,157 @@ export async function computeAllDealIntelligence(): Promise<{ processed: number;
     }
   }
 
-  // Process each deal
+  // Partition deals into pre-demo vs post-demo
+  const preDemoDeals: DealRow[] = [];
+  const postDemoDeals: DealRow[] = [];
+
+  for (const deal of deals as DealRow[]) {
+    if (PRE_DEMO_STAGE_IDS.includes(deal.deal_stage)) {
+      preDemoDeals.push(deal);
+    } else {
+      postDemoDeals.push(deal);
+    }
+  }
+
   let errors = 0;
   const rows: DealIntelligenceRow[] = [];
 
-  for (const deal of deals as DealRow[]) {
+  // Process post-demo deals with existing Deal Health scoring
+  for (const deal of postDemoDeals) {
     try {
       const row = processDeal(deal, ownerMap);
+      row.grade_type = 'deal_health';
       rows.push(row);
     } catch (err) {
       console.error(`Error processing deal ${deal.hubspot_deal_id}:`, err);
       errors++;
+    }
+  }
+
+  // Process pre-demo deals with Pre-Demo Effort scoring
+  if (preDemoDeals.length > 0) {
+    try {
+      // Batch fetch engagements for all pre-demo deals
+      const preDemoDealIds = preDemoDeals.map(d => d.hubspot_deal_id);
+      const engagementsMap = await batchFetchDealEngagements(preDemoDealIds);
+
+      // Fetch note counts for pre-demo deals
+      const noteCountMap = new Map<string, number>();
+      const { data: noteCounts } = await supabase
+        .from('deal_notes')
+        .select('deal_id')
+        .in('deal_id', preDemoDeals.map(d => d.id));
+
+      if (noteCounts) {
+        for (const nc of noteCounts) {
+          noteCountMap.set(nc.deal_id, (noteCountMap.get(nc.deal_id) || 0) + 1);
+        }
+      }
+
+      // Map deal IDs (internal) to hubspot deal IDs for note count lookup
+      const internalToHubspot = new Map<string, string>();
+      for (const deal of preDemoDeals) {
+        internalToHubspot.set(deal.id, deal.hubspot_deal_id);
+      }
+      const hubspotNoteCountMap = new Map<string, number>();
+      for (const [internalId, count] of noteCountMap) {
+        const hubspotId = internalToHubspot.get(internalId);
+        if (hubspotId) hubspotNoteCountMap.set(hubspotId, count);
+      }
+
+      // Compute pre-demo effort scores
+      const preDemoInputs: PreDemoDealInput[] = preDemoDeals.map(d => ({
+        hubspot_deal_id: d.hubspot_deal_id,
+        hubspot_created_at: d.hubspot_created_at,
+        next_step: d.next_step,
+        next_step_due_date: d.next_step_due_date,
+        next_step_status: d.next_step_status,
+        next_step_last_updated_at: d.next_step_last_updated_at,
+        sent_gift_or_incentive: d.sent_gift_or_incentive as string | null ?? null,
+      }));
+
+      const effortScores = computePreDemoEffortScores(preDemoInputs, engagementsMap, hubspotNoteCountMap);
+
+      for (const deal of preDemoDeals) {
+        try {
+          const effortResult = effortScores.get(deal.hubspot_deal_id);
+          const stageName = STAGE_LABEL_MAP.get(deal.deal_stage) || deal.deal_stage || 'Unknown';
+          const daysInStage = computeDaysInStage(deal);
+          const now = new Date().toISOString();
+
+          if (effortResult) {
+            rows.push({
+              hubspot_deal_id: deal.hubspot_deal_id,
+              pipeline: deal.pipeline,
+              overall_grade: effortResult.overall_grade,
+              overall_score: effortResult.overall_score,
+              // Map pre-demo dimensions to the 4 standard columns
+              hygiene_score: effortResult.call_cadence_score,
+              momentum_score: effortResult.followup_regularity_score,
+              engagement_score: effortResult.tactic_diversity_score,
+              risk_score: effortResult.discipline_score,
+              missing_fields: [],
+              hygiene_compliant: true,
+              next_step_status: null,
+              next_step_due_date: null,
+              days_since_activity: null,
+              has_future_activity: false,
+              stalled_severity: null,
+              overdue_task_count: 0,
+              deal_name: deal.deal_name,
+              amount: deal.amount,
+              stage_name: stageName,
+              stage_id: deal.deal_stage,
+              days_in_stage: daysInStage,
+              close_date: deal.close_date,
+              owner_id: deal.owner_id,
+              owner_name: deal.owner_id ? ownerMap.get(deal.owner_id) || null : null,
+              issues: [],
+              top_action: null,
+              top_action_type: null,
+              rules_computed_at: now,
+              updated_at: now,
+              // Pre-demo specific fields
+              grade_type: 'pre_demo_effort',
+              call_frequency_score: effortResult.call_frequency_score,
+              call_spacing_score: effortResult.call_spacing_score,
+              followup_regularity_score: effortResult.followup_regularity_score,
+              giftology_score: effortResult.giftology_score,
+              total_calls: effortResult.total_calls,
+              connected_calls: effortResult.connected_calls,
+              total_outbound_emails: effortResult.total_outbound_emails,
+              avg_call_gap_days: effortResult.avg_call_gap_days,
+              max_call_gap_days: effortResult.max_call_gap_days,
+              distinct_call_hours: effortResult.distinct_call_hours,
+              distinct_call_days: effortResult.distinct_call_days,
+              sent_gift: effortResult.sent_gift,
+              max_touchpoint_gap_days: effortResult.max_touchpoint_gap_days,
+              days_in_pre_demo: effortResult.days_in_pre_demo,
+            });
+          } else {
+            // Fallback: process with standard deal health
+            const row = processDeal(deal, ownerMap);
+            row.grade_type = 'pre_demo_effort';
+            rows.push(row);
+          }
+        } catch (err) {
+          console.error(`Error processing pre-demo deal ${deal.hubspot_deal_id}:`, err);
+          errors++;
+        }
+      }
+    } catch (err) {
+      console.error('Error in pre-demo effort batch processing, falling back to deal health:', err);
+      // Fallback: process pre-demo deals with standard scoring
+      for (const deal of preDemoDeals) {
+        try {
+          const row = processDeal(deal, ownerMap);
+          row.grade_type = 'pre_demo_effort';
+          rows.push(row);
+        } catch (innerErr) {
+          console.error(`Error processing deal ${deal.hubspot_deal_id}:`, innerErr);
+          errors++;
+        }
+      }
     }
   }
 
