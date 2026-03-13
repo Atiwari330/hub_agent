@@ -27,8 +27,8 @@ config({ path: '.env.local' });
 
 import { createServiceClient } from '../lib/supabase/client';
 import { analyzeTicketQuality } from '../app/api/queues/support-quality/analyze/analyze-core';
-import { runSynthesis } from '../app/api/queues/support-quality/synthesize/route';
-import type { SynthesisReport } from '../app/api/queues/support-quality/synthesize/route';
+import { runSynthesis } from '../app/api/queues/support-quality/synthesize/synthesize-quality-core';
+import type { SynthesisReport } from '../app/api/queues/support-quality/synthesize/synthesize-quality-core';
 import * as fs from 'fs';
 
 // --- Arg Parsing ---

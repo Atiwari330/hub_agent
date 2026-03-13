@@ -25,8 +25,8 @@ config({ path: '.env.local' });
 
 import { createServiceClient } from '../lib/supabase/client';
 import { analyzeRcmTicket } from '../app/api/queues/rcm-audit/analyze/analyze-rcm-core';
-import { runRcmSynthesis } from '../app/api/queues/rcm-audit/synthesize/route';
-import type { RcmAuditReport } from '../app/api/queues/rcm-audit/synthesize/route';
+import { runRcmSynthesis } from '../app/api/queues/rcm-audit/synthesize/synthesize-rcm-core';
+import type { RcmAuditReport } from '../app/api/queues/rcm-audit/synthesize/synthesize-rcm-core';
 import * as fs from 'fs';
 
 // --- Arg Parsing ---

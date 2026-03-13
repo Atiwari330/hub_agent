@@ -25,8 +25,8 @@ config({ path: '.env.local' });
 
 import { createServiceClient } from '../lib/supabase/client';
 import { analyzeSopCompliance } from '../app/api/queues/sop-audit/analyze/analyze-sop-core';
-import { runSopSynthesis } from '../app/api/queues/sop-audit/synthesize/route';
-import type { SopAuditReport } from '../app/api/queues/sop-audit/synthesize/route';
+import { runSopSynthesis } from '../app/api/queues/sop-audit/synthesize/synthesize-sop-core';
+import type { SopAuditReport } from '../app/api/queues/sop-audit/synthesize/synthesize-sop-core';
 import * as fs from 'fs';
 
 // --- Arg Parsing ---
