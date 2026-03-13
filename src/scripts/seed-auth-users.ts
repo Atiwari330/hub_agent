@@ -56,6 +56,12 @@ const USERS = [
     permissions: ['queue:ppl-sequence', 'hot_tracker'],
   },
   {
+    email: 'eradu@opusbehavioral.com',
+    displayName: 'Eduard Radu',
+    role: 'cmo',
+    permissions: ['queue:ppl-sequence', 'hot_tracker'],
+  },
+  {
     email: 'hbuniotto@opusbehavioral.com',
     displayName: 'Humberto Buniotto',
     role: 'ceo',

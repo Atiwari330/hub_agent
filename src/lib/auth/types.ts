@@ -35,6 +35,7 @@ export const RESOURCES = {
   API_AGENT: 'api:agent',
   PORTAL: 'portal',
   HOT_TRACKER: 'hot_tracker',
+  DEMO_TRACKER: 'demo_tracker',
 } as const;
 
 export type Resource = (typeof RESOURCES)[keyof typeof RESOURCES];
@@ -109,6 +110,9 @@ export function getResourceFromPath(pathname: string): Resource | null {
   // Hot Tracker
   if (pathname.includes('/dashboard/hot-tracker')) return RESOURCES.HOT_TRACKER;
 
+  // Demo Tracker
+  if (pathname.includes('/dashboard/demo-tracker')) return RESOURCES.DEMO_TRACKER;
+
   // AE pages
   if (pathname.match(/\/dashboard\/ae\/[^/]+/)) return RESOURCES.AE_DETAIL;
 
@@ -159,6 +163,7 @@ export function getResourceFromPath(pathname: string): Resource | null {
   if (pathname.includes('/api/queues/create-cs-task'))
     return RESOURCES.QUEUE_CS_HYGIENE;
   if (pathname.includes('/api/hot-tracker')) return RESOURCES.HOT_TRACKER;
+  if (pathname.includes('/api/demo-tracker')) return RESOURCES.DEMO_TRACKER;
   if (pathname.match(/\/api\/ae\/[^/]+/)) return RESOURCES.AE_DETAIL;
 
   return null;

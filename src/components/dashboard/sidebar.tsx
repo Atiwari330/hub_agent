@@ -195,6 +195,8 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
   const isOnSupportIntel = pathname === '/dashboard/queues/support-intel';
   // Hot Tracker
   const isOnHotTracker = pathname === '/dashboard/hot-tracker';
+  // Demo Tracker
+  const isOnDemoTracker = pathname === '/dashboard/demo-tracker';
 
   return (
     <aside className={`fixed left-0 top-0 h-screen bg-slate-900 text-slate-100 flex flex-col transition-all duration-300 ${isCollapsed ? 'w-16' : 'w-64'}`}>
@@ -260,6 +262,26 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.879 16.121A3 3 0 1012.015 11L11 14H9c0 .768.293 1.536.879 2.121z" />
               </svg>
               {!isCollapsed && <span>Hot Tracker</span>}
+            </Link>
+          </div>
+        )}
+
+        {/* Demo Tracker Link */}
+        {hasPermission(user, RESOURCES.DEMO_TRACKER) && (
+          <div className="mb-2">
+            <Link
+              href="/dashboard/demo-tracker"
+              className={`flex items-center gap-3 py-2.5 text-sm font-medium transition-colors ${isCollapsed ? 'px-0 justify-center' : 'px-4'} ${
+                isOnDemoTracker
+                  ? 'bg-indigo-600 text-white'
+                  : 'text-slate-300 hover:bg-slate-800'
+              }`}
+              title={isCollapsed ? 'Demo Tracker' : undefined}
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              {!isCollapsed && <span>Demo Tracker</span>}
             </Link>
           </div>
         )}
