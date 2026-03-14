@@ -194,6 +194,7 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
   const isOnPitchQueue = pathname === '/dashboard/queues/pitch-queue';
   const isOnSupportIntel = pathname === '/dashboard/queues/support-intel';
   const isOnRcmAudit = pathname === '/dashboard/queues/rcm-audit';
+  const isOnSupportManager = pathname === '/dashboard/queues/support-manager';
   // Hot Tracker
   const isOnHotTracker = pathname === '/dashboard/hot-tracker';
   // Demo Tracker
@@ -910,6 +911,31 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
                         </svg>
                       ) : (
                         <span>RCM Audit</span>
+                      )}
+                    </Link>
+                  </li>
+                  )}
+                  {hasPermission(user, RESOURCES.QUEUE_SUPPORT_MANAGER) && (
+                  <li>
+                    <Link
+                      href="/dashboard/queues/support-manager"
+                      className={`flex items-center py-2 text-sm transition-colors ${
+                        isCollapsed
+                          ? 'px-0 justify-center'
+                          : 'px-4 pl-14'
+                      } ${
+                        isOnSupportManager
+                          ? 'bg-indigo-600 text-white'
+                          : 'text-slate-300 hover:bg-slate-800'
+                      }`}
+                      title={isCollapsed ? 'Support Manager' : undefined}
+                    >
+                      {isCollapsed ? (
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                        </svg>
+                      ) : (
+                        <span>Support Manager</span>
                       )}
                     </Link>
                   </li>

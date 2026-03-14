@@ -23,6 +23,17 @@ export function getOpusModel() {
   return anthropic('claude-opus-4-6');
 }
 
+export function getSonnetModel() {
+  const apiKey = process.env.AI_GATEWAY_API_KEY;
+  if (!apiKey) throw new Error('AI_GATEWAY_API_KEY is not configured');
+
+  const anthropic = createAnthropic({
+    apiKey,
+    baseURL: 'https://ai-gateway.vercel.sh/v1',
+  });
+  return anthropic('claude-sonnet-4-20250514');
+}
+
 export function getModel() {
   const apiKey = process.env.AI_GATEWAY_API_KEY;
   if (!apiKey) {
