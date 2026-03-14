@@ -21,7 +21,7 @@ interface ProgressEvent {
   analysis?: {
     issue_summary: string;
     next_action: string;
-    action_owner: string;
+    follow_up_cadence: string | null;
     urgency: string;
     reasoning: string | null;
     engagement_summary: string | null;
@@ -111,7 +111,7 @@ export async function POST(request: NextRequest) {
                 analysis: {
                   issue_summary: result.analysis.issue_summary,
                   next_action: result.analysis.next_action,
-                  action_owner: result.analysis.action_owner,
+                  follow_up_cadence: result.analysis.follow_up_cadence,
                   urgency: result.analysis.urgency,
                   reasoning: result.analysis.reasoning,
                   engagement_summary: result.analysis.engagement_summary,

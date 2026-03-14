@@ -6,9 +6,8 @@ import type { SupportManagerResponse, SupportManagerTicket } from '@/app/api/que
 
 // --- Types ---
 
-type ActionOwnerFilter = 'all' | 'Support Agent' | 'Engineering' | 'Customer' | 'Support Manager';
 type UrgencyFilter = 'all' | 'critical' | 'high' | 'medium' | 'low';
-type SortColumn = 'companyName' | 'urgency' | 'actionOwner' | 'ageDays' | 'analyzedAt';
+type SortColumn = 'companyName' | 'urgency' | 'ageDays' | 'analyzedAt';
 type SortDirection = 'asc' | 'desc';
 
 // --- Helper Components ---
@@ -25,25 +24,6 @@ function UrgencyBar({ urgency }: { urgency: string }) {
   );
 }
 
-function ActionOwnerBadge({ owner }: { owner: string }) {
-  const styles: Record<string, string> = {
-    'Support Agent': 'bg-blue-100 text-blue-700',
-    'Engineering': 'bg-purple-100 text-purple-700',
-    'Customer': 'bg-gray-100 text-gray-600',
-    'Support Manager': 'bg-red-100 text-red-700',
-  };
-  const labels: Record<string, string> = {
-    'Support Agent': 'Agent',
-    'Engineering': 'Engineering',
-    'Customer': 'Customer',
-    'Support Manager': 'Manager',
-  };
-  return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap ${styles[owner] || 'bg-gray-100 text-gray-600'}`}>
-      {labels[owner] || owner}
-    </span>
-  );
-}
 
 function LinearBadge({ state }: { state: string }) {
   const stateColors: Record<string, string> = {
@@ -88,7 +68,6 @@ export function SupportManagerView() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedTicket, setExpandedTicket] = useState<string | null>(null);
-  const [actionOwnerFilter, setActionOwnerFilter] = useState<ActionOwnerFilter>('all');
   const [urgencyFilter, setUrgencyFilter] = useState<UrgencyFilter>('all');
   const [sortColumn, setSortColumn] = useState<SortColumn>('urgency');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
@@ -119,18 +98,14 @@ export function SupportManagerView() {
   // Recompute counts from tickets array
   const recomputeCounts = useCallback((tickets: SupportManagerTicket[]): SupportManagerResponse['counts'] => {
     const analyzed = tickets.filter((t) => t.analysis).length;
-    const byActionOwner: Record<string, number> = {};
     const byUrgency = { critical: 0, high: 0, medium: 0, low: 0 };
     for (const t of tickets) {
       if (t.analysis) {
-        if (t.analysis.action_owner) {
-          byActionOwner[t.analysis.action_owner] = (byActionOwner[t.analysis.action_owner] || 0) + 1;
-        }
         const urg = t.analysis.urgency as keyof typeof byUrgency;
         if (urg in byUrgency) byUrgency[urg]++;
       }
     }
-    return { total: tickets.length, analyzed, unanalyzed: tickets.length - analyzed, byActionOwner, byUrgency };
+    return { total: tickets.length, analyzed, unanalyzed: tickets.length - analyzed, byUrgency };
   }, []);
 
   // Single ticket analysis
@@ -224,13 +199,9 @@ export function SupportManagerView() {
                   );
                   // Recompute counts
                   const analyzed = updatedTickets.filter((t) => t.analysis).length;
-                  const byActionOwner: Record<string, number> = {};
                   const byUrgency = { critical: 0, high: 0, medium: 0, low: 0 };
                   for (const t of updatedTickets) {
                     if (t.analysis) {
-                      if (t.analysis.action_owner) {
-                        byActionOwner[t.analysis.action_owner] = (byActionOwner[t.analysis.action_owner] || 0) + 1;
-                      }
                       const urg = t.analysis.urgency as keyof typeof byUrgency;
                       if (urg in byUrgency) byUrgency[urg]++;
                     }
@@ -242,7 +213,6 @@ export function SupportManagerView() {
                       ...prev.counts,
                       analyzed,
                       unanalyzed: prev.counts.total - analyzed,
-                      byActionOwner,
                       byUrgency,
                     },
                   };
@@ -280,10 +250,6 @@ export function SupportManagerView() {
 
     let tickets = data.tickets;
 
-    if (actionOwnerFilter !== 'all') {
-      tickets = tickets.filter((t) => t.analysis?.action_owner === actionOwnerFilter);
-    }
-
     if (urgencyFilter !== 'all') {
       tickets = tickets.filter((t) => t.analysis?.urgency === urgencyFilter);
     }
@@ -304,9 +270,6 @@ export function SupportManagerView() {
           cmp = aUrg - bUrg;
           break;
         }
-        case 'actionOwner':
-          cmp = (a.analysis?.action_owner || '').localeCompare(b.analysis?.action_owner || '');
-          break;
         case 'ageDays':
           cmp = (a.ageDays || 0) - (b.ageDays || 0);
           break;
@@ -321,7 +284,7 @@ export function SupportManagerView() {
     });
 
     return tickets;
-  }, [data, actionOwnerFilter, urgencyFilter, sortColumn, sortDirection]);
+  }, [data, urgencyFilter, sortColumn, sortDirection]);
 
   const handleSort = useCallback((col: SortColumn) => {
     setSortColumn((prev) => {
@@ -440,28 +403,6 @@ export function SupportManagerView() {
         </button>
       </div>
 
-      {/* Action Owner filter pills */}
-      <div className="flex gap-2 mb-4">
-        {(['all', 'Support Agent', 'Engineering', 'Customer', 'Support Manager'] as ActionOwnerFilter[]).map((filter) => {
-          const label = filter === 'all' ? 'All' : filter === 'Support Agent' ? 'Agent' : filter === 'Support Manager' ? 'Manager' : filter;
-          const count = filter === 'all' ? counts.analyzed : (counts.byActionOwner[filter] || 0);
-          const isActive = actionOwnerFilter === filter;
-          return (
-            <button
-              key={filter}
-              onClick={() => setActionOwnerFilter(filter)}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                isActive
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              {label} {count > 0 && <span className={isActive ? 'text-indigo-200' : 'text-gray-400'}>({count})</span>}
-            </button>
-          );
-        })}
-      </div>
-
       {/* Progress bar */}
       {analyzing && progress && (
         <div className="mb-4 bg-indigo-50 border border-indigo-200 rounded-lg p-3">
@@ -490,10 +431,6 @@ export function SupportManagerView() {
           <button onClick={() => handleSort('companyName')} className="w-56 shrink-0 text-left flex items-center gap-1 hover:text-gray-700">
             Company
             {sortColumn === 'companyName' && <span>{sortDirection === 'asc' ? '\u2191' : '\u2193'}</span>}
-          </button>
-          <button onClick={() => handleSort('actionOwner')} className="w-28 shrink-0 text-left flex items-center gap-1 hover:text-gray-700 ml-4">
-            Owner
-            {sortColumn === 'actionOwner' && <span>{sortDirection === 'asc' ? '\u2191' : '\u2193'}</span>}
           </button>
           <button onClick={() => handleSort('ageDays')} className="w-14 shrink-0 text-right flex items-center gap-1 hover:text-gray-700 ml-4">
             Age
@@ -585,17 +522,6 @@ function TicketRow({
             {a?.company_name || ticket.companyName || 'Unknown'}
           </div>
 
-          {/* Action Owner */}
-          <div className="w-28 shrink-0 ml-4">
-            {a ? (
-              <ActionOwnerBadge owner={a.action_owner} />
-            ) : (
-              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-50 text-gray-400">
-                Pending
-              </span>
-            )}
-          </div>
-
           {/* Age */}
           <div className="w-14 shrink-0 text-sm text-gray-500 text-right tabular-nums ml-4">
             {ticket.ageDays}d
@@ -675,6 +601,16 @@ function TicketRow({
               </span>
             </div>
           )}
+
+          {/* Line 4: Follow-Up Cadence */}
+          {a?.follow_up_cadence && (
+            <div>
+              <span className="text-[11px] font-semibold text-amber-600 uppercase tracking-wide">Follow-up </span>
+              <span className="text-sm text-gray-700 leading-relaxed">
+                {a.follow_up_cadence}
+              </span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -689,6 +625,14 @@ function TicketRow({
                 <div>
                   <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Reasoning</h4>
                   <p className="text-sm text-gray-700 leading-relaxed">{a.reasoning}</p>
+                </div>
+              )}
+
+              {/* Knowledge Used */}
+              {a.knowledge_used && a.knowledge_used !== 'none' && (
+                <div>
+                  <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Knowledge Used</h4>
+                  <p className="text-sm text-gray-600 leading-relaxed italic">{a.knowledge_used}</p>
                 </div>
               )}
 

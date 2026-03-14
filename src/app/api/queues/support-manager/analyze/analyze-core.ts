@@ -3,8 +3,9 @@ import { getHubSpotClient } from '@/lib/hubspot/client';
 import { getOwnerById } from '@/lib/hubspot/owners';
 import { getTicketEngagementTimeline } from '@/lib/hubspot/ticket-engagements';
 import { fetchLinearIssueContext, type LinearIssueContext } from '@/lib/linear/client';
-import { generateText } from 'ai';
+import { generateText, stepCountIs } from 'ai';
 import { getSonnetModel } from '@/lib/ai/provider';
+import { lookupSupportKnowledgeTool } from '@/lib/ai/tools/support-knowledge';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 // --- Types ---
@@ -22,7 +23,7 @@ export interface TicketSupportManagerAnalysis {
   hubspot_ticket_id: string;
   issue_summary: string;
   next_action: string;
-  action_owner: string;
+  follow_up_cadence: string | null;
   urgency: string;
   reasoning: string | null;
   engagement_summary: string | null;
@@ -37,6 +38,7 @@ export interface TicketSupportManagerAnalysis {
   has_linear: boolean;
   linear_state: string | null;
   confidence: number;
+  knowledge_used: string | null;
   analyzed_at: string;
 }
 
@@ -60,36 +62,12 @@ CRITICAL CULTURAL PRINCIPLE — SUPPORT IS A TEAM EFFORT:
 - The ticket owner is simply who worked it initially. ANY support agent can and should pick up the work.
 - You may note who initially worked the ticket for context in REASONING or ENGAGEMENT_SUMMARY, but NEXT_ACTION must always use role titles, never names.
 
-PRODUCT DOMAIN CONTEXT:
-The Opus EHR platform includes:
-- **TO DO List / Task System**: Clinicians see a TO DO list of required documentation based on their scheduled appointments. Each appointment is linked to specific required documents (e.g., intake assessment, progress note). The documentation requirement is satisfied ONLY when completed through the appointment or the TO DO list — NOT by creating the same document type directly from the client chart. This is a common source of user confusion: a clinician may create an intake from the client chart thinking it fulfills the TO DO requirement, but it doesn't — it creates a separate unlinked document.
-- **Scheduling & Appointments**: Appointments carry the documentation requirements. The required forms are connected to the specific scheduled event.
-- **Client Chart**: Contains all clinical documents for a patient. Documents created directly here are standalone and do NOT fulfill appointment-linked TO DO requirements.
-- **RCM / Billing — Vendor Landscape**: Opus EHR is NOT a billing/RCM system itself — it integrates with external vendors:
-  - **PracticeSuite** — The LEGACY billing vendor. Opus no longer onboards new customers to PracticeSuite and is actively migrating existing customers OFF of it. Issues involving PracticeSuite data exports, migrations, or ERA files are complex and often require the CS Manager and Head of Client Success to problem-solve together.
-  - **Opus RCM / Imagine / ImaginePay** — The CURRENT billing/RCM vendor. This is a white-labeled version of the Imagine platform, branded as "Opus RCM." Imagine handles claims, ERA posting, payment processing (via ImaginePay), token generation, etc. The Opus EHR sends data to Imagine via API integrations.
-- **Forms & Templates**: Clinical forms (intakes, assessments, progress notes) that can be filled from appointments, TO DO items, or the chart directly.
+PRODUCT KNOWLEDGE RETRIEVAL:
+The Opus EHR platform includes several product areas (scheduling, billing/RCM, TO DO list, clinical documentation, client management, reporting, and more). You have access to the \`lookupSupportKnowledge\` tool which retrieves detailed knowledge about specific system areas.
 
-When analyzing tickets about "missing" or "duplicate" documents, TO DO items showing as incomplete, or confusion about where to complete documentation — consider whether the user may have completed the work from the wrong entry point (chart vs. appointment/TO DO). This is often a training issue, not a bug.
+**You MUST call \`lookupSupportKnowledge\` at least once before producing your triage recommendation.** Based on the ticket's subject, conversation, and context, identify which system area(s) are relevant and retrieve the knowledge. You may call it multiple times if the ticket spans multiple areas.
 
-VENDOR-ORIGINATED TICKETS (Imagine/ImaginePay/PracticeSuite sending tickets to Opus):
-Sometimes tickets in the queue are NOT from customers — they are from vendor partners (Imagine, ImaginePay, PracticeSuite) reporting issues back to Opus. You can identify these by:
-- Company name is "Imagine Software", "ImaginePay", or similar vendor name (not a healthcare facility)
-- Subject lines containing "IT-Assistant Alert", automated ticket references, or vendor ticket IDs
-- Conversation content from vendor reps (e.g., Deanna Rector at ImaginePay) reporting data issues originating from the Opus EHR
-
-These are back-channel communications where the vendor is saying: "Hey Opus, your system sent us bad data" or "Your integration is breaking something on our side."
-
-**Protocol for vendor-originated tickets:**
-1. **Immediate action**: The support team must ensure a Linear ticket exists for the engineering team. If no Linear ticket is linked, creating one is the #1 priority — engineering needs to know about this.
-2. **Support owns the tracking**: The support team is responsible for keeping this ticket alive and tracking engineering progress. They must check the Linear ticket regularly for updates.
-3. **Engineering accountability timeline**:
-   - Days 0-3: Engineering should be actively investigating. Support monitors the Linear ticket for updates.
-   - Days 3-7 with no Linear updates: The support team should ping engineering on the Linear ticket: "This vendor ticket is aging — what's the status?"
-   - Days 7-10 with no progress: Escalate urgency. The support team should push harder on engineering and flag it in standup.
-   - Days 10+ with no resolution: The CS Manager must bring this up in the morning sync with the engineering team directly. This is now a manager-level escalation.
-4. **Systemic risk awareness**: Vendor-reported data issues (like impossible balances, broken token generation, sync failures) often affect MULTIPLE customer accounts, not just the one mentioned. Flag this systemic risk in the analysis.
-5. **Closure**: The ticket cannot be closed until the Linear ticket is resolved AND the vendor confirms the fix on their end.
+If the ticket appears to involve a vendor (Imagine, ImaginePay, PracticeSuite) — retrieve the "vendor-tickets" knowledge to understand identification criteria and protocols.
 
 YOUR JOB:
 Read all available context for this ticket — the conversation thread, engagement timeline, and any engineering escalation in Linear — and determine:
@@ -156,7 +134,7 @@ Respond in this EXACT format (every field required):
 
 ISSUE_SUMMARY: [One sentence describing the core issue — be specific, not generic]
 NEXT_ACTION: [Specific action that needs to happen next — be prescriptive. Use ROLE TITLES ONLY: "The support team should...", "The CS Manager should...", "The Head of Client Success should..." — NEVER use individual names.]
-ACTION_OWNER: [Support Agent|Engineering|Customer|Support Manager]
+FOLLOW_UP_CADENCE: [Who needs to be followed up with, how often, and what triggers escalation. Format: "Follow up with [who] [frequency]; if no response in [timeframe], [escalation action]." Examples below.]
 URGENCY: [critical|high|medium|low]
 REASONING: [2-4 sentences explaining why this is the recommended next action. Reference specific evidence from the conversation, timeline, or Linear context. For Manager escalations, explain why this can't be handled at the agent level.]
 ENGAGEMENT_SUMMARY: [2-3 sentence recap of the conversation — who said what, what was tried, where things stand]
@@ -164,6 +142,7 @@ LINEAR_SUMMARY: [If Linear context exists: 2-3 sentences about engineering statu
 DAYS_SINCE_LAST_ACTIVITY: [Integer number of days since the last meaningful activity on this ticket, or 0 if today]
 LAST_ACTIVITY_BY: [Name or role of the person who last took action — e.g. "Support Agent", "Customer", "Engineering"]
 CONFIDENCE: [0.00-1.00]
+KNOWLEDGE_USED: [Comma-separated list of knowledge areas you retrieved, followed by a dash and one sentence explaining how the product knowledge informed your recommendation. Example: "scheduling, todo-list — Used scheduling knowledge to identify this is a training issue where the provider completed documentation from the chart instead of the appointment." If you did not retrieve any knowledge, write "none".]
 
 Guidelines:
 - Be SPECIFIC in NEXT_ACTION — vague actions like "follow up" or "check status" are useless. Say exactly what to do.
@@ -172,11 +151,38 @@ Guidelines:
 - If a ticket has gone silent for days, flag it and recommend a follow-up.
 - If Linear shows engineering has resolved the issue but support hasn't updated the customer, flag that communication gap.
 - If the customer has been waiting more than 2 business days with no response, urgency should be at least "high".
-- For tickets older than 60 days: ACTION_OWNER should almost always be "Support Manager" — these need the CS Manager's intervention regardless of what the issue is.
+
 - For documentation/TO DO confusion tickets, consider whether this is a training issue (user completed work from wrong entry point) and recommend explaining the correct workflow.
 - When a customer is angry, frustrated, or threatening escalation — this is a Support Manager issue, not something to leave with the agent who may have caused the frustration.
+- **INTERNAL-FIRST ESCALATION PROTOCOL**: When a ticket requires CS Manager intervention (relationship damage, frustrated customer, stalled project, process failure), the NEXT_ACTION must prescribe a two-step sequence in this order: (1) The CS Manager should FIRST hold an internal huddle with the Head of Client Success to review the situation, identify the root cause, build a concrete remediation plan, and get coaching on delivery and follow-through. (2) THEN reach out to the customer — prepared with a clear plan, specific next steps that have already been validated internally, and an apology backed by concrete commitments. The CS Manager should never go into a customer recovery call without having already aligned internally on the fix and the follow-through. The goal is to show up saying "here is our plan, we've already verified this internally, and here are the exact next steps" — not "let me look into this and get back to you."
 - When a customer reports a RECURRING issue (same problem happening multiple times), flag this for the CS Manager to coordinate a retro with the engineering team lead. This is distinct from a one-time bug.
-- For straightforward technical issues (sync failures, integration bugs), do NOT escalate to the Head of Client Success — the CS Manager can handle engineering coordination directly via standup or Slack.`;
+- For straightforward technical issues (sync failures, integration bugs), do NOT escalate to the Head of Client Success — the CS Manager can handle engineering coordination directly via standup or Slack.
+- **CRITICAL — NEXT_ACTION must be consistent with LINEAR_SUMMARY**: If the Linear context shows engineering has already investigated and concluded the issue is NOT a system bug (or has completed their work and is waiting on support/customer), do NOT recommend escalating back to engineering. Instead, recommend the support team act on engineering's findings. Example: if engineering provides a troubleshooting checklist and is waiting for support to facilitate it, the NEXT_ACTION should be for the support team to walk the customer through the checklist (e.g., via screen share), not to re-escalate to engineering.
+
+FOLLOW_UP_CADENCE GUIDELINES — use these rules to determine the appropriate follow-up cadence:
+
+**Vendor-blocking issues (e.g., PracticeSuite integration):**
+- The support team must get DAILY updates from the vendor's support team and relay those updates to the customer same-day.
+- If the vendor is unresponsive for 48+ hours, the support team must push harder — escalate within the vendor's support hierarchy and loop in the CS Manager to apply additional pressure.
+- The customer must never go more than 24 hours without a substantive update when their revenue/billing is impacted.
+
+**Internal engineering blocking (Linear ticket open):**
+- Critical/high urgency: The support team should check in with engineering DAILY for status updates.
+- Medium urgency: Check in every 2-3 business days.
+- If engineering has gone silent (no Linear updates in 3+ days), the CS Manager should escalate directly — message the engineering lead or raise it in standup.
+
+**Awaiting customer information:**
+- Urgent issues: If the customer hasn't responded within 3-4 hours after we requested critical information, the support team should follow up again same-day.
+- Normal issues: Follow up after 24-48 hours if no response. Send a second nudge at 3 business days.
+- If no response after 5 business days, the support team should attempt a different contact method (phone if email, email if phone).
+
+**How-to / simple question answered, awaiting confirmation:**
+- If the customer hasn't responded in 3-4 business days after receiving an answer, the support team should send a friendly follow-up: "Looks like you may be all set — we'll go ahead and close this ticket. Feel free to reopen if you need anything."
+
+**Active troubleshooting in progress:**
+- The support team should follow up within 24 hours after the customer tries a suggested fix, to confirm resolution.
+- If the fix didn't work, respond same-day with the next troubleshooting step — don't let the customer sit overnight wondering what's next.
+- **ANALYSIS STABILITY**: When a PREVIOUS ANALYSIS is provided, treat it as an anchor. If the underlying situation has NOT materially changed since the last analysis (no new customer messages, no new engineering updates, no new internal activity, and the time elapsed is within the recommended follow-up window), you should preserve the existing NEXT_ACTION, FOLLOW_UP_CADENCE, and URGENCY. Only change them when there is a concrete reason: new information arrived, a follow-up deadline was missed, a status changed, or significant time has passed beyond the cadence window. If you do change a recommendation, briefly note why in REASONING.`;
 }
 
 // --- Core Analysis Function ---
@@ -301,6 +307,17 @@ export async function analyzeSupportManagerTicket(
       ? Math.round((Date.now() - createdAt.getTime()) / (1000 * 60 * 60 * 24))
       : null;
 
+    // 8b. Fetch previous analysis (if exists) for stability anchoring
+    let previousAnalysis: { next_action: string; follow_up_cadence: string | null; urgency: string; issue_summary: string; analyzed_at: string } | null = null;
+    const { data: prevRow } = await supabase
+      .from('ticket_support_manager_analyses')
+      .select('next_action, follow_up_cadence, urgency, issue_summary, analyzed_at')
+      .eq('hubspot_ticket_id', ticketId)
+      .single();
+    if (prevRow) {
+      previousAnalysis = prevRow;
+    }
+
     // 9. Build user prompt
     const userPrompt = `Triage this support ticket and determine the next action:
 
@@ -345,17 +362,27 @@ ${linearContext.comments.length > 0
   ? linearContext.comments
       .map((c) => `[${c.createdAt.split('T')[0]}] ${c.author}: ${c.body}`)
       .join('\n\n')
-  : 'No comments yet.'}` : ''}`;
+  : 'No comments yet.'}` : ''}${previousAnalysis ? `
 
-    // 10. Call LLM
+PREVIOUS ANALYSIS (from ${previousAnalysis.analyzed_at}):
+- ISSUE_SUMMARY: ${previousAnalysis.issue_summary}
+- NEXT_ACTION: ${previousAnalysis.next_action}
+- FOLLOW_UP_CADENCE: ${previousAnalysis.follow_up_cadence || 'N/A'}
+- URGENCY: ${previousAnalysis.urgency}` : ''}`;
+
+    // 10. Call LLM with knowledge retrieval tools
     const result = await generateText({
       model: getSonnetModel(),
       system: buildSystemPrompt(),
       prompt: userPrompt,
+      tools: {
+        lookupSupportKnowledge: lookupSupportKnowledgeTool,
+      },
+      stopWhen: stepCountIs(5),
     });
 
-    // 11. Parse structured response
-    const text = result.text;
+    // 11. Parse structured response (fallback if model stops after tool call without final text)
+    const text = result.text || result.steps[result.steps.length - 1]?.text || '';
 
     const field = (name: string, fallback: string): string => {
       const m = text.match(new RegExp(`${name}:\\s*(.+?)(?=\\n[A-Z_]+:|\\n\\n|$)`, 'is'));
@@ -374,10 +401,7 @@ ${linearContext.comments.length > 0
 
     const issueSummary = field('ISSUE_SUMMARY', 'No summary available.');
     const nextAction = field('NEXT_ACTION', 'Review ticket.');
-    const actionOwnerRaw = field('ACTION_OWNER', 'Support Agent');
-    const validOwners = ['Support Agent', 'Engineering', 'Customer', 'Support Manager'];
-    const actionOwner = validOwners.includes(actionOwnerRaw) ? actionOwnerRaw : 'Support Agent';
-
+    const followUpCadence = field('FOLLOW_UP_CADENCE', null as unknown as string) || null;
     const urgencyRaw = field('URGENCY', 'medium').toLowerCase();
     const urgency = ['critical', 'high', 'medium', 'low'].includes(urgencyRaw) ? urgencyRaw : 'medium';
 
@@ -387,13 +411,14 @@ ${linearContext.comments.length > 0
     const daysSinceLastActivity = intField('DAYS_SINCE_LAST_ACTIVITY', 0);
     const lastActivityBy = field('LAST_ACTIVITY_BY', 'Unknown');
     const confidence = numField('CONFIDENCE', 0.5, 1);
+    const knowledgeUsed = field('KNOWLEDGE_USED', null as unknown as string) || null;
 
     // 12. Upsert into ticket_support_manager_analyses
     const analysisData: TicketSupportManagerAnalysis = {
       hubspot_ticket_id: ticketId,
       issue_summary: issueSummary,
       next_action: nextAction,
-      action_owner: actionOwner,
+      follow_up_cadence: followUpCadence,
       urgency,
       reasoning,
       engagement_summary: engagementSummary,
@@ -408,6 +433,7 @@ ${linearContext.comments.length > 0
       has_linear: !!ticket.linear_task,
       linear_state: linearContext?.state || null,
       confidence,
+      knowledge_used: knowledgeUsed,
       analyzed_at: new Date().toISOString(),
     };
 

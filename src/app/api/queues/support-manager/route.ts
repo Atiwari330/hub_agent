@@ -28,7 +28,6 @@ export interface SupportManagerResponse {
     total: number;
     analyzed: number;
     unanalyzed: number;
-    byActionOwner: Record<string, number>;
     byUrgency: { critical: number; high: number; medium: number; low: number };
   };
 }
@@ -89,7 +88,7 @@ export async function GET(request: NextRequest) {
             hubspot_ticket_id: row.hubspot_ticket_id,
             issue_summary: row.issue_summary,
             next_action: row.next_action,
-            action_owner: row.action_owner,
+            follow_up_cadence: row.follow_up_cadence || null,
             urgency: row.urgency,
             reasoning: row.reasoning,
             engagement_summary: row.engagement_summary,
@@ -104,6 +103,7 @@ export async function GET(request: NextRequest) {
             has_linear: row.has_linear,
             linear_state: row.linear_state,
             confidence: parseFloat(row.confidence),
+            knowledge_used: row.knowledge_used || null,
             analyzed_at: row.analyzed_at,
           };
         }
@@ -172,14 +172,10 @@ export async function GET(request: NextRequest) {
 
     // Compute counts
     const analyzed = tickets.filter((t) => t.analysis).length;
-    const byActionOwner: Record<string, number> = {};
     const byUrgency = { critical: 0, high: 0, medium: 0, low: 0 };
 
     for (const t of tickets) {
       if (t.analysis) {
-        if (t.analysis.action_owner) {
-          byActionOwner[t.analysis.action_owner] = (byActionOwner[t.analysis.action_owner] || 0) + 1;
-        }
         const urg = t.analysis.urgency as keyof typeof byUrgency;
         if (urg in byUrgency) byUrgency[urg]++;
       }
@@ -191,7 +187,6 @@ export async function GET(request: NextRequest) {
         total: tickets.length,
         analyzed,
         unanalyzed: tickets.length - analyzed,
-        byActionOwner,
         byUrgency,
       },
     };
