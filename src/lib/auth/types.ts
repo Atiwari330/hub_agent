@@ -32,6 +32,7 @@ export const RESOURCES = {
   QUEUE_COMPLIANCE_RESEARCH: 'queue:compliance-research',
   QUEUE_DEAL_HEALTH: 'queue:deal-health',
   QUEUE_SUPPORT_QUALITY: 'queue:support-quality',
+  QUEUE_RCM_AUDIT: 'queue:rcm-audit',
   API_AGENT: 'api:agent',
   PORTAL: 'portal',
   HOT_TRACKER: 'hot_tracker',
@@ -102,6 +103,8 @@ export function getResourceFromPath(pathname: string): Resource | null {
     return RESOURCES.QUEUE_COMPLIANCE_RESEARCH;
   if (pathname.includes('/queues/support-quality'))
     return RESOURCES.QUEUE_SUPPORT_QUALITY;
+  if (pathname.includes('/queues/rcm-audit'))
+    return RESOURCES.QUEUE_RCM_AUDIT;
   if (pathname.includes('/queues/deal-health'))
     return RESOURCES.QUEUE_DEAL_HEALTH;
   if (pathname.includes('/queues/deal-intelligence'))
@@ -158,6 +161,8 @@ export function getResourceFromPath(pathname: string): Resource | null {
     return RESOURCES.QUEUE_COMPLIANCE_RESEARCH;
   if (pathname.includes('/api/queues/support-quality'))
     return RESOURCES.QUEUE_SUPPORT_QUALITY;
+  if (pathname.includes('/api/queues/rcm-audit'))
+    return RESOURCES.QUEUE_RCM_AUDIT;
   if (pathname.includes('/api/queues/deal-intelligence'))
     return RESOURCES.QUEUE_DEAL_HEALTH;
   if (pathname.includes('/api/queues/create-cs-task'))

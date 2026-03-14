@@ -193,6 +193,7 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
   const isOnFollowUpQueue = pathname === '/dashboard/queues/follow-up-queue';
   const isOnPitchQueue = pathname === '/dashboard/queues/pitch-queue';
   const isOnSupportIntel = pathname === '/dashboard/queues/support-intel';
+  const isOnRcmAudit = pathname === '/dashboard/queues/rcm-audit';
   // Hot Tracker
   const isOnHotTracker = pathname === '/dashboard/hot-tracker';
   // Demo Tracker
@@ -779,7 +780,8 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
               {(hasPermission(user, RESOURCES.QUEUE_SUPPORT_PULSE) ||
                 hasPermission(user, RESOURCES.QUEUE_FOLLOW_UP) ||
                 hasPermission(user, RESOURCES.QUEUE_PITCH_QUEUE) ||
-                hasPermission(user, RESOURCES.QUEUE_SUPPORT_INTEL)) && (
+                hasPermission(user, RESOURCES.QUEUE_SUPPORT_INTEL) ||
+                hasPermission(user, RESOURCES.QUEUE_RCM_AUDIT)) && (
               <>
                 {!isCollapsed && (
                   <div className="px-4 pl-11 py-1.5 mt-2">
@@ -883,6 +885,31 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
                         </svg>
                       ) : (
                         <span>Support Intel</span>
+                      )}
+                    </Link>
+                  </li>
+                  )}
+                  {hasPermission(user, RESOURCES.QUEUE_RCM_AUDIT) && (
+                  <li>
+                    <Link
+                      href="/dashboard/queues/rcm-audit"
+                      className={`flex items-center py-2 text-sm transition-colors ${
+                        isCollapsed
+                          ? 'px-0 justify-center'
+                          : 'px-4 pl-14'
+                      } ${
+                        isOnRcmAudit
+                          ? 'bg-indigo-600 text-white'
+                          : 'text-slate-300 hover:bg-slate-800'
+                      }`}
+                      title={isCollapsed ? 'RCM Audit' : undefined}
+                    >
+                      {isCollapsed ? (
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                        </svg>
+                      ) : (
+                        <span>RCM Audit</span>
                       )}
                     </Link>
                   </li>

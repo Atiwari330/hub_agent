@@ -1,6 +1,7 @@
 import { createServiceClient } from '@/lib/supabase/client';
 import { getHubSpotClient } from '@/lib/hubspot/client';
 import { getTicketEngagementTimeline } from '@/lib/hubspot/ticket-engagements';
+import { fetchLinearIssueContext, type LinearIssueContext } from '@/lib/linear/client';
 import { generateText } from 'ai';
 import { getModel } from '@/lib/ai/provider';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -32,6 +33,10 @@ export interface TicketRcmAnalysis {
   assigned_rep: string | null;
   is_closed: boolean;
   analyzed_at: string;
+  linear_issue_id: string | null;
+  linear_assessment: string | null;
+  linear_comment_count: number | null;
+  linear_state: string | null;
 }
 
 export type AnalyzeRcmResult =
@@ -77,6 +82,7 @@ YOUR JOB:
 1. Determine if this ticket is RCM/billing related
 2. If YES: classify the RCM system, issue category, summarize problems, assess severity and status
 3. If NO: mark as not RCM-related with minimal output
+4. If LINEAR ENGINEERING CONTEXT is provided, factor it into your analysis — it contains the engineering team's internal investigation, comments, and status
 
 Respond in this EXACT format (every field required):
 
@@ -89,14 +95,16 @@ SEVERITY: [critical|high|medium|low|N/A]
 CURRENT_STATUS: [active|stalled|waiting_vendor|waiting_customer|resolved|N/A]
 VENDOR_BLAMED: [true|false|N/A]
 CONFIDENCE: [0.00-1.00]
+LINEAR_ASSESSMENT: [2-4 sentence assessment incorporating the Linear engineering context. Compare the customer's perception of the issue vs what engineering has found. Note response times, whether the issue is a real bug vs user error vs misconfiguration, and any communication gaps between support and engineering. If no Linear context is available, write "No Linear ticket linked."]
 
 Guidelines:
 - A ticket is RCM-related if it involves billing, claims, payments, insurance, ERA, encounters flowing to billing, CPT codes, or revenue cycle processes
 - Tickets about purely clinical EHR features, scheduling, or general IT are NOT RCM-related
-- For non-RCM tickets: set IS_RCM_RELATED=false, all other fields to N/A except CONFIDENCE
+- For non-RCM tickets: set IS_RCM_RELATED=false, all other fields to N/A except CONFIDENCE and LINEAR_ASSESSMENT
 - SEVERITY: critical = revenue directly blocked (claims can't submit, payments not posting); high = significant billing delays; medium = workaround exists; low = cosmetic or minor
 - CURRENT_STATUS: assess based on the latest activity — is someone actively working it, or has it stalled?
-- VENDOR_BLAMED: true if the root cause appears to be a third-party vendor (clearinghouse, payer, Practice Suite vendor, etc.)`;
+- VENDOR_BLAMED: true if the root cause appears to be a third-party vendor (clearinghouse, payer, Practice Suite vendor, etc.)
+- LINEAR_ASSESSMENT: When Linear context is available, provide a nuanced view. The customer may perceive a major issue, but engineering may have identified it as user error, a known limitation, or a simple misconfiguration. Note if engineering has responded promptly or if there are delays. Flag any communication gaps where support hasn't relayed engineering's findings back to the customer.`;
 }
 
 // --- Core Analysis Function ---
@@ -164,6 +172,16 @@ export async function analyzeRcmTicket(
       engagementTimeline = { engagements: [], counts: { emails: 0, notes: 0, calls: 0, meetings: 0, total: 0 } };
     }
 
+    // 4b. Fetch Linear engineering context (if linked)
+    let linearContext: LinearIssueContext | null = null;
+    if (ticket.linear_task) {
+      try {
+        linearContext = await fetchLinearIssueContext(ticket.linear_task);
+      } catch (err) {
+        console.warn(`Could not fetch Linear context for ticket ${ticketId}:`, err);
+      }
+    }
+
     // 5. Build conversation text
     const conversationText =
       conversationMessages.length > 0
@@ -227,7 +245,25 @@ CONVERSATION THREAD (${conversationMessages.length} messages):
 ${conversationText}
 
 ENGAGEMENT TIMELINE (${engagementTimeline.engagements.length} items):
-${engagementTimelineText}`;
+${engagementTimelineText}${linearContext ? `
+
+LINEAR ENGINEERING CONTEXT:
+- Linear Issue: ${linearContext.identifier} — ${linearContext.title}
+- State: ${linearContext.state}
+- Priority: ${linearContext.priority}
+- Assignee: ${linearContext.assignee || 'Unassigned'}
+- Created: ${linearContext.createdAt.split('T')[0]}
+- Updated: ${linearContext.updatedAt.split('T')[0]}
+
+Description:
+${linearContext.description || '(no description)'}
+
+Engineering Comments (${linearContext.comments.length}):
+${linearContext.comments.length > 0
+  ? linearContext.comments
+      .map((c) => `[${c.createdAt.split('T')[0]}] ${c.author}: ${c.body}`)
+      .join('\n\n')
+  : 'No comments yet.'}` : ''}`;
 
     // 9. Call LLM
     const result = await generateText({
@@ -253,6 +289,9 @@ ${engagementTimelineText}`;
     const isRcmRelated = isRcmRelatedRaw === 'true';
     const confidence = numField('CONFIDENCE', 0.5, 1);
 
+    const linearAssessment = field('LINEAR_ASSESSMENT', 'No Linear ticket linked.');
+    const linearAssessmentClean = linearAssessment.toLowerCase() === 'n/a' ? 'No Linear ticket linked.' : linearAssessment;
+
     if (!isRcmRelated) {
       // Non-RCM ticket: minimal row
       const analysisData: TicketRcmAnalysis = {
@@ -271,6 +310,10 @@ ${engagementTimelineText}`;
         assigned_rep: ownerName,
         is_closed: ticket.is_closed || false,
         analyzed_at: new Date().toISOString(),
+        linear_issue_id: linearContext?.issueId || null,
+        linear_assessment: linearAssessmentClean,
+        linear_comment_count: linearContext?.comments.length ?? null,
+        linear_state: linearContext?.state || null,
       };
 
       const { error: upsertError } = await serviceClient
@@ -330,6 +373,10 @@ ${engagementTimelineText}`;
       assigned_rep: ownerName,
       is_closed: ticket.is_closed || false,
       analyzed_at: new Date().toISOString(),
+      linear_issue_id: linearContext?.issueId || null,
+      linear_assessment: linearAssessmentClean,
+      linear_comment_count: linearContext?.comments.length ?? null,
+      linear_state: linearContext?.state || null,
     };
 
     const { error: upsertError } = await serviceClient
