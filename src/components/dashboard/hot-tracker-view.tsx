@@ -1024,8 +1024,8 @@ function InfoTooltip({ text }: { text: string }) {
       </button>
       {open && (
         <>
-          <div className="fixed inset-0 z-20" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 top-6 z-30 w-72 p-3 bg-slate-900 text-slate-200 text-xs font-normal leading-relaxed rounded-lg shadow-xl border border-slate-700">
+          <div className="fixed inset-0 z-50" onClick={() => setOpen(false)} />
+          <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-80 p-4 bg-slate-900 text-slate-200 text-sm font-normal leading-relaxed rounded-lg shadow-xl border border-slate-700">
             {text}
           </div>
         </>
