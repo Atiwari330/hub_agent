@@ -124,7 +124,7 @@ const STAGE_LABELS: Record<StageKey, string> = {
 const METRIC_TOOLTIPS: Record<string, string> = {
   sqlContacted: 'Measures how quickly AEs respond to new SQL/Discovery deals. Tracks the % of deals where the first call or email happened within 15 minutes of entering the Discovery stage.',
   callsToSql: 'Counts the number of phone calls made to contacts (who have a phone number) associated with deals in the SQL/Discovery stage or beyond.',
-  proposalGift: 'Tracks how many deals in the Proposal/Evaluating stage have had a gift or incentive sent. Goal is to increase close rates through giftology.',
+  proposalGift: 'Counts deals created this quarter that have the gift/incentive flag set in HubSpot (any pipeline stage). Shown as gifts sent out of total deals created that week.',
   pplTouches: 'Average number of touches (calls + outbound emails) on Paid Per Lead deals during their first 7 days. Only counts deals where the full first week has elapsed.',
   pplCompliance: 'For Paid Per Lead deals, measures the % of days in the first week where at least 1 touch (call or email) occurred. Excludes deals with meetings already booked.',
   pplCallCompliance: 'For Paid Per Lead deals, measures the % of days in the first week where at least 2 phone calls were made. Excludes deals with meetings booked. Day 0 excluded if deal created after 5pm EST.',
@@ -499,7 +499,7 @@ export function HotTrackerView() {
 
             {/* ─── Metric 3: Proposal Deals with Gift ─── */}
             <MetricSection
-              title="Proposal Deals Sent Gift"
+              title="Deals with Gift/Incentive Sent"
               goal={`Goal: ${goals.proposalWithGift}/wk`}
               tooltip={METRIC_TOOLTIPS.proposalGift}
               weeks={weeks}

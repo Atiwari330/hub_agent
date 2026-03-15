@@ -321,23 +321,23 @@ export async function computeHotTrackerForQuarter(
   }
 
   // ─────────────────────────────────────────────────
-  // Metric 3: Proposal deals with gift (pure DB)
+  // Metric 3: Deals with gift/incentive sent (any stage, bucketed by deal creation week)
   // ─────────────────────────────────────────────────
   const metric3ByOwnerWeek = new Map<string, Map<number, { total: number; withGift: number }>>();
 
-  const { data: proposalDeals } = await supabase
+  const { data: giftDeals } = await supabase
     .from('deals')
-    .select('id, hubspot_deal_id, proposal_entered_at, sent_gift_or_incentive, owner_id')
-    .not('proposal_entered_at', 'is', null)
-    .gte('proposal_entered_at', qi.startDate.toISOString())
-    .lte('proposal_entered_at', qi.endDate.toISOString())
+    .select('id, hubspot_deal_id, hubspot_created_at, sent_gift_or_incentive, owner_id')
+    .not('hubspot_created_at', 'is', null)
+    .gte('hubspot_created_at', qi.startDate.toISOString())
+    .lte('hubspot_created_at', qi.endDate.toISOString())
     .eq('pipeline', SYNC_CONFIG.TARGET_PIPELINE_ID);
 
-  for (const deal of proposalDeals || []) {
+  for (const deal of giftDeals || []) {
     const ownerId = deal.owner_id;
     if (!ownerId) continue;
 
-    const weekNum = getWeekNumberInQuarter(new Date(deal.proposal_entered_at!), qi.startDate);
+    const weekNum = getWeekNumberInQuarter(new Date(deal.hubspot_created_at!), qi.startDate);
 
     if (!metric3ByOwnerWeek.has(ownerId)) {
       metric3ByOwnerWeek.set(ownerId, new Map());
