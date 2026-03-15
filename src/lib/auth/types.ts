@@ -34,6 +34,7 @@ export const RESOURCES = {
   QUEUE_SUPPORT_QUALITY: 'queue:support-quality',
   QUEUE_RCM_AUDIT: 'queue:rcm-audit',
   QUEUE_SUPPORT_MANAGER: 'queue:support-manager',
+  QUEUE_PRE_DEMO_COACH: 'queue:pre-demo-coach',
   API_AGENT: 'api:agent',
   PORTAL: 'portal',
   HOT_TRACKER: 'hot_tracker',
@@ -110,6 +111,8 @@ export function getResourceFromPath(pathname: string): Resource | null {
     return RESOURCES.QUEUE_SUPPORT_MANAGER;
   if (pathname.includes('/queues/deal-health'))
     return RESOURCES.QUEUE_DEAL_HEALTH;
+  if (pathname.includes('/queues/pre-demo-coach'))
+    return RESOURCES.QUEUE_PRE_DEMO_COACH;
   if (pathname.includes('/queues/deal-intelligence'))
     return RESOURCES.QUEUE_DEAL_HEALTH;
 
@@ -168,6 +171,8 @@ export function getResourceFromPath(pathname: string): Resource | null {
     return RESOURCES.QUEUE_RCM_AUDIT;
   if (pathname.includes('/api/queues/support-manager'))
     return RESOURCES.QUEUE_SUPPORT_MANAGER;
+  if (pathname.includes('/api/queues/pre-demo-coach'))
+    return RESOURCES.QUEUE_PRE_DEMO_COACH;
   if (pathname.includes('/api/queues/deal-intelligence'))
     return RESOURCES.QUEUE_DEAL_HEALTH;
   if (pathname.includes('/api/queues/create-cs-task'))

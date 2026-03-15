@@ -178,6 +178,7 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
   const isOnOverdueTasksQueue = pathname === '/dashboard/queues/overdue-tasks';
   const isOnStalledDealsQueue = pathname === '/dashboard/queues/stalled-deals';
   const isOnPreDemoPipelineQueue = pathname === '/dashboard/queues/pre-demo-pipeline';
+  const isOnPreDemoCoachQueue = pathname === '/dashboard/queues/pre-demo-coach';
   const isOnPplSequenceQueue = pathname === '/dashboard/queues/ppl-sequence';
   const isOnDealHealthQueue = pathname === '/dashboard/queues/deal-health';
   const isOnDealCoachQueue = pathname === '/dashboard/queues/deal-coach';
@@ -351,6 +352,7 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
           hasPermission(user, RESOURCES.QUEUE_OVERDUE_TASKS) ||
           hasPermission(user, RESOURCES.QUEUE_STALLED_DEALS) ||
           hasPermission(user, RESOURCES.QUEUE_PRE_DEMO_PIPELINE) ||
+          hasPermission(user, RESOURCES.QUEUE_PRE_DEMO_COACH) ||
           hasPermission(user, RESOURCES.QUEUE_PPL_SEQUENCE) ||
           hasPermission(user, RESOURCES.QUEUE_UPSELL_HYGIENE) ||
           hasPermission(user, RESOURCES.QUEUE_STALLED_UPSELLS) ||
@@ -386,6 +388,7 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
                 hasPermission(user, RESOURCES.QUEUE_OVERDUE_TASKS) ||
                 hasPermission(user, RESOURCES.QUEUE_STALLED_DEALS) ||
                 hasPermission(user, RESOURCES.QUEUE_PRE_DEMO_PIPELINE) ||
+                hasPermission(user, RESOURCES.QUEUE_PRE_DEMO_COACH) ||
                 hasPermission(user, RESOURCES.QUEUE_PPL_SEQUENCE) ||
                 hasPermission(user, RESOURCES.QUEUE_DEAL_COACH) ||
                 hasPermission(user, RESOURCES.QUEUE_DEAL_HEALTH) ||
@@ -517,6 +520,31 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
                         </svg>
                       ) : (
                         <span>Pre-Demo Pipeline</span>
+                      )}
+                    </Link>
+                  </li>
+                  )}
+                  {hasPermission(user, RESOURCES.QUEUE_PRE_DEMO_COACH) && (
+                  <li>
+                    <Link
+                      href="/dashboard/queues/pre-demo-coach"
+                      className={`flex items-center py-2 text-sm transition-colors ${
+                        isCollapsed
+                          ? 'px-0 justify-center'
+                          : 'px-4 pl-14'
+                      } ${
+                        isOnPreDemoCoachQueue
+                          ? 'bg-indigo-600 text-white'
+                          : 'text-slate-300 hover:bg-slate-800'
+                      }`}
+                      title={isCollapsed ? 'Pre-Demo Coach' : undefined}
+                    >
+                      {isCollapsed ? (
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                        </svg>
+                      ) : (
+                        <span>Pre-Demo Coach</span>
                       )}
                     </Link>
                   </li>
