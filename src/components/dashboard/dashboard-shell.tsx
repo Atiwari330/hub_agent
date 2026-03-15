@@ -19,6 +19,7 @@ interface DashboardShellProps {
   children: React.ReactNode;
   user: UserWithPermissions;
   isStale?: boolean;
+  syncHealth?: 'healthy' | 'degraded' | 'failed' | 'unknown';
 }
 
 const SIDEBAR_COLLAPSED_KEY = 'sidebar-collapsed';
@@ -31,6 +32,7 @@ export function DashboardShell({
   children,
   user,
   isStale,
+  syncHealth,
 }: DashboardShellProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
 
@@ -56,6 +58,7 @@ export function DashboardShell({
         onCollapsedChange={handleCollapsedChange}
         user={user}
         isStale={isStale}
+        syncHealth={syncHealth}
       />
       <main className={`min-h-screen transition-all duration-300 ${isCollapsed ? 'ml-16' : 'ml-64'}`}>
         {children}

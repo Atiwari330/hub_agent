@@ -21,6 +21,7 @@ interface SidebarProps {
   onCollapsedChange?: (collapsed: boolean) => void;
   user: UserWithPermissions;
   isStale?: boolean;
+  syncHealth?: 'healthy' | 'degraded' | 'failed' | 'unknown';
 }
 
 function ChevronIcon({ open }: { open: boolean }) {
@@ -118,7 +119,7 @@ function LogoutIcon() {
   );
 }
 
-export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCollapsedChange, user, isStale }: SidebarProps) {
+export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCollapsedChange, user, isStale, syncHealth }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [aeListOpen, setAeListOpen] = useState(true);
@@ -1012,8 +1013,24 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
                     style={{ width: `${Math.min(100, quarterProgress)}%` }}
                   />
                 </div>
-                <div className="text-xs text-slate-500 mt-1">
-                  {syncing ? 'Syncing...' : `Synced ${formatRelativeTime(lastSync)}`}
+                <div className="text-xs text-slate-500 mt-1 flex items-center gap-1.5">
+                  {syncing ? 'Syncing...' : (
+                    <>
+                      <span
+                        className={`inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                          syncHealth === 'failed' ? 'bg-red-400' :
+                          syncHealth === 'degraded' ? 'bg-amber-400' :
+                          'bg-emerald-400'
+                        }`}
+                        title={
+                          syncHealth === 'failed' ? 'Last sync failed' :
+                          syncHealth === 'degraded' ? 'Last sync completed with errors' :
+                          'Sync healthy'
+                        }
+                      />
+                      {syncHealth === 'failed' ? 'Sync failed' : `Synced ${formatRelativeTime(lastSync)}`}
+                    </>
+                  )}
                 </div>
               </div>
               {/* Sync button */}

@@ -4,6 +4,16 @@ import { FilterOperatorEnum } from '@hubspot/api-client/lib/codegen/crm/deals';
 import { getStageEntryProperties, TRACKED_STAGES } from './stage-mappings';
 import { SYNC_CONFIG } from './sync-config';
 
+/**
+ * Map all tracked stage entry timestamps from HubSpot response.
+ * Using a helper ensures new stages are automatically picked up everywhere.
+ */
+function mapStageProperties(props: Record<string, string>): Record<string, string | undefined> {
+  return Object.fromEntries(
+    Object.values(TRACKED_STAGES).map(stage => [stage.property, props[stage.property]])
+  );
+}
+
 const DEAL_PROPERTIES = [
   'dealname',
   'amount',
@@ -73,13 +83,7 @@ export async function getDealsByOwnerId(ownerId: string): Promise<HubSpotDeal[]>
           proposal_stage: deal.properties.proposal_stage,
           hs_all_collaborator_owner_ids: deal.properties.hs_all_collaborator_owner_ids,
           sent_gift_or_incentive: deal.properties.sent_gift_or_incentive,
-          // Stage entry timestamps
-          [TRACKED_STAGES.SQL.property]: deal.properties[TRACKED_STAGES.SQL.property],
-          [TRACKED_STAGES.DISCOVERY.property]: deal.properties[TRACKED_STAGES.DISCOVERY.property],
-          [TRACKED_STAGES.DEMO_SCHEDULED.property]: deal.properties[TRACKED_STAGES.DEMO_SCHEDULED.property],
-          [TRACKED_STAGES.DEMO_COMPLETED.property]: deal.properties[TRACKED_STAGES.DEMO_COMPLETED.property],
-          [TRACKED_STAGES.CLOSED_WON.property]: deal.properties[TRACKED_STAGES.CLOSED_WON.property],
-          [TRACKED_STAGES.PROPOSAL.property]: deal.properties[TRACKED_STAGES.PROPOSAL.property],
+          ...mapStageProperties(deal.properties as Record<string, string>),
         },
         createdAt: deal.createdAt?.toISOString(),
         updatedAt: deal.updatedAt?.toISOString(),
@@ -121,12 +125,7 @@ export async function getDealById(dealId: string): Promise<HubSpotDeal | null> {
         product_s: deal.properties.product_s,
         proposal_stage: deal.properties.proposal_stage,
         hs_all_collaborator_owner_ids: deal.properties.hs_all_collaborator_owner_ids,
-        // Stage entry timestamps
-        [TRACKED_STAGES.SQL.property]: deal.properties[TRACKED_STAGES.SQL.property],
-        [TRACKED_STAGES.DISCOVERY.property]: deal.properties[TRACKED_STAGES.DISCOVERY.property],
-        [TRACKED_STAGES.DEMO_SCHEDULED.property]: deal.properties[TRACKED_STAGES.DEMO_SCHEDULED.property],
-        [TRACKED_STAGES.DEMO_COMPLETED.property]: deal.properties[TRACKED_STAGES.DEMO_COMPLETED.property],
-        [TRACKED_STAGES.CLOSED_WON.property]: deal.properties[TRACKED_STAGES.CLOSED_WON.property],
+        ...mapStageProperties(deal.properties as Record<string, string>),
       },
       createdAt: deal.createdAt?.toISOString(),
       updatedAt: deal.updatedAt?.toISOString(),
@@ -170,13 +169,7 @@ export async function getAllDeals(): Promise<HubSpotDeal[]> {
           proposal_stage: deal.properties.proposal_stage,
           hs_all_collaborator_owner_ids: deal.properties.hs_all_collaborator_owner_ids,
           sent_gift_or_incentive: deal.properties.sent_gift_or_incentive,
-          // Stage entry timestamps
-          [TRACKED_STAGES.SQL.property]: deal.properties[TRACKED_STAGES.SQL.property],
-          [TRACKED_STAGES.DISCOVERY.property]: deal.properties[TRACKED_STAGES.DISCOVERY.property],
-          [TRACKED_STAGES.DEMO_SCHEDULED.property]: deal.properties[TRACKED_STAGES.DEMO_SCHEDULED.property],
-          [TRACKED_STAGES.DEMO_COMPLETED.property]: deal.properties[TRACKED_STAGES.DEMO_COMPLETED.property],
-          [TRACKED_STAGES.CLOSED_WON.property]: deal.properties[TRACKED_STAGES.CLOSED_WON.property],
-          [TRACKED_STAGES.PROPOSAL.property]: deal.properties[TRACKED_STAGES.PROPOSAL.property],
+          ...mapStageProperties(deal.properties as Record<string, string>),
         },
         createdAt: deal.createdAt?.toISOString(),
         updatedAt: deal.updatedAt?.toISOString(),
@@ -277,18 +270,7 @@ export async function getFilteredDealsForSync(
             proposal_stage: deal.properties.proposal_stage,
             hs_all_collaborator_owner_ids: deal.properties.hs_all_collaborator_owner_ids,
             sent_gift_or_incentive: deal.properties.sent_gift_or_incentive,
-            [TRACKED_STAGES.SQL.property]:
-              deal.properties[TRACKED_STAGES.SQL.property],
-            [TRACKED_STAGES.DISCOVERY.property]:
-              deal.properties[TRACKED_STAGES.DISCOVERY.property],
-            [TRACKED_STAGES.DEMO_SCHEDULED.property]:
-              deal.properties[TRACKED_STAGES.DEMO_SCHEDULED.property],
-            [TRACKED_STAGES.DEMO_COMPLETED.property]:
-              deal.properties[TRACKED_STAGES.DEMO_COMPLETED.property],
-            [TRACKED_STAGES.CLOSED_WON.property]:
-              deal.properties[TRACKED_STAGES.CLOSED_WON.property],
-            [TRACKED_STAGES.PROPOSAL.property]:
-              deal.properties[TRACKED_STAGES.PROPOSAL.property],
+            ...mapStageProperties(deal.properties as Record<string, string>),
           },
           createdAt: deal.createdAt?.toISOString(),
           updatedAt: deal.updatedAt?.toISOString(),
@@ -381,16 +363,7 @@ export async function getUpsellDealsForSync(): Promise<HubSpotDeal[]> {
           proposal_stage: deal.properties.proposal_stage,
           hs_all_collaborator_owner_ids: deal.properties.hs_all_collaborator_owner_ids,
           sent_gift_or_incentive: deal.properties.sent_gift_or_incentive,
-          [TRACKED_STAGES.SQL.property]:
-            deal.properties[TRACKED_STAGES.SQL.property],
-          [TRACKED_STAGES.DEMO_SCHEDULED.property]:
-            deal.properties[TRACKED_STAGES.DEMO_SCHEDULED.property],
-          [TRACKED_STAGES.DEMO_COMPLETED.property]:
-            deal.properties[TRACKED_STAGES.DEMO_COMPLETED.property],
-          [TRACKED_STAGES.CLOSED_WON.property]:
-            deal.properties[TRACKED_STAGES.CLOSED_WON.property],
-          [TRACKED_STAGES.PROPOSAL.property]:
-            deal.properties[TRACKED_STAGES.PROPOSAL.property],
+          ...mapStageProperties(deal.properties as Record<string, string>),
         },
         createdAt: deal.createdAt?.toISOString(),
         updatedAt: deal.updatedAt?.toISOString(),
@@ -480,15 +453,7 @@ export async function getDealWithNextStepHistory(
         proposal_stage: deal.properties.proposal_stage,
         hs_all_collaborator_owner_ids: deal.properties.hs_all_collaborator_owner_ids,
         sent_gift_or_incentive: deal.properties.sent_gift_or_incentive,
-        [TRACKED_STAGES.SQL.property]: deal.properties[TRACKED_STAGES.SQL.property],
-        [TRACKED_STAGES.DEMO_SCHEDULED.property]:
-          deal.properties[TRACKED_STAGES.DEMO_SCHEDULED.property],
-        [TRACKED_STAGES.DEMO_COMPLETED.property]:
-          deal.properties[TRACKED_STAGES.DEMO_COMPLETED.property],
-        [TRACKED_STAGES.CLOSED_WON.property]:
-          deal.properties[TRACKED_STAGES.CLOSED_WON.property],
-        [TRACKED_STAGES.PROPOSAL.property]:
-          deal.properties[TRACKED_STAGES.PROPOSAL.property],
+        ...mapStageProperties(deal.properties as Record<string, string>),
       },
       createdAt: deal.createdAt?.toISOString(),
       updatedAt: deal.updatedAt?.toISOString(),

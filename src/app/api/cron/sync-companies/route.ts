@@ -67,6 +67,11 @@ export async function GET(request: Request) {
     const companies = await getAllCompanies();
     console.log(`Found ${companies.length} companies with contract status or ARR`);
 
+    // Guard: If HubSpot returns zero companies, likely an API issue
+    if (companies.length === 0) {
+      throw new Error('Zero companies returned from HubSpot — possible API auth/filter issue');
+    }
+
     // Transform to database format
     const companyData = companies.map((company) => ({
       hubspot_company_id: company.id,

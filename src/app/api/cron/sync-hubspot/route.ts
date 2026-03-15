@@ -60,6 +60,7 @@ export async function GET(request: Request) {
 
     if (ownerError) {
       console.error('Owner batch upsert error:', ownerError);
+      throw new Error(`Owner upsert failed: ${ownerError.message} — aborting to prevent deal corruption`);
     }
 
     console.log(`Synced ${owners.length} owners`);
@@ -85,6 +86,11 @@ export async function GET(request: Request) {
 
     const deals = await getFilteredDealsForSync(ownerIds);
     console.log(`Found ${deals.length} deals matching criteria`);
+
+    // Guard: If HubSpot returns zero deals for known AEs, likely an API issue
+    if (deals.length === 0 && ownerIds.length > 0) {
+      throw new Error('Zero deals returned from HubSpot for known AEs — possible API auth/filter issue');
+    }
 
     // Step 4: Batch upsert deals (chunked for large datasets)
     // Use toTimestamp() to convert empty strings to null for all date fields

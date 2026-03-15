@@ -26,19 +26,28 @@ export default async function DashboardLayout({
       .order('last_name', { ascending: true }),
     supabase
       .from('workflow_runs')
-      .select('completed_at')
+      .select('completed_at, status, result')
       .eq('workflow_name', 'sync-hubspot')
-      .eq('status', 'completed')
-      .order('completed_at', { ascending: false })
+      .in('status', ['completed', 'failed'])
+      .order('started_at', { ascending: false })
       .limit(1),
   ]);
 
   const owners = ownersResult.data || [];
-  const lastSync = lastSyncResult.data?.[0]?.completed_at || null;
+  const lastSyncRow = lastSyncResult.data?.[0];
+  const lastSync = lastSyncRow?.status === 'completed' ? lastSyncRow.completed_at : null;
 
   // Check if data is stale (>1 hour since last sync)
   const isStale = !lastSync ||
     (Date.now() - new Date(lastSync).getTime() > 60 * 60 * 1000);
+
+  // Compute sync health from most recent run
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const result = lastSyncRow?.result as Record<string, any> | null;
+  const syncHealth: 'healthy' | 'degraded' | 'failed' | 'unknown' = !lastSyncRow ? 'unknown'
+    : lastSyncRow.status === 'failed' ? 'failed'
+    : (result?.dealErrors > 0 || result?.upsellDealErrors > 0) ? 'degraded'
+    : 'healthy';
 
   const quarter = getCurrentQuarter();
   const progress = getQuarterProgress(quarter);
@@ -51,6 +60,7 @@ export default async function DashboardLayout({
       quarterProgress={progress.percentComplete}
       user={user}
       isStale={isStale}
+      syncHealth={syncHealth}
     >
       {children}
     </DashboardShell>

@@ -72,6 +72,11 @@ export async function GET(request: Request) {
     }
     const allTickets = Array.from(ticketMap.values());
 
+    // Guard: If HubSpot returns zero tickets, abort to prevent mass-closing all DB tickets
+    if (allTickets.length === 0) {
+      throw new Error('Zero tickets returned from HubSpot — aborting to prevent mass ticket closure');
+    }
+
     // Transform to database format
     const ticketData = allTickets.map((ticket) => ({
       hubspot_ticket_id: ticket.id,
