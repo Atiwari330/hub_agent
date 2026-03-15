@@ -119,6 +119,22 @@ const STAGE_LABELS: Record<StageKey, string> = {
   demoCompleted: 'Demo Completed',
 };
 
+// ── Tooltip descriptions ──
+
+const METRIC_TOOLTIPS: Record<string, string> = {
+  sqlContacted: 'Measures how quickly AEs respond to new SQL/Discovery deals. Tracks the % of deals where the first call or email happened within 15 minutes of entering the Discovery stage.',
+  callsToSql: 'Counts the number of phone calls made to contacts (who have a phone number) associated with deals in the SQL/Discovery stage or beyond.',
+  proposalGift: 'Tracks how many deals in the Proposal/Evaluating stage have had a gift or incentive sent. Goal is to increase close rates through giftology.',
+  pplTouches: 'Average number of touches (calls + outbound emails) on Paid Per Lead deals during their first 7 days. Only counts deals where the full first week has elapsed.',
+  pplCompliance: 'For Paid Per Lead deals, measures the % of days in the first week where at least 1 touch (call or email) occurred. Excludes deals with meetings already booked.',
+  pplCallCompliance: 'For Paid Per Lead deals, measures the % of days in the first week where at least 2 phone calls were made. Excludes deals with meetings booked. Day 0 excluded if deal created after 5pm EST.',
+  mqlSql: 'Count of deals entering MQL or SQL/Discovery stage each week. Shows new pipeline entering the top of the funnel.',
+  demoScheduled: 'Count of deals entering the Demo Scheduled stage each week. Leading indicator of upcoming demo activity.',
+  demoCompleted: 'Count of deals where the demo was completed each week. Shows actual demo execution.',
+  speedToDemo: 'Average calendar days from MQL entry (or deal creation if no MQL date) to Demo Scheduled. Measures how quickly leads are being worked through the pipeline. Faster = higher close rates.',
+  demoToProposal: 'Of deals completing a demo in a given week, what % moved to Proposal/Evaluating within 14 days. Blue cells indicate the 14-day window hasn\'t elapsed yet. Measures demo quality and deal qualification.',
+};
+
 // ── Helpers ──
 
 function formatPct(value: number): string {
@@ -367,6 +383,7 @@ export function HotTrackerView() {
             <MetricSection
               title="% SQLs Contacted within 15 min"
               goal={`Goal: ${formatPct(goals.sqlContactedPct)}`}
+              tooltip={METRIC_TOOLTIPS.sqlContacted}
               weeks={weeks}
               aeList={aeList}
               renderTeamCell={(w) => {
@@ -430,6 +447,7 @@ export function HotTrackerView() {
             <MetricSection
               title="Calls to SQLs w/ Phone"
               goal={`Goal: ${goals.callsToSqlWithPhone}/wk`}
+              tooltip={METRIC_TOOLTIPS.callsToSql}
               weeks={weeks}
               aeList={aeList}
               renderTeamCell={(w) => {
@@ -483,6 +501,7 @@ export function HotTrackerView() {
             <MetricSection
               title="Proposal Deals Sent Gift"
               goal={`Goal: ${goals.proposalWithGift}/wk`}
+              tooltip={METRIC_TOOLTIPS.proposalGift}
               weeks={weeks}
               aeList={aeList}
               renderTeamCell={(w) => {
@@ -546,6 +565,7 @@ export function HotTrackerView() {
             <MetricSection
               title="Avg PPL First Week Touches"
               goal={`Goal: ${goals.pplAvgTouches}/deal`}
+              tooltip={METRIC_TOOLTIPS.pplTouches}
               weeks={weeks}
               aeList={aeList}
               renderTeamCell={(w) => {
@@ -609,6 +629,7 @@ export function HotTrackerView() {
             <MetricSection
               title="PPL First Week Daily Touch Compliance"
               goal={`Goal: ${formatPct(goals.pplDailyCompliance)}`}
+              tooltip={METRIC_TOOLTIPS.pplCompliance}
               weeks={weeks}
               aeList={aeList}
               renderTeamCell={(w) => {
@@ -683,6 +704,7 @@ export function HotTrackerView() {
             <MetricSection
               title="PPL Daily Call Compliance (2 calls/day)"
               goal={`Goal: ${formatPct(goals.pplCallCompliance)}`}
+              tooltip={METRIC_TOOLTIPS.pplCallCompliance}
               weeks={weeks}
               aeList={aeList}
               renderTeamCell={(w) => {
@@ -775,6 +797,7 @@ export function HotTrackerView() {
                       stageKey={stageKey}
                       title={STAGE_LABELS[stageKey]}
                       goal={goal}
+                      tooltip={METRIC_TOOLTIPS[stageKey]}
                       weeks={weeks}
                       stageWeeks={stageCountsData.weeks}
                       aeList={aeList}
@@ -800,6 +823,7 @@ export function HotTrackerView() {
                 <LeadingMeasureSection
                   title="Speed to Demo (MQL → Demo)"
                   goalLabel={`Goal: ≤${stageCountsData.goals.speedToDemo}d`}
+                  tooltip={METRIC_TOOLTIPS.speedToDemo}
                   weeks={weeks}
                   stageWeeks={stageCountsData.weeks}
                   aeList={aeList}
@@ -834,6 +858,7 @@ export function HotTrackerView() {
                 <LeadingMeasureSection
                   title="Demo → Proposal Conversion (14d)"
                   goalLabel={`Goal: ${Math.round(stageCountsData.goals.demoToProposal * 100)}%`}
+                  tooltip={METRIC_TOOLTIPS.demoToProposal}
                   weeks={weeks}
                   stageWeeks={stageCountsData.weeks}
                   aeList={aeList}
@@ -985,9 +1010,34 @@ function Header({
   );
 }
 
+function InfoTooltip({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <span className="relative inline-block ml-2 align-middle">
+      <button
+        onClick={(e) => { e.stopPropagation(); setOpen(!open); }}
+        className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-white/20 hover:bg-white/40 text-white text-[10px] font-bold leading-none transition-colors"
+        aria-label="Info"
+      >
+        ?
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-20" onClick={() => setOpen(false)} />
+          <div className="absolute left-0 top-6 z-30 w-72 p-3 bg-slate-900 text-slate-200 text-xs font-normal leading-relaxed rounded-lg shadow-xl border border-slate-700">
+            {text}
+          </div>
+        </>
+      )}
+    </span>
+  );
+}
+
 function MetricSection({
   title,
   goal,
+  tooltip,
   weeks,
   aeList,
   renderTeamCell,
@@ -997,6 +1047,7 @@ function MetricSection({
 }: {
   title: string;
   goal: string;
+  tooltip?: string;
   weeks: WeekData[];
   aeList: [string, string][];
   renderTeamCell: (w: WeekData) => React.ReactNode;
@@ -1013,6 +1064,7 @@ function MetricSection({
           className="sticky left-0 z-10 bg-slate-800 text-white px-4 py-2 font-semibold text-sm"
         >
           {title}
+          {tooltip && <InfoTooltip text={tooltip} />}
           <span className="ml-3 font-normal text-slate-300 text-xs">{goal}</span>
         </td>
       </tr>
@@ -1082,6 +1134,7 @@ interface CellValue { value: string; sub: string; colorClass: string }
 function LeadingMeasureSection({
   title,
   goalLabel,
+  tooltip,
   weeks,
   stageWeeks,
   aeList,
@@ -1093,6 +1146,7 @@ function LeadingMeasureSection({
 }: {
   title: string;
   goalLabel: string;
+  tooltip?: string;
   weeks: WeekData[];
   stageWeeks: StageCountsWeek[];
   aeList: [string, string][];
@@ -1109,6 +1163,7 @@ function LeadingMeasureSection({
       <tr className="border-t-2 border-slate-300">
         <td colSpan={weeks.length + 2} className="sticky left-0 z-10 bg-slate-800 text-white px-4 py-2 font-semibold text-sm">
           {title}
+          {tooltip && <InfoTooltip text={tooltip} />}
           <span className="ml-3 font-normal text-slate-300 text-xs">{goalLabel}</span>
         </td>
       </tr>
@@ -1168,6 +1223,7 @@ function StageMetricSection({
   stageKey,
   title,
   goal,
+  tooltip,
   weeks,
   stageWeeks,
   aeList,
@@ -1176,6 +1232,7 @@ function StageMetricSection({
   stageKey: StageKey;
   title: string;
   goal: number;
+  tooltip?: string;
   weeks: WeekData[];
   stageWeeks: StageCountsWeek[];
   aeList: [string, string][];
@@ -1203,6 +1260,7 @@ function StageMetricSection({
           className="sticky left-0 z-10 bg-slate-800 text-white px-4 py-2 font-semibold text-sm"
         >
           {title}
+          {tooltip && <InfoTooltip text={tooltip} />}
           <span className="ml-3 font-normal text-slate-300 text-xs">Goal: {goal}/AE/wk</span>
         </td>
       </tr>
