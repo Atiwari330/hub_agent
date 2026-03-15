@@ -7,6 +7,10 @@ import { generateText, stepCountIs } from 'ai';
 import { getSonnetModel } from '@/lib/ai/provider';
 import { lookupSupportKnowledgeTool } from '@/lib/ai/tools/support-knowledge';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import fs from 'fs';
+import path from 'path';
+
+const CUSTOMER_KNOWLEDGE_DIR = path.join(process.cwd(), 'src', 'lib', 'ai', 'knowledge', 'customers');
 
 // --- Types ---
 
@@ -69,6 +73,13 @@ The Opus EHR platform includes several product areas (scheduling, billing/RCM, T
 **You MUST call \`lookupSupportKnowledge\` at least once before producing your triage recommendation.** Based on the ticket's subject, conversation, and context, identify which system area(s) are relevant and retrieve the knowledge. You may call it multiple times if the ticket spans multiple areas.
 
 If the ticket appears to involve a vendor (Imagine, ImaginePay, PracticeSuite) — retrieve the "vendor-tickets" knowledge to understand identification criteria and protocols.
+
+CUSTOMER-SPECIFIC CONTEXT:
+Some tickets will include a CUSTOMER CONTEXT section in the ticket data with VIP customer profiles. When present:
+- Factor the customer's handling instructions into your NEXT_ACTION and URGENCY assessment.
+- If the customer has a dedicated account manager, ensure NEXT_ACTION includes notifying that person (by role title) when appropriate — especially for feature requests, escalations, or significant issues.
+- If the customer has an active SOW (Statement of Work), flag any feature/change requests that may be covered by it. These should not be treated as standard backlog items.
+- VIP customers have tighter response time expectations — bias urgency upward by one level compared to a standard customer in the same situation.
 
 YOUR JOB:
 Read all available context for this ticket — the conversation thread, engagement timeline, and any engineering escalation in Linear — and determine:
@@ -320,6 +331,21 @@ export async function analyzeSupportManagerTicket(
       previousAnalysis = prevRow;
     }
 
+    // 8c. Load customer-specific context (if available)
+    let customerContext: string | null = null;
+    if (ticket.hs_primary_company_name) {
+      const normalizedName = ticket.hs_primary_company_name
+        .toLowerCase()
+        .replace(/[^a-z0-9\s-]/g, '')
+        .replace(/\s+/g, '-');
+      const customerFilePath = path.join(CUSTOMER_KNOWLEDGE_DIR, `${normalizedName}.md`);
+      try {
+        customerContext = fs.readFileSync(customerFilePath, 'utf-8');
+      } catch {
+        // No customer-specific context — normal for most customers
+      }
+    }
+
     // 9. Build user prompt
     const userPrompt = `Triage this support ticket and determine the next action:
 
@@ -334,7 +360,10 @@ TICKET METADATA:
 - Assigned Rep: ${ownerName || 'Unassigned'}
 
 COMPANY:
-- Name: ${ticket.hs_primary_company_name || 'Unknown'}
+- Name: ${ticket.hs_primary_company_name || 'Unknown'}${customerContext ? `
+
+CUSTOMER CONTEXT:
+${customerContext}` : ''}
 
 ENGAGEMENT SUMMARY:
 - Emails: ${engagementTimeline.counts.emails}
