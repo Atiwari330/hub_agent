@@ -39,6 +39,7 @@ export interface TicketSupportManagerAnalysis {
   linear_state: string | null;
   confidence: number;
   knowledge_used: string | null;
+  action_owner: string | null;
   analyzed_at: string;
 }
 
@@ -143,6 +144,7 @@ DAYS_SINCE_LAST_ACTIVITY: [Integer number of days since the last meaningful acti
 LAST_ACTIVITY_BY: [Name or role of the person who last took action — e.g. "Support Agent", "Customer", "Engineering"]
 CONFIDENCE: [0.00-1.00]
 KNOWLEDGE_USED: [Comma-separated list of knowledge areas you retrieved, followed by a dash and one sentence explaining how the product knowledge informed your recommendation. Example: "scheduling, todo-list — Used scheduling knowledge to identify this is a training issue where the provider completed documentation from the chart instead of the appointment." If you did not retrieve any knowledge, write "none".]
+ACTION_OWNER: [Support Agent|Engineering|Customer|Support Manager]
 
 Guidelines:
 - Be SPECIFIC in NEXT_ACTION — vague actions like "follow up" or "check status" are useless. Say exactly what to do.
@@ -412,6 +414,9 @@ PREVIOUS ANALYSIS (from ${previousAnalysis.analyzed_at}):
     const lastActivityBy = field('LAST_ACTIVITY_BY', 'Unknown');
     const confidence = numField('CONFIDENCE', 0.5, 1);
     const knowledgeUsed = field('KNOWLEDGE_USED', null as unknown as string) || null;
+    const actionOwnerRaw = field('ACTION_OWNER', 'Support Agent');
+    const actionOwner = ['Support Agent', 'Engineering', 'Customer', 'Support Manager'].includes(actionOwnerRaw)
+      ? actionOwnerRaw : 'Support Agent';
 
     // 12. Upsert into ticket_support_manager_analyses
     const analysisData: TicketSupportManagerAnalysis = {
@@ -434,6 +439,7 @@ PREVIOUS ANALYSIS (from ${previousAnalysis.analyzed_at}):
       linear_state: linearContext?.state || null,
       confidence,
       knowledge_used: knowledgeUsed,
+      action_owner: actionOwner,
       analyzed_at: new Date().toISOString(),
     };
 

@@ -7,6 +7,19 @@ import type { TicketSupportManagerAnalysis } from './analyze/analyze-core';
 
 // --- Types ---
 
+export interface VoiceMemoInfo {
+  id: string;
+  durationSeconds: number | null;
+  createdAt: string;
+  acknowledgedAt: string | null;
+}
+
+export interface CsStatusInfo {
+  status: 'acknowledged' | 'in_progress' | 'done' | 'blocked';
+  updatedAt: string;
+  notes: string | null;
+}
+
 export interface SupportManagerTicket {
   ticketId: string;
   subject: string | null;
@@ -20,6 +33,8 @@ export interface SupportManagerTicket {
   isClosed: boolean;
   linearTask: string | null;
   analysis: TicketSupportManagerAnalysis | null;
+  voiceMemo: VoiceMemoInfo | null;
+  csStatus: CsStatusInfo | null;
 }
 
 export interface SupportManagerResponse {
@@ -30,6 +45,7 @@ export interface SupportManagerResponse {
     unanalyzed: number;
     byUrgency: { critical: number; high: number; medium: number; low: number };
   };
+  userRole: string;
 }
 
 // --- Route Handler ---
@@ -37,10 +53,12 @@ export interface SupportManagerResponse {
 export async function GET(request: NextRequest) {
   const authResult = await checkApiAuth(RESOURCES.QUEUE_SUPPORT_MANAGER);
   if (authResult instanceof NextResponse) return authResult;
+  const currentUser = authResult;
 
   const supabase = await createServerSupabaseClient();
 
   const mode = request.nextUrl.searchParams.get('mode');
+  const actionOwnerFilter = request.nextUrl.searchParams.get('actionOwnerFilter');
 
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -104,6 +122,7 @@ export async function GET(request: NextRequest) {
             linear_state: row.linear_state,
             confidence: parseFloat(row.confidence),
             knowledge_used: row.knowledge_used || null,
+            action_owner: row.action_owner || null,
             analyzed_at: row.analyzed_at,
           };
         }
@@ -135,9 +154,44 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Fetch voice memos for all tickets
+    const voiceMemos: Record<string, VoiceMemoInfo> = {};
+    if (ticketIds.length > 0) {
+      const { data: memoRows } = await supabase
+        .from('ticket_voice_memos')
+        .select('id, hubspot_ticket_id, duration_seconds, created_at, acknowledged_at')
+        .in('hubspot_ticket_id', ticketIds);
+
+      for (const row of memoRows || []) {
+        voiceMemos[row.hubspot_ticket_id] = {
+          id: row.id,
+          durationSeconds: row.duration_seconds,
+          createdAt: row.created_at,
+          acknowledgedAt: row.acknowledged_at,
+        };
+      }
+    }
+
+    // Fetch CS statuses for all tickets
+    const csStatuses: Record<string, CsStatusInfo> = {};
+    if (ticketIds.length > 0) {
+      const { data: statusRows } = await supabase
+        .from('ticket_cs_statuses')
+        .select('hubspot_ticket_id, status, updated_at, notes')
+        .in('hubspot_ticket_id', ticketIds);
+
+      for (const row of statusRows || []) {
+        csStatuses[row.hubspot_ticket_id] = {
+          status: row.status,
+          updatedAt: row.updated_at,
+          notes: row.notes,
+        };
+      }
+    }
+
     // Build ticket list
     const now = new Date();
-    const tickets: SupportManagerTicket[] = allTickets.map((ticket) => {
+    let tickets: SupportManagerTicket[] = allTickets.map((ticket) => {
       const createdAt = ticket.hubspot_created_at ? new Date(ticket.hubspot_created_at) : now;
       const ageDays = Math.floor((now.getTime() - createdAt.getTime()) / (1000 * 60 * 60 * 24));
 
@@ -154,8 +208,18 @@ export async function GET(request: NextRequest) {
         isClosed: ticket.is_closed || false,
         linearTask: ticket.linear_task || null,
         analysis: analyses[ticket.hubspot_ticket_id] || null,
+        voiceMemo: voiceMemos[ticket.hubspot_ticket_id] || null,
+        csStatus: csStatuses[ticket.hubspot_ticket_id] || null,
       };
     });
+
+    // Apply action owner filter (for CS Manager "My Team" view)
+    if (actionOwnerFilter === 'team') {
+      const teamOwners = ['Support Agent', 'Support Manager'];
+      tickets = tickets.filter((t) =>
+        !t.analysis || !t.analysis.action_owner || teamOwners.includes(t.analysis.action_owner)
+      );
+    }
 
     // Sort: unanalyzed first, then by urgency (critical > high > medium > low), then by age
     const urgencyOrder: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
@@ -189,6 +253,7 @@ export async function GET(request: NextRequest) {
         unanalyzed: tickets.length - analyzed,
         byUrgency,
       },
+      userRole: currentUser.role,
     };
 
     return NextResponse.json(response);

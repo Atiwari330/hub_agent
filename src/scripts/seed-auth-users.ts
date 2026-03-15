@@ -79,6 +79,12 @@ const USERS = [
     role: 'account_executive',
     permissions: ['portal'],
   },
+  {
+    email: 'david@opusbehavioral.com', // Update with David's actual email
+    displayName: 'David',              // Update with David's full name
+    role: 'cs_manager',
+    permissions: ['queue:support-manager'],
+  },
 ];
 
 async function promptForPassword(email: string): Promise<string> {

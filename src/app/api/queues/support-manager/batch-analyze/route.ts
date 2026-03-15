@@ -36,6 +36,8 @@ interface ProgressEvent {
     has_linear: boolean;
     linear_state: string | null;
     confidence: number;
+    knowledge_used: string | null;
+    action_owner: string | null;
     analyzed_at: string;
   };
   error?: string;
@@ -126,6 +128,8 @@ export async function POST(request: NextRequest) {
                   has_linear: result.analysis.has_linear,
                   linear_state: result.analysis.linear_state,
                   confidence: result.analysis.confidence,
+                  knowledge_used: result.analysis.knowledge_used,
+                  action_owner: result.analysis.action_owner,
                   analyzed_at: result.analysis.analyzed_at,
                 },
               };

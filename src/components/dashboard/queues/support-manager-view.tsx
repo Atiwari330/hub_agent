@@ -3,12 +3,15 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { getHubSpotTicketUrl } from '@/lib/hubspot/urls';
 import type { SupportManagerResponse, SupportManagerTicket } from '@/app/api/queues/support-manager/route';
+import { VoiceMemoRecorder } from './voice-memo-recorder';
+import { VoiceMemoPlayer } from './voice-memo-player';
 
 // --- Types ---
 
 type UrgencyFilter = 'all' | 'critical' | 'high' | 'medium' | 'low';
 type SortColumn = 'companyName' | 'urgency' | 'ageDays' | 'analyzedAt';
 type SortDirection = 'asc' | 'desc';
+type ActionOwnerView = 'team' | 'all';
 
 // --- Helper Components ---
 
@@ -41,6 +44,53 @@ function LinearBadge({ state }: { state: string }) {
   );
 }
 
+function ActionOwnerBadge({ owner }: { owner: string }) {
+  const colors: Record<string, string> = {
+    'Support Agent': 'bg-blue-100 text-blue-700',
+    'Engineering': 'bg-purple-100 text-purple-700',
+    'Customer': 'bg-gray-100 text-gray-600',
+    'Support Manager': 'bg-orange-100 text-orange-700',
+  };
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium ${colors[owner] || 'bg-gray-100 text-gray-600'}`}>
+      {owner}
+    </span>
+  );
+}
+
+function CsStatusBadge({ status }: { status: string }) {
+  const colors: Record<string, string> = {
+    acknowledged: 'bg-blue-100 text-blue-700',
+    in_progress: 'bg-yellow-100 text-yellow-700',
+    done: 'bg-emerald-100 text-emerald-700',
+    blocked: 'bg-red-100 text-red-700',
+  };
+  const labels: Record<string, string> = {
+    acknowledged: 'Acknowledged',
+    in_progress: 'In Progress',
+    done: 'Done',
+    blocked: 'Blocked',
+  };
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium ${colors[status] || 'bg-gray-100 text-gray-600'}`}>
+      {labels[status] || status}
+    </span>
+  );
+}
+
+function VoiceMemoIndicator({ acknowledged }: { acknowledged: boolean }) {
+  return (
+    <span className="relative inline-flex" title={acknowledged ? 'Voice memo (acknowledged)' : 'Voice memo (new)'}>
+      <svg className={`w-4 h-4 ${acknowledged ? 'text-gray-400' : 'text-indigo-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-14 0m14 0a7 7 0 00-14 0m14 0v1a7 7 0 01-14 0v-1m14 0H5m7 7v4m-4 0h8" />
+      </svg>
+      {!acknowledged && (
+        <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-indigo-500 rounded-full" />
+      )}
+    </span>
+  );
+}
+
 function AnalyzedTimestamp({ dateStr }: { dateStr: string }) {
   const date = new Date(dateStr);
   const now = new Date();
@@ -63,12 +113,18 @@ function AnalyzedTimestamp({ dateStr }: { dateStr: string }) {
 
 // --- Main Component ---
 
-export function SupportManagerView() {
+export function SupportManagerView({ userRole }: { userRole: string }) {
+  const [previewRole, setPreviewRole] = useState<string | null>(null);
+  const effectiveRole = previewRole || userRole;
+  const isVP = effectiveRole === 'vp_revops';
+  const isCSManager = effectiveRole === 'cs_manager';
+
   const [data, setData] = useState<SupportManagerResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedTicket, setExpandedTicket] = useState<string | null>(null);
   const [urgencyFilter, setUrgencyFilter] = useState<UrgencyFilter>('all');
+  const [actionOwnerView, setActionOwnerView] = useState<ActionOwnerView>(isCSManager ? 'team' : 'all');
   const [sortColumn, setSortColumn] = useState<SortColumn>('urgency');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [analyzing, setAnalyzing] = useState(false);
@@ -80,7 +136,9 @@ export function SupportManagerView() {
     try {
       setLoading(true);
       setError(null);
-      const res = await fetch('/api/queues/support-manager');
+      const params = new URLSearchParams();
+      if (actionOwnerView === 'team') params.set('actionOwnerFilter', 'team');
+      const res = await fetch(`/api/queues/support-manager${params.toString() ? `?${params}` : ''}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json: SupportManagerResponse = await res.json();
       setData(json);
@@ -89,7 +147,7 @@ export function SupportManagerView() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [actionOwnerView]);
 
   useEffect(() => {
     fetchData();
@@ -238,10 +296,32 @@ export function SupportManagerView() {
       setProgress(null);
       abortRef.current = null;
     }
-  }, [data, analyzing, fetchData]);
+  }, [data, analyzing]);
 
   const handleCancel = useCallback(() => {
     abortRef.current?.abort();
+  }, []);
+
+  // CS Status update
+  const handleStatusChange = useCallback(async (ticketId: string, status: string) => {
+    try {
+      const res = await fetch('/api/queues/support-manager/cs-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ticketId, status }),
+      });
+      if (!res.ok) throw new Error('Failed to update status');
+      const { csStatus } = await res.json();
+      setData((prev) => {
+        if (!prev) return prev;
+        const updatedTickets = prev.tickets.map((t) =>
+          t.ticketId === ticketId ? { ...t, csStatus } : t
+        );
+        return { ...prev, tickets: updatedTickets };
+      });
+    } catch (err) {
+      console.error('Status update failed:', err);
+    }
   }, []);
 
   // Filtering and sorting
@@ -335,9 +415,34 @@ export function SupportManagerView() {
 
   return (
     <div className="p-6 max-w-[1400px] mx-auto">
+      {/* Preview mode banner (VP only) */}
+      {userRole === 'vp_revops' && previewRole && (
+        <div className="mb-4 bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 flex items-center justify-between">
+          <span className="text-sm text-amber-800 font-medium">
+            Previewing as: CS Manager (David&apos;s view)
+          </span>
+          <button
+            onClick={() => setPreviewRole(null)}
+            className="text-xs px-3 py-1 bg-amber-600 text-white rounded hover:bg-amber-700 transition-colors"
+          >
+            Exit Preview
+          </button>
+        </div>
+      )}
+
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Support Manager Queue</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-bold text-gray-900">Support Manager Queue</h1>
+          {userRole === 'vp_revops' && !previewRole && (
+            <button
+              onClick={() => setPreviewRole('cs_manager')}
+              className="text-xs px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-colors"
+            >
+              Preview as David
+            </button>
+          )}
+        </div>
         <p className="text-sm text-gray-500 mt-1">
           {counts.total} open tickets &middot; {counts.analyzed} analyzed &middot; {counts.unanalyzed} pending
         </p>
@@ -377,6 +482,24 @@ export function SupportManagerView() {
         )}
 
         <div className="flex-1" />
+
+        {/* Action owner filter toggle (CS Manager only) */}
+        {isCSManager && (
+          <div className="inline-flex rounded-lg border border-gray-300 overflow-hidden text-sm">
+            <button
+              onClick={() => setActionOwnerView('team')}
+              className={`px-3 py-2 ${actionOwnerView === 'team' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+            >
+              My Team
+            </button>
+            <button
+              onClick={() => setActionOwnerView('all')}
+              className={`px-3 py-2 ${actionOwnerView === 'all' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+            >
+              All Tickets
+            </button>
+          </div>
+        )}
 
         {/* Urgency filter */}
         <select
@@ -457,6 +580,10 @@ export function SupportManagerView() {
               onToggle={() => setExpandedTicket(expandedTicket === ticket.ticketId ? null : ticket.ticketId)}
               onAnalyze={() => analyzeTicket(ticket.ticketId)}
               isAnalyzing={analyzingTickets.has(ticket.ticketId)}
+              isVP={isVP}
+              isCSManager={isCSManager}
+              onStatusChange={handleStatusChange}
+              onDataRefresh={fetchData}
             />
           ))
         )}
@@ -487,12 +614,20 @@ function TicketRow({
   onToggle,
   onAnalyze,
   isAnalyzing,
+  isVP,
+  isCSManager,
+  onStatusChange,
+  onDataRefresh,
 }: {
   ticket: SupportManagerTicket;
   isExpanded: boolean;
   onToggle: () => void;
   onAnalyze: () => void;
   isAnalyzing: boolean;
+  isVP: boolean;
+  isCSManager: boolean;
+  onStatusChange: (ticketId: string, status: string) => void;
+  onDataRefresh: () => void;
 }) {
   const a = ticket.analysis;
 
@@ -536,8 +671,29 @@ function TicketRow({
             )}
           </div>
 
+          {/* Action owner badge */}
+          {a?.action_owner && (
+            <div className="shrink-0 ml-3">
+              <ActionOwnerBadge owner={a.action_owner} />
+            </div>
+          )}
+
+          {/* Voice memo indicator */}
+          {ticket.voiceMemo && (
+            <div className="shrink-0 ml-2">
+              <VoiceMemoIndicator acknowledged={!!ticket.voiceMemo.acknowledgedAt} />
+            </div>
+          )}
+
+          {/* CS Status badge (VP sees David's status) */}
+          {isVP && ticket.csStatus && (
+            <div className="shrink-0 ml-2">
+              <CsStatusBadge status={ticket.csStatus.status} />
+            </div>
+          )}
+
           {/* Re-analyze / Analyze button */}
-          <div className="shrink-0 ml-3"
+          <div className="shrink-0 ml-auto pl-3"
             onClick={(e) => e.stopPropagation()}
             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation(); }}
           >
@@ -656,6 +812,62 @@ function TicketRow({
                   <p className="text-sm text-gray-700 leading-relaxed">{a.linear_summary}</p>
                 </div>
               )}
+
+              {/* Voice Memo Section */}
+              <div className="pt-2 border-t border-gray-200">
+                <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Voice Memo</h4>
+                {isVP && (
+                  <div onClick={(e) => e.stopPropagation()}>
+                    <VoiceMemoRecorder
+                      ticketId={ticket.ticketId}
+                      hasExisting={!!ticket.voiceMemo}
+                      onRecorded={onDataRefresh}
+                    />
+                    {ticket.voiceMemo && (
+                      <div className="mt-1.5 text-xs text-gray-400">
+                        {ticket.voiceMemo.acknowledgedAt ? (
+                          <span className="text-emerald-600">Acknowledged by David</span>
+                        ) : (
+                          <span className="text-amber-600">Not yet acknowledged</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+                {isCSManager && ticket.voiceMemo && (
+                  <div onClick={(e) => e.stopPropagation()}>
+                    <VoiceMemoPlayer
+                      ticketId={ticket.ticketId}
+                      durationSeconds={ticket.voiceMemo.durationSeconds}
+                      acknowledgedAt={ticket.voiceMemo.acknowledgedAt}
+                      onAcknowledged={onDataRefresh}
+                    />
+                  </div>
+                )}
+                {isCSManager && !ticket.voiceMemo && (
+                  <p className="text-xs text-gray-400 italic">No voice memo</p>
+                )}
+              </div>
+
+              {/* CS Status (CS Manager sets, VP sees) */}
+              {isCSManager && (
+                <div className="pt-2 border-t border-gray-200" onClick={(e) => e.stopPropagation()}>
+                  <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">My Status</h4>
+                  <select
+                    value={ticket.csStatus?.status || ''}
+                    onChange={(e) => {
+                      if (e.target.value) onStatusChange(ticket.ticketId, e.target.value);
+                    }}
+                    className="px-3 py-1.5 border border-gray-300 rounded text-sm bg-white"
+                  >
+                    <option value="">Set status...</option>
+                    <option value="acknowledged">Acknowledged</option>
+                    <option value="in_progress">In Progress</option>
+                    <option value="done">Done</option>
+                    <option value="blocked">Blocked</option>
+                  </select>
+                </div>
+              )}
             </div>
 
             {/* Right column: Metadata */}
@@ -679,6 +891,9 @@ function TicketRow({
 
                 <div className="text-gray-500">Ball In Court</div>
                 <div className="text-gray-900">{ticket.ballInCourt || 'N/A'}</div>
+
+                <div className="text-gray-500">Action Owner</div>
+                <div className="text-gray-900">{a.action_owner || 'N/A'}</div>
 
                 <div className="text-gray-500">Last Activity</div>
                 <div className="text-gray-900">
