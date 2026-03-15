@@ -94,7 +94,8 @@ export async function GET(request: Request) {
 
     // Step 4: Batch upsert deals (chunked for large datasets)
     // Use toTimestamp() to convert empty strings to null for all date fields
-    const dealData = deals.map((deal) => ({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const dealData = deals.map((deal: any) => ({
       hubspot_deal_id: deal.id,
       deal_name: deal.properties.dealname,
       amount: deal.properties.amount ? parseFloat(deal.properties.amount) : null,
@@ -188,7 +189,8 @@ export async function GET(request: Request) {
     }
 
     // Map upsell deals to DB format and upsert
-    const upsellDealData = upsellDeals.map((deal) => ({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const upsellDealData = upsellDeals.map((deal: any) => ({
       hubspot_deal_id: deal.id,
       deal_name: deal.properties.dealname,
       amount: deal.properties.amount ? parseFloat(deal.properties.amount) : null,

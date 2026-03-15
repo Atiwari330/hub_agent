@@ -108,7 +108,7 @@ export function getWeekNumberInQuarter(date: Date, quarterStart: Date): number {
 }
 
 /** Build an array of empty week buckets covering the quarter. */
-function buildWeekBuckets(quarterStart: Date, quarterEnd: Date): { weekNumber: number; weekStart: string; weekEnd: string }[] {
+export function buildWeekBuckets(quarterStart: Date, quarterEnd: Date): { weekNumber: number; weekStart: string; weekEnd: string }[] {
   const weeks: { weekNumber: number; weekStart: string; weekEnd: string }[] = [];
   let cursor = getWeekStart(quarterStart);
   let weekNum = 1;

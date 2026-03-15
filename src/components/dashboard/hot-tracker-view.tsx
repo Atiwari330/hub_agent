@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { getCurrentQuarter } from '@/lib/utils/quarter';
 import { PplDrillDownModal } from './ppl-drill-down-modal';
+import { StageDealsDrillDownModal } from './stage-deals-drill-down-modal';
 
 // ── Types ──
 
@@ -67,6 +68,42 @@ interface HotTrackerData {
   weeks: WeekData[];
 }
 
+// ── Stage Counts Types ──
+
+interface StageCounts {
+  mql: number;
+  sqlDiscovery: number;
+  demoScheduled: number;
+  demoCompleted: number;
+}
+
+interface StageCountsAE extends StageCounts {
+  ownerId: string;
+  ownerName: string;
+}
+
+interface StageCountsWeek {
+  weekNumber: number;
+  weekStart: string;
+  weekEnd: string;
+  team: StageCounts;
+  byAE: StageCountsAE[];
+}
+
+interface StageCountsData {
+  weeks: StageCountsWeek[];
+  goals: StageCounts;
+}
+
+type StageKey = keyof StageCounts;
+
+const STAGE_LABELS: Record<StageKey, string> = {
+  mql: 'New MQLs',
+  sqlDiscovery: 'SQL/Discovery',
+  demoScheduled: 'Demo Scheduled',
+  demoCompleted: 'Demo Completed',
+};
+
 // ── Helpers ──
 
 function formatPct(value: number): string {
@@ -119,13 +156,28 @@ export function HotTrackerView() {
     ownerId?: string;
     ownerName?: string;
   } | null>(null);
+  const [stageCountsData, setStageCountsData] = useState<StageCountsData | null>(null);
+  const [stageDrillModal, setStageDrillModal] = useState<{
+    weekNumber: number;
+    stage: string;
+    stageLabel: string;
+    ownerId?: string;
+    ownerName?: string;
+  } | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
-      const res = await fetch(`/api/hot-tracker?year=${selectedYear}&quarter=${selectedQuarter}`);
-      if (!res.ok) throw new Error(`Failed to fetch: ${res.status}`);
-      const json = await res.json();
+      const [htRes, scRes] = await Promise.all([
+        fetch(`/api/hot-tracker?year=${selectedYear}&quarter=${selectedQuarter}`),
+        fetch(`/api/hot-tracker/stage-counts?year=${selectedYear}&quarter=${selectedQuarter}`),
+      ]);
+      if (!htRes.ok) throw new Error(`Failed to fetch: ${htRes.status}`);
+      const json = await htRes.json();
       setData(json);
+      if (scRes.ok) {
+        const scJson = await scRes.json();
+        setStageCountsData(scJson);
+      }
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
@@ -673,6 +725,40 @@ export function HotTrackerView() {
                 );
               }}
             />
+
+            {/* ─── Stage Progression Indicators ─── */}
+            {stageCountsData && (
+              <>
+                {/* Visual separator */}
+                <tr>
+                  <td
+                    colSpan={weeks.length + 2}
+                    className="bg-indigo-900 text-white px-4 py-2.5 font-bold text-sm border-t-4 border-indigo-400"
+                  >
+                    Stage Progression Indicators
+                    <span className="ml-3 font-normal text-indigo-200 text-xs">Leading measures — deals entering each stage per week</span>
+                  </td>
+                </tr>
+
+                {(Object.keys(STAGE_LABELS) as StageKey[]).map((stageKey) => {
+                  const goal = stageCountsData.goals[stageKey];
+                  return (
+                    <StageMetricSection
+                      key={stageKey}
+                      stageKey={stageKey}
+                      title={STAGE_LABELS[stageKey]}
+                      goal={goal}
+                      weeks={weeks}
+                      stageWeeks={stageCountsData.weeks}
+                      aeList={aeList}
+                      onCellClick={(weekNumber, ownerId, ownerName) =>
+                        setStageDrillModal({ weekNumber, stage: stageKey, stageLabel: STAGE_LABELS[stageKey], ownerId, ownerName })
+                      }
+                    />
+                  );
+                })}
+              </>
+            )}
           </tbody>
         </table>
       </div>
@@ -686,6 +772,19 @@ export function HotTrackerView() {
         weekNumber={pplModal?.weekNumber ?? 1}
         ownerId={pplModal?.ownerId}
         ownerName={pplModal?.ownerName}
+      />
+
+      {/* Stage Deals Drill-Down Modal */}
+      <StageDealsDrillDownModal
+        isOpen={stageDrillModal !== null}
+        onClose={() => setStageDrillModal(null)}
+        year={selectedYear}
+        quarter={selectedQuarter}
+        weekNumber={stageDrillModal?.weekNumber ?? 1}
+        stage={stageDrillModal?.stage ?? 'mql'}
+        stageLabel={stageDrillModal?.stageLabel ?? 'MQL'}
+        ownerId={stageDrillModal?.ownerId}
+        ownerName={stageDrillModal?.ownerName}
       />
     </div>
   );
@@ -855,5 +954,125 @@ function EmptyCell({ future }: { future?: boolean }) {
     <div className={`px-2 py-1 text-xs ${future ? 'text-slate-300' : 'text-slate-400'}`}>
       {future ? '-' : '-'}
     </div>
+  );
+}
+
+function StageMetricSection({
+  stageKey,
+  title,
+  goal,
+  weeks,
+  stageWeeks,
+  aeList,
+  onCellClick,
+}: {
+  stageKey: StageKey;
+  title: string;
+  goal: number;
+  weeks: WeekData[];
+  stageWeeks: StageCountsWeek[];
+  aeList: [string, string][];
+  onCellClick: (weekNumber: number, ownerId?: string, ownerName?: string) => void;
+}) {
+  // Build a quick lookup from weekNumber → stage week data
+  const stageWeekMap = new Map(stageWeeks.map((sw) => [sw.weekNumber, sw]));
+
+  // Compute AE totals across all weeks
+  const aeTotals = new Map<string, number>();
+  let teamTotal = 0;
+  for (const sw of stageWeeks) {
+    teamTotal += sw.team[stageKey];
+    for (const ae of sw.byAE) {
+      aeTotals.set(ae.ownerId, (aeTotals.get(ae.ownerId) || 0) + ae[stageKey]);
+    }
+  }
+
+  return (
+    <>
+      {/* Section header row */}
+      <tr className="border-t-2 border-slate-300">
+        <td
+          colSpan={weeks.length + 2}
+          className="sticky left-0 z-10 bg-slate-800 text-white px-4 py-2 font-semibold text-sm"
+        >
+          {title}
+          <span className="ml-3 font-normal text-slate-300 text-xs">Goal: {goal}/AE/wk</span>
+        </td>
+      </tr>
+
+      {/* Team total row */}
+      <tr className="bg-slate-50 border-b border-slate-200">
+        <td className="sticky left-0 z-10 bg-slate-50 px-4 py-2 font-semibold text-slate-700 border-r border-slate-200">
+          Team Total
+        </td>
+        {weeks.map((w) => {
+          const future = isFutureWeek(w.weekStart);
+          const sw = stageWeekMap.get(w.weekNumber);
+          const count = sw?.team[stageKey] || 0;
+          if (future) return <td key={w.weekNumber} className="px-1 py-1.5 text-center"><EmptyCell future /></td>;
+          const teamGoal = goal * aeList.length;
+          return (
+            <td key={w.weekNumber} className="px-1 py-1.5 text-center">
+              <button
+                className="w-full text-left cursor-pointer"
+                onClick={() => onCellClick(w.weekNumber)}
+              >
+                <MetricCell
+                  value={String(count)}
+                  colorClass={countColor(count, teamGoal)}
+                />
+              </button>
+            </td>
+          );
+        })}
+        <td className="px-1 py-1.5 text-center border-l border-slate-300 bg-slate-100">
+          <MetricCell
+            value={String(teamTotal)}
+            colorClass={countColor(
+              teamTotal,
+              goal * aeList.length * weeks.filter((w) => !isFutureWeek(w.weekStart)).length
+            )}
+          />
+        </td>
+      </tr>
+
+      {/* Per-AE rows */}
+      {aeList.map(([aeId, aeName]) => (
+        <tr key={aeId} className="border-b border-slate-100 hover:bg-slate-50">
+          <td className="sticky left-0 z-10 bg-white px-4 py-1.5 text-slate-600 text-sm border-r border-slate-200">
+            {aeName}
+          </td>
+          {weeks.map((w) => {
+            const future = isFutureWeek(w.weekStart);
+            const sw = stageWeekMap.get(w.weekNumber);
+            const ae = sw?.byAE.find((a) => a.ownerId === aeId);
+            const count = ae?.[stageKey] || 0;
+            if (future) return <td key={w.weekNumber} className="px-1 py-1 text-center"><EmptyCell future /></td>;
+            return (
+              <td key={w.weekNumber} className="px-1 py-1 text-center">
+                <button
+                  className="w-full text-left cursor-pointer"
+                  onClick={() => onCellClick(w.weekNumber, aeId, aeName)}
+                >
+                  <MetricCell
+                    value={String(count)}
+                    colorClass={countColor(count, goal)}
+                  />
+                </button>
+              </td>
+            );
+          })}
+          <td className="px-1 py-1 text-center border-l border-slate-300 bg-slate-50">
+            <MetricCell
+              value={String(aeTotals.get(aeId) || 0)}
+              colorClass={countColor(
+                aeTotals.get(aeId) || 0,
+                goal * weeks.filter((w) => !isFutureWeek(w.weekStart)).length
+              )}
+            />
+          </td>
+        </tr>
+      ))}
+    </>
   );
 }

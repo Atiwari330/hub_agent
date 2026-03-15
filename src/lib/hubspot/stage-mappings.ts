@@ -29,7 +29,8 @@ export const TRACKED_STAGES = {
   DEMO_SCHEDULED: {
     id: 'baedc188-ba76-4a41-8723-5bb99fe7c5bf',
     label: 'Demo - Scheduled',
-    property: 'hs_v2_date_entered_baedc188-ba76-4a41-8723-5bb99fe7c5bf',
+    // HubSpot replaces hyphens with underscores and appends a numeric suffix for UUID stage IDs
+    property: 'hs_v2_date_entered_baedc188_ba76_4a41_8723_5bb99fe7c5bf_1220797901',
     dbColumn: 'demo_scheduled_entered_at',
   },
   DEMO_COMPLETED: {
@@ -41,7 +42,8 @@ export const TRACKED_STAGES = {
   CLOSED_WON: {
     id: '97b2bcc6-fb34-4b56-8e6e-c349c88ef3d5',
     label: 'Closed Won',
-    property: 'hs_v2_date_entered_97b2bcc6-fb34-4b56-8e6e-c349c88ef3d5',
+    // HubSpot replaces hyphens with underscores and appends a numeric suffix for UUID stage IDs
+    property: 'hs_v2_date_entered_97b2bcc6_fb34_4b56_8e6e_c349c88ef3d5_1208951251',
     dbColumn: 'closed_won_entered_at',
   },
   PROPOSAL: {
