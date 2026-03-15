@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { getCurrentQuarter } from '@/lib/utils/quarter';
 import { PplDrillDownModal } from './ppl-drill-down-modal';
 import { StageDealsDrillDownModal } from './stage-deals-drill-down-modal';
+import { LeadingMetricDrillDownModal } from './leading-metric-drill-down-modal';
 
 // ── Types ──
 
@@ -76,9 +77,23 @@ interface StageCounts {
   demoCompleted: number;
 }
 
+interface SpeedToDemoData {
+  avgDays: number;
+  dealCount: number;
+}
+
+interface DemoToProposalData {
+  converted: number;
+  total: number;
+  pct: number;
+  inProgress: boolean;
+}
+
 interface StageCountsAE extends StageCounts {
   ownerId: string;
   ownerName: string;
+  speedToDemo: SpeedToDemoData;
+  demoToProposal: DemoToProposalData;
 }
 
 interface StageCountsWeek {
@@ -87,11 +102,13 @@ interface StageCountsWeek {
   weekEnd: string;
   team: StageCounts;
   byAE: StageCountsAE[];
+  speedToDemo: SpeedToDemoData;
+  demoToProposal: DemoToProposalData;
 }
 
 interface StageCountsData {
   weeks: StageCountsWeek[];
-  goals: StageCounts;
+  goals: StageCounts & { speedToDemo: number; demoToProposal: number };
 }
 
 type StageKey = keyof StageCounts;
@@ -119,6 +136,12 @@ function countColor(value: number, goal: number): string {
   const ratio = value / goal;
   if (ratio >= 0.8) return 'bg-green-100 text-green-800';
   if (ratio >= 0.5) return 'bg-yellow-100 text-yellow-800';
+  return 'bg-red-100 text-red-800';
+}
+
+function daysColor(days: number, goal: number): string {
+  if (days <= goal) return 'bg-green-100 text-green-800';
+  if (days <= goal * 2) return 'bg-yellow-100 text-yellow-800';
   return 'bg-red-100 text-red-800';
 }
 
@@ -159,6 +182,12 @@ export function HotTrackerView() {
     weekNumber: number;
     stage: string;
     stageLabel: string;
+    ownerId?: string;
+    ownerName?: string;
+  } | null>(null);
+  const [leadingMetricModal, setLeadingMetricModal] = useState<{
+    weekNumber: number;
+    metricType: 'speedToDemo' | 'untouchedDeals' | 'demoConversion';
     ownerId?: string;
     ownerName?: string;
   } | null>(null);
@@ -755,6 +784,87 @@ export function HotTrackerView() {
                     />
                   );
                 })}
+
+                {/* ─── Leading Measures ─── */}
+                <tr>
+                  <td
+                    colSpan={weeks.length + 2}
+                    className="bg-indigo-900 text-white px-4 py-2.5 font-bold text-sm border-t-4 border-indigo-400"
+                  >
+                    Leading Measures
+                    <span className="ml-3 font-normal text-indigo-200 text-xs">Pipeline velocity and conversion metrics</span>
+                  </td>
+                </tr>
+
+                {/* ─── Speed to Demo (MQL → Demo Scheduled) ─── */}
+                <LeadingMeasureSection
+                  title="Speed to Demo (MQL → Demo)"
+                  goalLabel={`Goal: ≤${stageCountsData.goals.speedToDemo}d`}
+                  weeks={weeks}
+                  stageWeeks={stageCountsData.weeks}
+                  aeList={aeList}
+                  renderTeamValue={(sw) => {
+                    if (sw.speedToDemo.dealCount === 0) return null;
+                    return { value: `${sw.speedToDemo.avgDays.toFixed(1)}d`, sub: `(${sw.speedToDemo.dealCount} deal${sw.speedToDemo.dealCount !== 1 ? 's' : ''})`, colorClass: daysColor(sw.speedToDemo.avgDays, stageCountsData.goals.speedToDemo) };
+                  }}
+                  renderAEValue={(ae) => {
+                    if (ae.speedToDemo.dealCount === 0) return null;
+                    return { value: `${ae.speedToDemo.avgDays.toFixed(1)}d`, sub: `(${ae.speedToDemo.dealCount})`, colorClass: daysColor(ae.speedToDemo.avgDays, stageCountsData.goals.speedToDemo) };
+                  }}
+                  computeTotal={(stageWeeks) => {
+                    let totalDays = 0, totalDeals = 0;
+                    for (const sw of stageWeeks) { totalDays += sw.speedToDemo.avgDays * sw.speedToDemo.dealCount; totalDeals += sw.speedToDemo.dealCount; }
+                    if (totalDeals === 0) return null;
+                    const avg = totalDays / totalDeals;
+                    return { value: `${avg.toFixed(1)}d`, sub: `(${totalDeals})`, colorClass: daysColor(avg, stageCountsData.goals.speedToDemo) };
+                  }}
+                  computeAETotal={(stageWeeks, aeId) => {
+                    let totalDays = 0, totalDeals = 0;
+                    for (const sw of stageWeeks) { const ae = sw.byAE.find(a => a.ownerId === aeId); if (ae) { totalDays += ae.speedToDemo.avgDays * ae.speedToDemo.dealCount; totalDeals += ae.speedToDemo.dealCount; } }
+                    if (totalDeals === 0) return null;
+                    const avg = totalDays / totalDeals;
+                    return { value: `${avg.toFixed(1)}d`, sub: `(${totalDeals})`, colorClass: daysColor(avg, stageCountsData.goals.speedToDemo) };
+                  }}
+                  onCellClick={(weekNumber, ownerId, ownerName) =>
+                    setLeadingMetricModal({ weekNumber, metricType: 'speedToDemo', ownerId, ownerName })
+                  }
+                />
+
+                {/* ─── Demo → Proposal Conversion ─── */}
+                <LeadingMeasureSection
+                  title="Demo → Proposal Conversion (14d)"
+                  goalLabel={`Goal: ${Math.round(stageCountsData.goals.demoToProposal * 100)}%`}
+                  weeks={weeks}
+                  stageWeeks={stageCountsData.weeks}
+                  aeList={aeList}
+                  renderTeamValue={(sw) => {
+                    if (sw.demoToProposal.total === 0) return null;
+                    const colorClass = sw.demoToProposal.inProgress ? 'bg-blue-100 text-blue-800' : pctColor(sw.demoToProposal.pct, stageCountsData.goals.demoToProposal);
+                    return { value: formatPct(sw.demoToProposal.pct), sub: `(${sw.demoToProposal.converted}/${sw.demoToProposal.total})`, colorClass };
+                  }}
+                  renderAEValue={(ae) => {
+                    if (ae.demoToProposal.total === 0) return null;
+                    const colorClass = ae.demoToProposal.inProgress ? 'bg-blue-100 text-blue-800' : pctColor(ae.demoToProposal.pct, stageCountsData.goals.demoToProposal);
+                    return { value: formatPct(ae.demoToProposal.pct), sub: `(${ae.demoToProposal.converted}/${ae.demoToProposal.total})`, colorClass };
+                  }}
+                  computeTotal={(stageWeeks) => {
+                    let converted = 0, total = 0;
+                    for (const sw of stageWeeks) { converted += sw.demoToProposal.converted; total += sw.demoToProposal.total; }
+                    if (total === 0) return null;
+                    const pct = converted / total;
+                    return { value: formatPct(pct), sub: `(${converted}/${total})`, colorClass: pctColor(pct, stageCountsData.goals.demoToProposal) };
+                  }}
+                  computeAETotal={(stageWeeks, aeId) => {
+                    let converted = 0, total = 0;
+                    for (const sw of stageWeeks) { const ae = sw.byAE.find(a => a.ownerId === aeId); if (ae) { converted += ae.demoToProposal.converted; total += ae.demoToProposal.total; } }
+                    if (total === 0) return null;
+                    const pct = converted / total;
+                    return { value: formatPct(pct), sub: `(${converted}/${total})`, colorClass: pctColor(pct, stageCountsData.goals.demoToProposal) };
+                  }}
+                  onCellClick={(weekNumber, ownerId, ownerName) =>
+                    setLeadingMetricModal({ weekNumber, metricType: 'demoConversion', ownerId, ownerName })
+                  }
+                />
               </>
             )}
           </tbody>
@@ -783,6 +893,18 @@ export function HotTrackerView() {
         stageLabel={stageDrillModal?.stageLabel ?? 'MQL'}
         ownerId={stageDrillModal?.ownerId}
         ownerName={stageDrillModal?.ownerName}
+      />
+
+      {/* Leading Metric Drill-Down Modal */}
+      <LeadingMetricDrillDownModal
+        isOpen={leadingMetricModal !== null}
+        onClose={() => setLeadingMetricModal(null)}
+        year={selectedYear}
+        quarter={selectedQuarter}
+        weekNumber={leadingMetricModal?.weekNumber ?? 1}
+        metricType={leadingMetricModal?.metricType ?? 'speedToDemo'}
+        ownerId={leadingMetricModal?.ownerId}
+        ownerName={leadingMetricModal?.ownerName}
       />
     </div>
   );
@@ -952,6 +1074,93 @@ function EmptyCell({ future }: { future?: boolean }) {
     <div className={`px-2 py-1 text-xs ${future ? 'text-slate-300' : 'text-slate-400'}`}>
       {future ? '-' : '-'}
     </div>
+  );
+}
+
+interface CellValue { value: string; sub: string; colorClass: string }
+
+function LeadingMeasureSection({
+  title,
+  goalLabel,
+  weeks,
+  stageWeeks,
+  aeList,
+  renderTeamValue,
+  renderAEValue,
+  computeTotal,
+  computeAETotal,
+  onCellClick,
+}: {
+  title: string;
+  goalLabel: string;
+  weeks: WeekData[];
+  stageWeeks: StageCountsWeek[];
+  aeList: [string, string][];
+  renderTeamValue: (sw: StageCountsWeek) => CellValue | null;
+  renderAEValue: (ae: StageCountsAE) => CellValue | null;
+  computeTotal: (stageWeeks: StageCountsWeek[]) => CellValue | null;
+  computeAETotal: (stageWeeks: StageCountsWeek[], aeId: string) => CellValue | null;
+  onCellClick: (weekNumber: number, ownerId?: string, ownerName?: string) => void;
+}) {
+  const stageWeekMap = new Map(stageWeeks.map((sw) => [sw.weekNumber, sw]));
+
+  return (
+    <>
+      <tr className="border-t-2 border-slate-300">
+        <td colSpan={weeks.length + 2} className="sticky left-0 z-10 bg-slate-800 text-white px-4 py-2 font-semibold text-sm">
+          {title}
+          <span className="ml-3 font-normal text-slate-300 text-xs">{goalLabel}</span>
+        </td>
+      </tr>
+
+      {/* Team total row */}
+      <tr className="bg-slate-50 border-b border-slate-200">
+        <td className="sticky left-0 z-10 bg-slate-50 px-4 py-2 font-semibold text-slate-700 border-r border-slate-200">Team Total</td>
+        {weeks.map((w) => {
+          const future = isFutureWeek(w.weekStart);
+          const sw = stageWeekMap.get(w.weekNumber);
+          if (future || !sw) return <td key={w.weekNumber} className="px-1 py-1.5 text-center"><EmptyCell future={future} /></td>;
+          const cv = renderTeamValue(sw);
+          if (!cv) return <td key={w.weekNumber} className="px-1 py-1.5 text-center"><EmptyCell /></td>;
+          return (
+            <td key={w.weekNumber} className="px-1 py-1.5 text-center">
+              <button className="w-full text-left cursor-pointer" onClick={() => onCellClick(w.weekNumber)}>
+                <MetricCell value={cv.value} sub={cv.sub} colorClass={cv.colorClass} />
+              </button>
+            </td>
+          );
+        })}
+        <td className="px-1 py-1.5 text-center border-l border-slate-300 bg-slate-100">
+          {(() => { const cv = computeTotal(stageWeeks); return cv ? <MetricCell value={cv.value} sub={cv.sub} colorClass={cv.colorClass} /> : <EmptyCell />; })()}
+        </td>
+      </tr>
+
+      {/* Per-AE rows */}
+      {aeList.map(([aeId, aeName]) => (
+        <tr key={aeId} className="border-b border-slate-100 hover:bg-slate-50">
+          <td className="sticky left-0 z-10 bg-white px-4 py-1.5 text-slate-600 text-sm border-r border-slate-200">{aeName}</td>
+          {weeks.map((w) => {
+            const future = isFutureWeek(w.weekStart);
+            const sw = stageWeekMap.get(w.weekNumber);
+            if (future || !sw) return <td key={w.weekNumber} className="px-1 py-1 text-center"><EmptyCell future={future} /></td>;
+            const ae = sw.byAE.find((a) => a.ownerId === aeId);
+            if (!ae) return <td key={w.weekNumber} className="px-1 py-1 text-center"><EmptyCell /></td>;
+            const cv = renderAEValue(ae);
+            if (!cv) return <td key={w.weekNumber} className="px-1 py-1 text-center"><EmptyCell /></td>;
+            return (
+              <td key={w.weekNumber} className="px-1 py-1 text-center">
+                <button className="w-full text-left cursor-pointer" onClick={() => onCellClick(w.weekNumber, aeId, aeName)}>
+                  <MetricCell value={cv.value} sub={cv.sub} colorClass={cv.colorClass} />
+                </button>
+              </td>
+            );
+          })}
+          <td className="px-1 py-1 text-center border-l border-slate-300 bg-slate-50">
+            {(() => { const cv = computeAETotal(stageWeeks, aeId); return cv ? <MetricCell value={cv.value} sub={cv.sub} colorClass={cv.colorClass} /> : <EmptyCell />; })()}
+          </td>
+        </tr>
+      ))}
+    </>
   );
 }
 
