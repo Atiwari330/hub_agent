@@ -7,16 +7,15 @@ import { RESOURCES } from '@/lib/auth';
 import { getWeekStart, formatDateUTC } from '@/lib/hot-tracker/compute';
 import { getStageNameMap } from '@/lib/hubspot/pipelines';
 
-const STAGE_COLUMN_MAP: Record<string, string> = {
-  mql: 'mql_entered_at',
-  sqlDiscovery: 'discovery_entered_at',
-  demoScheduled: 'demo_scheduled_entered_at',
-  demoCompleted: 'demo_completed_entered_at',
+// Maps stage key → DB column(s). mqlSql queries both MQL and SQL/Discovery columns.
+const STAGE_COLUMNS_MAP: Record<string, string[]> = {
+  mqlSql: ['mql_entered_at', 'discovery_entered_at'],
+  demoScheduled: ['demo_scheduled_entered_at'],
+  demoCompleted: ['demo_completed_entered_at'],
 };
 
 const STAGE_LABEL_MAP: Record<string, string> = {
-  mql: 'MQL',
-  sqlDiscovery: 'SQL/Discovery',
+  mqlSql: 'MQL / SQL Discovery',
   demoScheduled: 'Demo Scheduled',
   demoCompleted: 'Demo Completed',
 };
@@ -35,10 +34,10 @@ export async function GET(request: NextRequest) {
   const stage = searchParams.get('stage') || '';
   const ownerId = searchParams.get('ownerId') || null;
 
-  const dbColumn = STAGE_COLUMN_MAP[stage];
-  if (!dbColumn) {
+  const dbColumns = STAGE_COLUMNS_MAP[stage];
+  if (!dbColumns) {
     return NextResponse.json(
-      { error: `Invalid stage: ${stage}. Must be one of: ${Object.keys(STAGE_COLUMN_MAP).join(', ')}` },
+      { error: `Invalid stage: ${stage}. Must be one of: ${Object.keys(STAGE_COLUMNS_MAP).join(', ')}` },
       { status: 400 }
     );
   }
@@ -53,27 +52,46 @@ export async function GET(request: NextRequest) {
   weekEndDate.setUTCDate(weekEndDate.getUTCDate() + 6);
   weekEndDate.setUTCHours(23, 59, 59, 999);
 
-  // Query deals where the stage timestamp falls in this week
-  // Select all fixed columns plus all stage timestamp columns to avoid dynamic select issues
-  let query = supabase
-    .from('deals')
-    .select('hubspot_deal_id, deal_name, amount, close_date, deal_stage, owner_id, mql_entered_at, discovery_entered_at, demo_scheduled_entered_at, demo_completed_entered_at')
-    .eq('pipeline', SYNC_CONFIG.TARGET_PIPELINE_ID)
-    .gte(dbColumn, weekStartDate.toISOString())
-    .lte(dbColumn, weekEndDate.toISOString());
+  // For combined stages (mqlSql), run one query per column and merge results
+  const allDeals: { hubspot_deal_id: string; deal_name: string; amount: number | null; close_date: string | null; deal_stage: string | null; owner_id: string | null; enteredAt: string }[] = [];
+  const seenDealIds = new Set<string>();
 
-  if (ownerId) {
-    query = query.eq('owner_id', ownerId);
-  }
+  for (const dbColumn of dbColumns) {
+    let query = supabase
+      .from('deals')
+      .select('hubspot_deal_id, deal_name, amount, close_date, deal_stage, owner_id, mql_entered_at, discovery_entered_at, demo_scheduled_entered_at, demo_completed_entered_at')
+      .eq('pipeline', SYNC_CONFIG.TARGET_PIPELINE_ID)
+      .gte(dbColumn, weekStartDate.toISOString())
+      .lte(dbColumn, weekEndDate.toISOString());
 
-  const { data: deals, error } = await query;
+    if (ownerId) {
+      query = query.eq('owner_id', ownerId);
+    }
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    const { data: deals, error } = await query;
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    const colKey = dbColumn as 'mql_entered_at' | 'discovery_entered_at' | 'demo_scheduled_entered_at' | 'demo_completed_entered_at';
+    for (const deal of deals || []) {
+      if (!seenDealIds.has(deal.hubspot_deal_id)) {
+        seenDealIds.add(deal.hubspot_deal_id);
+        allDeals.push({
+          hubspot_deal_id: deal.hubspot_deal_id,
+          deal_name: deal.deal_name,
+          amount: deal.amount,
+          close_date: deal.close_date,
+          deal_stage: deal.deal_stage,
+          owner_id: deal.owner_id,
+          enteredAt: deal[colKey] as string,
+        });
+      }
+    }
   }
 
   // Fetch owner names
-  const ownerIds = [...new Set((deals || []).filter((d) => d.owner_id).map((d) => d.owner_id!))];
+  const ownerIds = [...new Set(allDeals.filter((d) => d.owner_id).map((d) => d.owner_id!))];
   const { data: owners } = await supabase
     .from('owners')
     .select('id, first_name, last_name')
@@ -91,17 +109,14 @@ export async function GET(request: NextRequest) {
     stageNameMap = new Map();
   }
 
-  // Map dbColumn to the typed property key
-  const dbColumnKey = dbColumn as 'mql_entered_at' | 'discovery_entered_at' | 'demo_scheduled_entered_at' | 'demo_completed_entered_at';
-
-  const result = (deals || []).map((deal) => ({
+  const result = allDeals.map((deal) => ({
     dealId: deal.hubspot_deal_id,
     dealName: deal.deal_name,
     ownerName: ownerNameMap.get(deal.owner_id || '') || 'Unknown',
     amount: deal.amount,
     closeDate: deal.close_date,
     stageName: stageNameMap.get(deal.deal_stage || '') || deal.deal_stage || 'Unknown',
-    enteredAt: deal[dbColumnKey] as string,
+    enteredAt: deal.enteredAt,
     hubspotUrl: `https://app.hubspot.com/contacts/7358632/deal/${deal.hubspot_deal_id}`,
   }));
 

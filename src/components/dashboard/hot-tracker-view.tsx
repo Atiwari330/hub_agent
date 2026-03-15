@@ -71,8 +71,7 @@ interface HotTrackerData {
 // ── Stage Counts Types ──
 
 interface StageCounts {
-  mql: number;
-  sqlDiscovery: number;
+  mqlSql: number;
   demoScheduled: number;
   demoCompleted: number;
 }
@@ -98,8 +97,7 @@ interface StageCountsData {
 type StageKey = keyof StageCounts;
 
 const STAGE_LABELS: Record<StageKey, string> = {
-  mql: 'New MQLs',
-  sqlDiscovery: 'SQL/Discovery',
+  mqlSql: 'MQL / SQL Discovery',
   demoScheduled: 'Demo Scheduled',
   demoCompleted: 'Demo Completed',
 };

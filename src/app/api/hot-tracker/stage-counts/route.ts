@@ -13,16 +13,16 @@ const HOT_TRACKER_AE_EMAILS = SYNC_CONFIG.TARGET_AE_EMAILS.filter(
 
 // Per-AE weekly goal defaults (placeholders — tune after seeing real data)
 const STAGE_GOALS = {
-  mql: 5,
-  sqlDiscovery: 3,
+  mqlSql: 5,
   demoScheduled: 3,
   demoCompleted: 2,
 };
 
 // DB column → stage key mapping
+// MQL and SQL/Discovery are combined into one "mqlSql" bucket
 const STAGE_COLUMNS = [
-  { key: 'mql', column: 'mql_entered_at' },
-  { key: 'sqlDiscovery', column: 'discovery_entered_at' },
+  { key: 'mqlSql', column: 'mql_entered_at' },
+  { key: 'mqlSql', column: 'discovery_entered_at' },
   { key: 'demoScheduled', column: 'demo_scheduled_entered_at' },
   { key: 'demoCompleted', column: 'demo_completed_entered_at' },
 ] as const;
@@ -70,7 +70,7 @@ export async function GET(request: NextRequest) {
   }
 
   // Initialize week data structure
-  type StageKey = 'mql' | 'sqlDiscovery' | 'demoScheduled' | 'demoCompleted';
+  type StageKey = 'mqlSql' | 'demoScheduled' | 'demoCompleted';
   type StageCounts = Record<StageKey, number>;
 
   const weekData = new Map<number, {
@@ -84,11 +84,11 @@ export async function GET(request: NextRequest) {
   for (const wb of weekBuckets) {
     const aeCounts = new Map<string, StageCounts>();
     for (const ownerId of allowedOwnerIds) {
-      aeCounts.set(ownerId, { mql: 0, sqlDiscovery: 0, demoScheduled: 0, demoCompleted: 0 });
+      aeCounts.set(ownerId, { mqlSql: 0, demoScheduled: 0, demoCompleted: 0 });
     }
     weekData.set(wb.weekNumber, {
       ...wb,
-      team: { mql: 0, sqlDiscovery: 0, demoScheduled: 0, demoCompleted: 0 },
+      team: { mqlSql: 0, demoScheduled: 0, demoCompleted: 0 },
       byAE: aeCounts,
     });
   }
