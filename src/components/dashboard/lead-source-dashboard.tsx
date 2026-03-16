@@ -169,6 +169,7 @@ export function LeadSourceDashboard() {
     <div className="p-8 space-y-6">
       {/* Date Range Controls */}
       <div className="bg-white rounded-xl border border-gray-200 p-4">
+        <p className="text-xs text-gray-500 mb-2">Showing deals created within this date range</p>
         <div className="flex items-center gap-4">
           <label className="text-sm font-medium text-gray-700">From</label>
           <input
