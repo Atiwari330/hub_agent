@@ -10,8 +10,7 @@ interface DealRecord {
   hubspotCreatedAt: string;
   stages: {
     mql: string | null;
-    sql: string | null;
-    discovery: string | null;
+    sqlDiscovery: string | null;
     demoScheduled: string | null;
     demoCompleted: string | null;
     proposal: string | null;

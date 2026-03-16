@@ -6,8 +6,7 @@ import { LeadSourceDealsModal, type DealRecord } from '@/components/dashboard/le
 
 interface SourceStages {
   mql: number;
-  sql: number;
-  discovery: number;
+  sqlDiscovery: number;
   demoScheduled: number;
   demoCompleted: number;
   proposal: number;
@@ -21,8 +20,8 @@ interface SourceSummary {
   stages: SourceStages;
   closedWonAmount: number;
   conversionRates: {
-    mqlToDiscovery: number;
-    discoveryToDemo: number;
+    mqlToSqlDiscovery: number;
+    sqlDiscoveryToDemo: number;
     demoToProposal: number;
     proposalToWon: number;
     overallWinRate: number;
@@ -51,8 +50,7 @@ interface LeadSourceData {
 
 const STAGE_CONFIG = {
   mql: { label: 'MQL', color: 'bg-sky-400', textColor: 'text-sky-600' },
-  sql: { label: 'SQL', color: 'bg-blue-500', textColor: 'text-blue-600' },
-  discovery: { label: 'Discovery', color: 'bg-indigo-500', textColor: 'text-indigo-600' },
+  sqlDiscovery: { label: 'SQL/Discovery', color: 'bg-blue-500', textColor: 'text-blue-600' },
   demoScheduled: { label: 'Demo Sched', color: 'bg-yellow-500', textColor: 'text-yellow-600' },
   demoCompleted: { label: 'Demo Comp', color: 'bg-purple-500', textColor: 'text-purple-600' },
   proposal: { label: 'Proposal', color: 'bg-orange-500', textColor: 'text-orange-600' },
