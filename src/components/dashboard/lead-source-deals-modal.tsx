@@ -8,14 +8,7 @@ interface DealRecord {
   leadSource: string;
   ownerName: string;
   hubspotCreatedAt: string;
-  stages: {
-    mql: string | null;
-    sqlDiscovery: string | null;
-    demoScheduled: string | null;
-    demoCompleted: string | null;
-    proposal: string | null;
-    closedWon: string | null;
-  };
+  currentStage: string;
 }
 
 interface LeadSourceDealsModalProps {
@@ -80,11 +73,11 @@ function DealCard({ deal }: { deal: DealRecord }) {
         )}
       </div>
 
-      {/* Owner + source */}
+      {/* Owner + stage */}
       <div className="text-xs text-gray-500 mb-2">
         Owner: <span className="text-gray-700 font-medium">{deal.ownerName}</span>
         <span className="text-gray-300 mx-2">|</span>
-        Source: <span className="text-gray-700 font-medium">{deal.leadSource}</span>
+        Stage: <span className="text-gray-700 font-medium">{deal.currentStage}</span>
       </div>
 
       {/* Dates */}

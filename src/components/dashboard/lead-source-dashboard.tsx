@@ -4,28 +4,18 @@ import { useEffect, useState } from 'react';
 import { formatCurrency, formatPercent } from '@/lib/utils/currency';
 import { LeadSourceDealsModal, type DealRecord } from '@/components/dashboard/lead-source-deals-modal';
 
-interface SourceStages {
-  mql: number;
-  sqlDiscovery: number;
-  demoScheduled: number;
-  demoCompleted: number;
-  proposal: number;
-  closedWon: number;
+interface StageInfo {
+  key: string;
+  label: string;
 }
 
 interface SourceSummary {
   leadSource: string;
   totalDeals: number;
   totalAmount: number;
-  stages: SourceStages;
+  stages: Record<string, number>;
   closedWonAmount: number;
-  conversionRates: {
-    mqlToSqlDiscovery: number;
-    sqlDiscoveryToDemo: number;
-    demoToProposal: number;
-    proposalToWon: number;
-    overallWinRate: number;
-  };
+  winRate: number;
 }
 
 interface TrendWeek {
@@ -46,21 +36,25 @@ interface LeadSourceData {
   sources: SourceSummary[];
   trend: TrendWeek[];
   deals: DealRecord[];
+  stageOrder: StageInfo[];
 }
 
-const STAGE_CONFIG = {
-  mql: { label: 'MQL', color: 'bg-sky-400', textColor: 'text-sky-600' },
-  sqlDiscovery: { label: 'SQL/Discovery', color: 'bg-blue-500', textColor: 'text-blue-600' },
-  demoScheduled: { label: 'Demo Sched', color: 'bg-yellow-500', textColor: 'text-yellow-600' },
-  demoCompleted: { label: 'Demo Comp', color: 'bg-purple-500', textColor: 'text-purple-600' },
-  proposal: { label: 'Proposal', color: 'bg-orange-500', textColor: 'text-orange-600' },
-  closedWon: { label: 'Closed Won', color: 'bg-emerald-500', textColor: 'text-emerald-600' },
-} as const;
+// Colors per stage key
+const STAGE_COLORS: Record<string, { color: string; textColor: string }> = {
+  mql:                { color: 'bg-sky-400',     textColor: 'text-sky-600' },
+  sqlDiscovery:       { color: 'bg-blue-500',    textColor: 'text-blue-600' },
+  demoScheduled:      { color: 'bg-yellow-500',  textColor: 'text-yellow-600' },
+  demoCompleted:      { color: 'bg-purple-500',  textColor: 'text-purple-600' },
+  qualifiedValidated: { color: 'bg-cyan-500',    textColor: 'text-cyan-600' },
+  proposalEvaluating: { color: 'bg-orange-500',  textColor: 'text-orange-600' },
+  msaSentReview:      { color: 'bg-pink-500',    textColor: 'text-pink-600' },
+  closedWon:          { color: 'bg-emerald-500', textColor: 'text-emerald-600' },
+  closedLost:         { color: 'bg-red-400',     textColor: 'text-red-500' },
+};
 
-type StageKey = keyof typeof STAGE_CONFIG;
-const STAGE_KEYS = Object.keys(STAGE_CONFIG) as StageKey[];
+const DEFAULT_STAGE_STYLE = { color: 'bg-gray-400', textColor: 'text-gray-600' };
 
-// Assign consistent colors to lead sources
+// Assign consistent colors to lead sources for trend chart
 const SOURCE_COLORS = [
   'bg-sky-500',
   'bg-indigo-500',
@@ -124,17 +118,19 @@ export function LeadSourceDashboard() {
     );
   }
 
+  const stages = data.stageOrder;
+
   const filteredSources = selectedSource
     ? data.sources.filter((s) => s.leadSource === selectedSource)
     : data.sources;
 
   // Calculate max stage value for chart scaling
   const maxStageValue = Math.max(
-    ...filteredSources.map((s) => Math.max(...STAGE_KEYS.map((k) => s.stages[k]))),
+    ...filteredSources.map((s) => Math.max(...stages.map((st) => s.stages[st.key] || 0))),
     1
   );
 
-  // Source color map
+  // Source color map for trend chart
   const sourceColorMap = new Map<string, string>();
   data.sources.forEach((s, i) => {
     sourceColorMap.set(s.leadSource, SOURCE_COLORS[i % SOURCE_COLORS.length]);
@@ -146,12 +142,12 @@ export function LeadSourceDashboard() {
     setDrillDown({ title: `${leadSource} — All Deals`, deals });
   }
 
-  function openStageDrillDown(leadSource: string, stage: StageKey) {
+  function openStageDrillDown(leadSource: string, stageLabel: string) {
     const deals = data!.deals.filter(
-      (d) => d.leadSource === leadSource && d.stages[stage] !== null
+      (d) => d.leadSource === leadSource && d.currentStage === stageLabel
     );
     setDrillDown({
-      title: `${leadSource} — ${STAGE_CONFIG[stage].label}`,
+      title: `${leadSource} — ${stageLabel}`,
       deals,
     });
   }
@@ -231,7 +227,7 @@ export function LeadSourceDashboard() {
         />
         <SummaryCard
           label="Closed Won"
-          value={String(selectedSource ? filteredSources[0]?.stages.closedWon || 0 : data.totalClosedWon)}
+          value={String(selectedSource ? filteredSources[0]?.stages['closedWon'] || 0 : data.totalClosedWon)}
           color="text-emerald-600"
         />
         <SummaryCard
@@ -240,23 +236,27 @@ export function LeadSourceDashboard() {
         />
         <SummaryCard
           label="Win Rate"
-          value={formatPercent(selectedSource ? filteredSources[0]?.conversionRates.overallWinRate || 0 : data.overallWinRate)}
+          value={formatPercent(selectedSource ? filteredSources[0]?.winRate || 0 : data.overallWinRate)}
           color="text-indigo-600"
         />
       </div>
 
-      {/* Grouped Bar Chart — Pipeline Progression */}
+      {/* Grouped Bar Chart — Current Stage Distribution */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Pipeline Progression by Source</h3>
+        <h3 className="text-lg font-semibold text-gray-900 mb-1">Current Stage Distribution by Source</h3>
+        <p className="text-sm text-gray-500 mb-4">Where deals currently sit in the pipeline</p>
 
         {/* Legend */}
         <div className="flex flex-wrap gap-4 mb-4">
-          {STAGE_KEYS.map((key) => (
-            <div key={key} className="flex items-center gap-1.5">
-              <div className={`w-3 h-3 rounded ${STAGE_CONFIG[key].color}`} />
-              <span className="text-xs text-gray-600">{STAGE_CONFIG[key].label}</span>
-            </div>
-          ))}
+          {stages.map((st) => {
+            const style = STAGE_COLORS[st.key] || DEFAULT_STAGE_STYLE;
+            return (
+              <div key={st.key} className="flex items-center gap-1.5">
+                <div className={`w-3 h-3 rounded ${style.color}`} />
+                <span className="text-xs text-gray-600">{st.label}</span>
+              </div>
+            );
+          })}
         </div>
 
         {/* Chart */}
@@ -269,14 +269,17 @@ export function LeadSourceDashboard() {
               title={`Click to view ${source.leadSource} deals`}
             >
               <div className="w-full flex items-end justify-center gap-0.5 h-48">
-                {STAGE_KEYS.map((key) => (
-                  <Bar
-                    key={key}
-                    value={source.stages[key]}
-                    maxValue={maxStageValue}
-                    color={STAGE_CONFIG[key].color}
-                  />
-                ))}
+                {stages.map((st) => {
+                  const style = STAGE_COLORS[st.key] || DEFAULT_STAGE_STYLE;
+                  return (
+                    <Bar
+                      key={st.key}
+                      value={source.stages[st.key] || 0}
+                      maxValue={maxStageValue}
+                      color={style.color}
+                    />
+                  );
+                })}
               </div>
               <div className="text-xs font-medium text-gray-600 text-center truncate w-full" title={source.leadSource}>
                 {source.leadSource}
@@ -290,6 +293,7 @@ export function LeadSourceDashboard() {
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-200">
           <h3 className="text-lg font-semibold text-gray-900">Source Breakdown</h3>
+          <p className="text-sm text-gray-500">Deals currently in each stage (click counts to view deals)</p>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -298,9 +302,9 @@ export function LeadSourceDashboard() {
                 <th className="px-4 py-3 font-medium text-gray-700">Source</th>
                 <th className="px-4 py-3 font-medium text-gray-700 text-right">Deals</th>
                 <th className="px-4 py-3 font-medium text-gray-700 text-right">Amount</th>
-                {STAGE_KEYS.map((key) => (
-                  <th key={key} className="px-4 py-3 font-medium text-gray-700 text-right">
-                    {STAGE_CONFIG[key].label}
+                {stages.map((st) => (
+                  <th key={st.key} className="px-3 py-3 font-medium text-gray-700 text-right whitespace-nowrap">
+                    {st.label}
                   </th>
                 ))}
                 <th className="px-4 py-3 font-medium text-gray-700 text-right">Win Rate</th>
@@ -319,22 +323,26 @@ export function LeadSourceDashboard() {
                     </button>
                   </td>
                   <td className="px-4 py-3 text-right text-gray-700">{formatCurrency(source.totalAmount)}</td>
-                  {STAGE_KEYS.map((key) => (
-                    <td key={key} className="px-4 py-3 text-right">
-                      {source.stages[key] > 0 ? (
-                        <button
-                          className={`${STAGE_CONFIG[key].textColor} hover:underline cursor-pointer font-medium`}
-                          onClick={() => openStageDrillDown(source.leadSource, key)}
-                        >
-                          {source.stages[key]}
-                        </button>
-                      ) : (
-                        <span className="text-gray-300">0</span>
-                      )}
-                    </td>
-                  ))}
+                  {stages.map((st) => {
+                    const count = source.stages[st.key] || 0;
+                    const style = STAGE_COLORS[st.key] || DEFAULT_STAGE_STYLE;
+                    return (
+                      <td key={st.key} className="px-3 py-3 text-right">
+                        {count > 0 ? (
+                          <button
+                            className={`${style.textColor} hover:underline cursor-pointer font-medium`}
+                            onClick={() => openStageDrillDown(source.leadSource, st.label)}
+                          >
+                            {count}
+                          </button>
+                        ) : (
+                          <span className="text-gray-300">0</span>
+                        )}
+                      </td>
+                    );
+                  })}
                   <td className="px-4 py-3 text-right font-medium text-gray-900">
-                    {formatPercent(source.conversionRates.overallWinRate)}
+                    {formatPercent(source.winRate)}
                   </td>
                 </tr>
               ))}
@@ -383,7 +391,6 @@ export function LeadSourceDashboard() {
                       }}
                     />
                   ) : (
-                    // Stacked bars for all sources
                     trendSources.map((src) => {
                       const count = week.sources[src] || 0;
                       if (count === 0) return null;
@@ -397,7 +404,6 @@ export function LeadSourceDashboard() {
                       );
                     })
                   )}
-                  {/* Hover tooltip */}
                   {weekTotal > 0 && (
                     <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-xs px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition whitespace-nowrap z-10">
                       {weekTotal}

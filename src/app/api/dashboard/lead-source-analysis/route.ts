@@ -1,29 +1,38 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/client';
 import { SYNC_CONFIG } from '@/lib/hubspot/sync-config';
+import { SALES_PIPELINE_STAGES } from '@/lib/hubspot/stage-config';
 
-interface SourceStages {
-  mql: number;
-  sqlDiscovery: number;
-  demoScheduled: number;
-  demoCompleted: number;
-  proposal: number;
-  closedWon: number;
+// Current pipeline stages in order (excluding legacy SQL)
+const STAGE_ORDER = [
+  { key: 'mql', id: SALES_PIPELINE_STAGES.MQL.id, label: 'MQL' },
+  { key: 'sqlDiscovery', id: SALES_PIPELINE_STAGES.SQL_DISCOVERY.id, label: 'SQL/Discovery' },
+  { key: 'demoScheduled', id: SALES_PIPELINE_STAGES.DEMO_SCHEDULED.id, label: 'Demo Scheduled' },
+  { key: 'demoCompleted', id: SALES_PIPELINE_STAGES.DEMO_COMPLETED.id, label: 'Demo Completed' },
+  { key: 'qualifiedValidated', id: SALES_PIPELINE_STAGES.QUALIFIED_VALIDATED.id, label: 'Qualified/Validated' },
+  { key: 'proposalEvaluating', id: SALES_PIPELINE_STAGES.PROPOSAL_EVALUATING.id, label: 'Proposal/Evaluating' },
+  { key: 'msaSentReview', id: SALES_PIPELINE_STAGES.MSA_SENT_REVIEW.id, label: 'MSA Sent/Review' },
+  { key: 'closedWon', id: SALES_PIPELINE_STAGES.CLOSED_WON.id, label: 'Closed Won' },
+  { key: 'closedLost', id: SALES_PIPELINE_STAGES.CLOSED_LOST.id, label: 'Closed Lost' },
+] as const;
+
+// Build stage ID → key map
+const STAGE_ID_TO_KEY = new Map<string, string>();
+for (const s of STAGE_ORDER) {
+  STAGE_ID_TO_KEY.set(s.id, s.key);
 }
+// Also map legacy SQL to sqlDiscovery
+STAGE_ID_TO_KEY.set(SALES_PIPELINE_STAGES.SQL_LEGACY.id, 'sqlDiscovery');
+
+type StageCounts = Record<string, number>;
 
 interface SourceSummary {
   leadSource: string;
   totalDeals: number;
   totalAmount: number;
-  stages: SourceStages;
+  stages: StageCounts;
   closedWonAmount: number;
-  conversionRates: {
-    mqlToSqlDiscovery: number;
-    sqlDiscoveryToDemo: number;
-    demoToProposal: number;
-    proposalToWon: number;
-    overallWinRate: number;
-  };
+  winRate: number;
 }
 
 interface TrendWeek {
@@ -42,14 +51,7 @@ interface DealRecord {
   leadSource: string;
   ownerName: string;
   hubspotCreatedAt: string;
-  stages: {
-    mql: string | null;
-    sqlDiscovery: string | null;
-    demoScheduled: string | null;
-    demoCompleted: string | null;
-    proposal: string | null;
-    closedWon: string | null;
-  };
+  currentStage: string;
 }
 
 function getMonday(date: Date): Date {
@@ -75,7 +77,6 @@ export async function GET(request: NextRequest) {
 
     const supabase = createServiceClient();
 
-    // Fetch deals with owner info
     const { data: deals, error } = await supabase
       .from('deals')
       .select(`
@@ -86,14 +87,9 @@ export async function GET(request: NextRequest) {
         close_date,
         lead_source,
         pipeline,
+        deal_stage,
         hubspot_created_at,
-        hubspot_owner_id,
-        mql_entered_at,
-        discovery_entered_at,
-        demo_scheduled_entered_at,
-        demo_completed_entered_at,
-        proposal_entered_at,
-        closed_won_entered_at
+        hubspot_owner_id
       `)
       .eq('pipeline', SYNC_CONFIG.TARGET_PIPELINE_ID)
       .gte('hubspot_created_at', `${startDate}T00:00:00`)
@@ -117,6 +113,13 @@ export async function GET(request: NextRequest) {
 
     const allDeals = deals || [];
 
+    // Map stage IDs to labels for deal records
+    const stageIdToLabel = new Map<string, string>();
+    for (const s of STAGE_ORDER) {
+      stageIdToLabel.set(s.id, s.label);
+    }
+    stageIdToLabel.set(SALES_PIPELINE_STAGES.SQL_LEGACY.id, 'SQL/Discovery');
+
     // Build deal records for drill-down
     const dealRecords: DealRecord[] = allDeals.map((deal) => ({
       hubspotDealId: deal.hubspot_deal_id,
@@ -126,14 +129,7 @@ export async function GET(request: NextRequest) {
       leadSource: deal.lead_source || 'Unknown',
       ownerName: ownerMap.get(deal.hubspot_owner_id || '') || 'Unassigned',
       hubspotCreatedAt: deal.hubspot_created_at || '',
-      stages: {
-        mql: deal.mql_entered_at || null,
-        sqlDiscovery: deal.discovery_entered_at || null,
-        demoScheduled: deal.demo_scheduled_entered_at || null,
-        demoCompleted: deal.demo_completed_entered_at || null,
-        proposal: deal.proposal_entered_at || null,
-        closedWon: deal.closed_won_entered_at || null,
-      },
+      currentStage: stageIdToLabel.get(deal.deal_stage || '') || 'Unknown',
     }));
 
     // Build trend data (weekly buckets)
@@ -167,7 +163,7 @@ export async function GET(request: NextRequest) {
       (a, b) => a.weekStart.localeCompare(b.weekStart)
     );
 
-    // Group by lead_source for aggregation
+    // Group by lead_source and count current stages
     const sourceMap = new Map<string, typeof allDeals>();
 
     for (const deal of allDeals) {
@@ -178,17 +174,12 @@ export async function GET(request: NextRequest) {
       sourceMap.get(source)!.push(deal);
     }
 
-    // Aggregate per source
     const sources: SourceSummary[] = Array.from(sourceMap.entries())
       .map(([leadSource, sourceDeals]) => {
-        const stages: SourceStages = {
-          mql: 0,
-          sqlDiscovery: 0,
-          demoScheduled: 0,
-          demoCompleted: 0,
-          proposal: 0,
-          closedWon: 0,
-        };
+        const stages: StageCounts = {};
+        for (const s of STAGE_ORDER) {
+          stages[s.key] = 0;
+        }
 
         let totalAmount = 0;
         let closedWonAmount = 0;
@@ -197,25 +188,18 @@ export async function GET(request: NextRequest) {
           const amt = Number(deal.amount) || 0;
           totalAmount += amt;
 
-          if (deal.mql_entered_at) stages.mql++;
-          if (deal.discovery_entered_at) stages.sqlDiscovery++;
-          if (deal.demo_scheduled_entered_at) stages.demoScheduled++;
-          if (deal.demo_completed_entered_at) stages.demoCompleted++;
-          if (deal.proposal_entered_at) stages.proposal++;
-          if (deal.closed_won_entered_at) {
-            stages.closedWon++;
+          const stageKey = STAGE_ID_TO_KEY.get(deal.deal_stage || '') || 'unknown';
+          if (stageKey in stages) {
+            stages[stageKey]++;
+          }
+
+          if (deal.deal_stage === SALES_PIPELINE_STAGES.CLOSED_WON.id) {
             closedWonAmount += amt;
           }
         }
 
         const total = sourceDeals.length;
-        const conversionRates = {
-          mqlToSqlDiscovery: stages.mql > 0 ? (stages.sqlDiscovery / stages.mql) * 100 : 0,
-          sqlDiscoveryToDemo: stages.sqlDiscovery > 0 ? (stages.demoCompleted / stages.sqlDiscovery) * 100 : 0,
-          demoToProposal: stages.demoCompleted > 0 ? (stages.proposal / stages.demoCompleted) * 100 : 0,
-          proposalToWon: stages.proposal > 0 ? (stages.closedWon / stages.proposal) * 100 : 0,
-          overallWinRate: total > 0 ? (stages.closedWon / total) * 100 : 0,
-        };
+        const closedWonCount = stages['closedWon'] || 0;
 
         return {
           leadSource,
@@ -223,13 +207,13 @@ export async function GET(request: NextRequest) {
           totalAmount,
           stages,
           closedWonAmount,
-          conversionRates,
+          winRate: total > 0 ? (closedWonCount / total) * 100 : 0,
         };
       })
       .sort((a, b) => b.totalDeals - a.totalDeals);
 
     const totalDeals = allDeals.length;
-    const totalClosedWon = sources.reduce((sum, s) => sum + s.stages.closedWon, 0);
+    const totalClosedWon = sources.reduce((sum, s) => sum + (s.stages['closedWon'] || 0), 0);
     const totalAmount = sources.reduce((sum, s) => sum + s.totalAmount, 0);
     const totalClosedWonAmount = sources.reduce((sum, s) => sum + s.closedWonAmount, 0);
     const overallWinRate = totalDeals > 0 ? (totalClosedWon / totalDeals) * 100 : 0;
@@ -244,6 +228,7 @@ export async function GET(request: NextRequest) {
       sources,
       trend,
       deals: dealRecords,
+      stageOrder: STAGE_ORDER.map((s) => ({ key: s.key, label: s.label })),
     });
   } catch (error) {
     console.error('Lead source analysis error:', error);
