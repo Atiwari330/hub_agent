@@ -321,34 +321,76 @@ export async function computeHotTrackerForQuarter(
   }
 
   // ─────────────────────────────────────────────────
-  // Metric 3: Deals with gift/incentive sent (any stage, bucketed by deal creation week)
+  // Metric 3: Deals with gift/incentive sent, bucketed by the date the property was set in HubSpot
   // ─────────────────────────────────────────────────
   const metric3ByOwnerWeek = new Map<string, Map<number, { total: number; withGift: number }>>();
 
+  // Query all sales pipeline deals where the gift flag is set (any creation date)
   const { data: giftDeals } = await supabase
     .from('deals')
-    .select('id, hubspot_deal_id, hubspot_created_at, sent_gift_or_incentive, owner_id')
-    .not('hubspot_created_at', 'is', null)
-    .gte('hubspot_created_at', qi.startDate.toISOString())
-    .lte('hubspot_created_at', qi.endDate.toISOString())
+    .select('id, hubspot_deal_id, owner_id')
+    .eq('sent_gift_or_incentive', true)
     .eq('pipeline', SYNC_CONFIG.TARGET_PIPELINE_ID);
 
-  for (const deal of giftDeals || []) {
-    const ownerId = deal.owner_id;
-    if (!ownerId) continue;
-
-    const weekNum = getWeekNumberInQuarter(new Date(deal.hubspot_created_at!), qi.startDate);
-
-    if (!metric3ByOwnerWeek.has(ownerId)) {
-      metric3ByOwnerWeek.set(ownerId, new Map());
+  if (giftDeals && giftDeals.length > 0) {
+    // Batch-fetch property history from HubSpot to get the timestamp when the gift flag was set
+    const client = getHubSpotClient();
+    const giftDealHubspotIds = giftDeals.map((d) => d.hubspot_deal_id);
+    // Map hubspot_deal_id -> { ownerId }
+    const giftDealOwnerMap = new Map<string, string>();
+    for (const d of giftDeals) {
+      if (d.owner_id) giftDealOwnerMap.set(d.hubspot_deal_id, d.owner_id);
     }
-    const ownerWeeks = metric3ByOwnerWeek.get(ownerId)!;
-    if (!ownerWeeks.has(weekNum)) {
-      ownerWeeks.set(weekNum, { total: 0, withGift: 0 });
+
+    for (const idChunk of chunk(giftDealHubspotIds, 100)) {
+      try {
+        const response = await client.crm.deals.batchApi.read({
+          inputs: idChunk.map((id: string) => ({ id })),
+          properties: ['sent_gift_or_incentive'],
+          propertiesWithHistory: ['sent_gift_or_incentive'],
+        });
+
+        for (const deal of response.results) {
+          const ownerId = giftDealOwnerMap.get(deal.id);
+          if (!ownerId) continue;
+
+          // Extract the timestamp when sent_gift_or_incentive was set to a truthy value
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const dealAny = deal as any;
+          const history = dealAny.propertiesWithHistory?.sent_gift_or_incentive;
+          if (!Array.isArray(history) || history.length === 0) continue;
+
+          // Find the earliest entry where the value is truthy
+          let giftSetAt: Date | null = null;
+          for (const entry of history) {
+            const val = entry.value;
+            if (val && val !== 'false' && val !== 'no' && val.trim() !== '') {
+              const ts = new Date(entry.timestamp);
+              if (!giftSetAt || ts < giftSetAt) giftSetAt = ts;
+            }
+          }
+
+          if (!giftSetAt) continue;
+
+          // Only count if the gift was set within the quarter
+          if (giftSetAt < qi.startDate || giftSetAt > qi.endDate) continue;
+
+          const weekNum = getWeekNumberInQuarter(giftSetAt, qi.startDate);
+
+          if (!metric3ByOwnerWeek.has(ownerId)) {
+            metric3ByOwnerWeek.set(ownerId, new Map());
+          }
+          const ownerWeeks = metric3ByOwnerWeek.get(ownerId)!;
+          if (!ownerWeeks.has(weekNum)) {
+            ownerWeeks.set(weekNum, { total: 0, withGift: 0 });
+          }
+          const bucket = ownerWeeks.get(weekNum)!;
+          bucket.withGift++;
+        }
+      } catch (error) {
+        console.warn('[hot-tracker] Failed batch gift property history fetch:', error);
+      }
     }
-    const bucket = ownerWeeks.get(weekNum)!;
-    bucket.total++;
-    if (deal.sent_gift_or_incentive) bucket.withGift++;
   }
 
   // ─────────────────────────────────────────────────

@@ -124,7 +124,7 @@ const STAGE_LABELS: Record<StageKey, string> = {
 const METRIC_TOOLTIPS: Record<string, string> = {
   sqlContacted: 'Measures how quickly AEs respond to new SQL/Discovery deals. Tracks the % of deals where the first call or email happened within 15 minutes of entering the Discovery stage.',
   callsToSql: 'Counts the number of phone calls made to contacts (who have a phone number) associated with deals in the SQL/Discovery stage or beyond.',
-  proposalGift: 'Counts deals created this quarter that have the gift/incentive flag set in HubSpot (any pipeline stage). Shown as gifts sent out of total deals created that week.',
+  proposalGift: 'Counts gifts/incentives sent by the week the AE actually set the flag in HubSpot (using property change history). A gift sent in week 8 on a deal created in week 2 now correctly shows in week 8.',
   pplTouches: 'Average number of touches (calls + outbound emails) on Paid Per Lead deals during their first 7 days. Only counts deals where the full first week has elapsed.',
   pplCompliance: 'For Paid Per Lead deals, measures the % of days in the first week where at least 1 touch (call or email) occurred. Excludes deals with meetings already booked.',
   pplCallCompliance: 'For Paid Per Lead deals, measures the % of days in the first week where at least 2 phone calls were made. Excludes deals with meetings booked. Day 0 excluded if deal created after 5pm EST.',
@@ -510,7 +510,6 @@ export function HotTrackerView() {
                 return (
                   <MetricCell
                     value={String(w.team.proposalWithGift)}
-                    sub={w.team.proposalTotal > 0 ? `(${w.team.proposalWithGift}/${w.team.proposalTotal})` : undefined}
                     colorClass={countColor(w.team.proposalWithGift, goals.proposalWithGift)}
                   />
                 );
@@ -522,7 +521,6 @@ export function HotTrackerView() {
                 return (
                   <MetricCell
                     value={String(ae?.proposalWithGift || 0)}
-                    sub={ae && ae.proposalTotal > 0 ? `(${ae.proposalWithGift}/${ae.proposalTotal})` : undefined}
                     colorClass={countColor(
                       ae?.proposalWithGift || 0,
                       goals.proposalWithGift / Math.max(1, aeList.length)
@@ -533,27 +531,22 @@ export function HotTrackerView() {
               renderTotalCell={() => (
                 <MetricCell
                   value={String(teamTotals.proposalWithGift)}
-                  sub={teamTotals.proposalTotal > 0 ? `(${teamTotals.proposalWithGift}/${teamTotals.proposalTotal})` : undefined}
                   colorClass={countColor(teamTotals.proposalWithGift, goals.proposalWithGift * weeks.filter((w) => !isFutureWeek(w.weekStart)).length)}
                 />
               )}
               renderAETotalCell={(aeId) => {
-                const totals = weeks.reduce(
+                const giftTotal = weeks.reduce(
                   (acc, w) => {
                     const ae = w.byAE.find((a) => a.ownerId === aeId);
-                    return {
-                      gift: acc.gift + (ae?.proposalWithGift || 0),
-                      total: acc.total + (ae?.proposalTotal || 0),
-                    };
+                    return acc + (ae?.proposalWithGift || 0);
                   },
-                  { gift: 0, total: 0 }
+                  0
                 );
                 return (
                   <MetricCell
-                    value={String(totals.gift)}
-                    sub={totals.total > 0 ? `(${totals.gift}/${totals.total})` : undefined}
+                    value={String(giftTotal)}
                     colorClass={countColor(
-                      totals.gift,
+                      giftTotal,
                       (goals.proposalWithGift / Math.max(1, aeList.length)) * weeks.filter((w) => !isFutureWeek(w.weekStart)).length
                     )}
                   />

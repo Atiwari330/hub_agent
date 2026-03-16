@@ -5,6 +5,7 @@ import { DashboardTabs, type DashboardTab } from '@/components/dashboard/dashboa
 import { DailyDashboard } from '@/components/dashboard/daily-dashboard';
 import { WeeklyDashboard } from '@/components/dashboard/weekly-dashboard';
 import { QuarterlyDashboard } from '@/components/dashboard/quarterly-dashboard';
+import { IntelligenceDashboard } from '@/components/dashboard/intelligence-dashboard';
 
 export function MissionControlClient() {
   const [activeTab, setActiveTab] = useState<DashboardTab>('daily');
@@ -19,6 +20,7 @@ export function MissionControlClient() {
         {activeTab === 'daily' && <DailyDashboard />}
         {activeTab === 'weekly' && <WeeklyDashboard />}
         {activeTab === 'quarterly' && <QuarterlyDashboard />}
+        {activeTab === 'intelligence' && <IntelligenceDashboard />}
       </div>
     </div>
   );
