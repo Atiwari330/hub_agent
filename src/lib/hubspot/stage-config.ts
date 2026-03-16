@@ -19,7 +19,7 @@ export const SALES_PIPELINE_STAGES = {
   PROPOSAL_EVALUATING:  { id: '59865091',                                  label: 'Proposal/Evaluating' },
   MSA_SENT_REVIEW:      { id: '1286807304',                                label: 'MSA Sent/Review' },
   CLOSED_WON:           { id: '97b2bcc6-fb34-4b56-8e6e-c349c88ef3d5',     label: 'Closed Won' },
-  CLOSED_LOST:          { id: '4f186989-8c95-4356-aa43-f8a498d0e927',     label: 'Closed Lost' },
+  CLOSED_LOST:          { id: '4f186989-3ba2-4697-b675-6185b098d6a8',     label: 'Closed Lost' },
 } as const;
 
 const S = SALES_PIPELINE_STAGES;
