@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { formatCurrency, formatPercent } from '@/lib/utils/currency';
+import { LeadSourceDealsModal, type DealRecord } from '@/components/dashboard/lead-source-deals-modal';
 
 interface SourceStages {
   mql: number;
@@ -28,6 +29,14 @@ interface SourceSummary {
   };
 }
 
+interface TrendWeek {
+  weekStart: string;
+  weekEnd: string;
+  weekLabel: string;
+  sources: Record<string, number>;
+  total: number;
+}
+
 interface LeadSourceData {
   dateRange: { startDate: string; endDate: string };
   totalDeals: number;
@@ -36,6 +45,8 @@ interface LeadSourceData {
   totalClosedWonAmount: number;
   overallWinRate: number;
   sources: SourceSummary[];
+  trend: TrendWeek[];
+  deals: DealRecord[];
 }
 
 const STAGE_CONFIG = {
@@ -51,6 +62,18 @@ const STAGE_CONFIG = {
 type StageKey = keyof typeof STAGE_CONFIG;
 const STAGE_KEYS = Object.keys(STAGE_CONFIG) as StageKey[];
 
+// Assign consistent colors to lead sources
+const SOURCE_COLORS = [
+  'bg-sky-500',
+  'bg-indigo-500',
+  'bg-amber-500',
+  'bg-rose-500',
+  'bg-emerald-500',
+  'bg-purple-500',
+  'bg-teal-500',
+  'bg-orange-500',
+];
+
 export function LeadSourceDashboard() {
   const [startDate, setStartDate] = useState('2026-01-01');
   const [endDate, setEndDate] = useState(() => new Date().toISOString().split('T')[0]);
@@ -58,6 +81,7 @@ export function LeadSourceDashboard() {
   const [data, setData] = useState<LeadSourceData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [drillDown, setDrillDown] = useState<{ title: string; deals: DealRecord[] } | null>(null);
 
   useEffect(() => {
     async function fetchData() {
@@ -109,6 +133,41 @@ export function LeadSourceDashboard() {
   // Calculate max stage value for chart scaling
   const maxStageValue = Math.max(
     ...filteredSources.map((s) => Math.max(...STAGE_KEYS.map((k) => s.stages[k]))),
+    1
+  );
+
+  // Source color map
+  const sourceColorMap = new Map<string, string>();
+  data.sources.forEach((s, i) => {
+    sourceColorMap.set(s.leadSource, SOURCE_COLORS[i % SOURCE_COLORS.length]);
+  });
+
+  // Drill-down helpers
+  function openSourceDrillDown(leadSource: string) {
+    const deals = data!.deals.filter((d) => d.leadSource === leadSource);
+    setDrillDown({ title: `${leadSource} — All Deals`, deals });
+  }
+
+  function openStageDrillDown(leadSource: string, stage: StageKey) {
+    const deals = data!.deals.filter(
+      (d) => d.leadSource === leadSource && d.stages[stage] !== null
+    );
+    setDrillDown({
+      title: `${leadSource} — ${STAGE_CONFIG[stage].label}`,
+      deals,
+    });
+  }
+
+  // Trend chart data
+  const trendSources = selectedSource
+    ? [selectedSource]
+    : data.sources.map((s) => s.leadSource);
+
+  const maxTrendValue = Math.max(
+    ...data.trend.map((w) => {
+      if (selectedSource) return w.sources[selectedSource] || 0;
+      return w.total;
+    }),
     1
   );
 
@@ -188,7 +247,7 @@ export function LeadSourceDashboard() {
         />
       </div>
 
-      {/* Grouped Bar Chart */}
+      {/* Grouped Bar Chart — Pipeline Progression */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Pipeline Progression by Source</h3>
 
@@ -205,7 +264,12 @@ export function LeadSourceDashboard() {
         {/* Chart */}
         <div className="flex items-end gap-4 h-56">
           {filteredSources.map((source) => (
-            <div key={source.leadSource} className="flex-1 flex flex-col items-center gap-1">
+            <button
+              key={source.leadSource}
+              className="flex-1 flex flex-col items-center gap-1 cursor-pointer hover:opacity-80 transition-opacity"
+              onClick={() => openSourceDrillDown(source.leadSource)}
+              title={`Click to view ${source.leadSource} deals`}
+            >
               <div className="w-full flex items-end justify-center gap-0.5 h-48">
                 {STAGE_KEYS.map((key) => (
                   <Bar
@@ -219,7 +283,7 @@ export function LeadSourceDashboard() {
               <div className="text-xs font-medium text-gray-600 text-center truncate w-full" title={source.leadSource}>
                 {source.leadSource}
               </div>
-            </div>
+            </button>
           ))}
         </div>
       </div>
@@ -248,11 +312,27 @@ export function LeadSourceDashboard() {
               {filteredSources.map((source) => (
                 <tr key={source.leadSource} className="hover:bg-gray-50">
                   <td className="px-4 py-3 font-medium text-gray-900">{source.leadSource}</td>
-                  <td className="px-4 py-3 text-right text-gray-700">{source.totalDeals}</td>
+                  <td className="px-4 py-3 text-right">
+                    <button
+                      className="text-gray-700 hover:text-indigo-600 hover:underline cursor-pointer font-medium"
+                      onClick={() => openSourceDrillDown(source.leadSource)}
+                    >
+                      {source.totalDeals}
+                    </button>
+                  </td>
                   <td className="px-4 py-3 text-right text-gray-700">{formatCurrency(source.totalAmount)}</td>
                   {STAGE_KEYS.map((key) => (
-                    <td key={key} className={`px-4 py-3 text-right ${STAGE_CONFIG[key].textColor}`}>
-                      {source.stages[key]}
+                    <td key={key} className="px-4 py-3 text-right">
+                      {source.stages[key] > 0 ? (
+                        <button
+                          className={`${STAGE_CONFIG[key].textColor} hover:underline cursor-pointer font-medium`}
+                          onClick={() => openStageDrillDown(source.leadSource, key)}
+                        >
+                          {source.stages[key]}
+                        </button>
+                      ) : (
+                        <span className="text-gray-300">0</span>
+                      )}
                     </td>
                   ))}
                   <td className="px-4 py-3 text-right font-medium text-gray-900">
@@ -264,6 +344,84 @@ export function LeadSourceDashboard() {
           </table>
         </div>
       </div>
+
+      {/* Deal Creation Trend */}
+      <div className="bg-white rounded-xl border border-gray-200 p-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Deal Creation Trend</h3>
+
+        {/* Legend */}
+        {!selectedSource && (
+          <div className="flex flex-wrap gap-4 mb-4">
+            {data.sources.map((s) => (
+              <div key={s.leadSource} className="flex items-center gap-1.5">
+                <div className={`w-3 h-3 rounded ${sourceColorMap.get(s.leadSource)}`} />
+                <span className="text-xs text-gray-600">{s.leadSource}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        {selectedSource && (
+          <div className="flex items-center gap-1.5 mb-4">
+            <div className={`w-3 h-3 rounded ${sourceColorMap.get(selectedSource)}`} />
+            <span className="text-xs text-gray-600">{selectedSource}</span>
+          </div>
+        )}
+
+        {/* Stacked bar chart */}
+        <div className="flex items-end gap-1 h-48">
+          {data.trend.map((week) => {
+            const weekTotal = selectedSource
+              ? (week.sources[selectedSource] || 0)
+              : week.total;
+
+            return (
+              <div key={week.weekStart} className="flex-1 flex flex-col items-center gap-1">
+                <div className="w-full flex flex-col-reverse items-center h-40 relative group">
+                  {selectedSource ? (
+                    <div
+                      className={`w-full rounded-t ${sourceColorMap.get(selectedSource) || 'bg-gray-400'}`}
+                      style={{
+                        height: `${weekTotal > 0 ? Math.max((weekTotal / maxTrendValue) * 100, 3) : 0}%`,
+                      }}
+                    />
+                  ) : (
+                    // Stacked bars for all sources
+                    trendSources.map((src) => {
+                      const count = week.sources[src] || 0;
+                      if (count === 0) return null;
+                      const height = (count / maxTrendValue) * 100;
+                      return (
+                        <div
+                          key={src}
+                          className={`w-full ${sourceColorMap.get(src) || 'bg-gray-400'}`}
+                          style={{ height: `${Math.max(height, 2)}%` }}
+                        />
+                      );
+                    })
+                  )}
+                  {/* Hover tooltip */}
+                  {weekTotal > 0 && (
+                    <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-xs px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition whitespace-nowrap z-10">
+                      {weekTotal}
+                    </div>
+                  )}
+                </div>
+                <div className="text-xs text-gray-500 whitespace-nowrap">
+                  {week.weekLabel}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Drill-Down Modal */}
+      <LeadSourceDealsModal
+        isOpen={drillDown !== null}
+        onClose={() => setDrillDown(null)}
+        title={drillDown?.title || ''}
+        deals={drillDown?.deals || []}
+      />
     </div>
   );
 }
