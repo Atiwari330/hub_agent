@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 
-export type DashboardTab = 'daily' | 'weekly' | 'quarterly' | 'intelligence';
+export type DashboardTab = 'daily' | 'weekly' | 'quarterly' | 'intelligence' | 'lead-sources';
 
 interface DashboardTabsProps {
   activeTab: DashboardTab;
@@ -14,6 +14,7 @@ const TABS: { id: DashboardTab; label: string; description: string }[] = [
   { id: 'weekly', label: 'Weekly', description: "The week in review" },
   { id: 'quarterly', label: 'Quarterly', description: "Are we on track?" },
   { id: 'intelligence', label: 'Intelligence', description: "Data-driven call insights" },
+  { id: 'lead-sources', label: 'Lead Sources', description: "Deal flow by source" },
 ];
 
 export function DashboardTabs({ activeTab, onTabChange }: DashboardTabsProps) {
