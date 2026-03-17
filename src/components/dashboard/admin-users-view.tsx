@@ -455,7 +455,7 @@ export function AdminUsersView() {
                         {duration !== null ? `${duration}s` : '-'}
                       </td>
                       <td className="px-4 py-2 text-xs text-gray-500 max-w-xs truncate">
-                        {run.error_message || '-'}
+                        {run.error_message || formatMetadata(run.metadata) || '-'}
                       </td>
                     </tr>
                   );
@@ -470,6 +470,26 @@ export function AdminUsersView() {
 }
 
 // --- Helpers ---
+
+function formatMetadata(metadata: Record<string, unknown> | null): string | null {
+  if (!metadata) return null;
+  // Format analyze-support results
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const results = metadata.results as any;
+  if (results?.trainer && results?.manager) {
+    const parts: string[] = [];
+    if (results.trainer.total > 0) {
+      parts.push(`Trainer: ${results.trainer.success}/${results.trainer.total}`);
+    }
+    if (results.manager.total > 0) {
+      parts.push(`Manager: ${results.manager.success}/${results.manager.total}`);
+    }
+    if (parts.length > 0) return parts.join(', ');
+  }
+  // Generic: show mode if present
+  if (metadata.mode) return `mode: ${metadata.mode}`;
+  return null;
+}
 
 function formatRelative(dateStr: string): string {
   const date = new Date(dateStr);
