@@ -1,4 +1,4 @@
-export type UserRole = 'vp_revops' | 'cmo' | 'ceo' | 'account_executive' | 'cs_manager';
+export type UserRole = 'vp_revops' | 'cmo' | 'ceo' | 'account_executive' | 'cs_manager' | 'support_agent';
 
 export interface UserWithPermissions {
   id: string;
@@ -206,6 +206,11 @@ export function getDefaultLandingPage(user: UserWithPermissions): string {
   // CS Manager goes to Support Manager Queue
   if (user.role === 'cs_manager') {
     return '/dashboard/queues/support-manager';
+  }
+
+  // Support Agent goes to Support Trainer Queue
+  if (user.role === 'support_agent') {
+    return '/dashboard/queues/support-trainer';
   }
 
   // CMO and CEO go to PPL Sequence Queue

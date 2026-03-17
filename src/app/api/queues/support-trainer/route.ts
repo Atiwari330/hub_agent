@@ -1,11 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerSupabaseClient } from '@/lib/supabase/client';
+import { createServerSupabaseClient, createServiceClient } from '@/lib/supabase/client';
 import { checkApiAuth } from '@/lib/auth/api';
 import { RESOURCES } from '@/lib/auth';
 import { getOwnerById } from '@/lib/hubspot/owners';
 import type { TicketTrainerAnalysis } from './analyze/analyze-core';
 
 // --- Types ---
+
+export interface TrainerReadBy {
+  userId: string;
+  displayName: string;
+  readAt: string;
+}
+
+export interface TrainerInaccuracyReport {
+  id: string;
+  userId: string;
+  displayName: string;
+  reason: string;
+  createdAt: string;
+  resolvedAt: string | null;
+  resolvedBy: string | null;
+}
 
 export interface SupportTrainerTicket {
   ticketId: string;
@@ -20,6 +36,9 @@ export interface SupportTrainerTicket {
   isClosed: boolean;
   linearTask: string | null;
   analysis: TicketTrainerAnalysis | null;
+  readBy: TrainerReadBy[];
+  commentCount: number;
+  inaccuracyReports: TrainerInaccuracyReport[];
 }
 
 export interface SupportTrainerResponse {
@@ -31,6 +50,12 @@ export interface SupportTrainerResponse {
     byDifficulty: { beginner: number; intermediate: number; advanced: number };
   };
   userRole: string;
+  currentUser: {
+    id: string;
+    displayName: string;
+    role: string;
+  };
+  teamMemberCount: number;
 }
 
 // --- Route Handler ---
@@ -110,6 +135,71 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Fetch collaboration data for all tickets
+    const readsByTicket: Record<string, TrainerReadBy[]> = {};
+    const commentCountByTicket: Record<string, number> = {};
+    const inaccuracyByTicket: Record<string, TrainerInaccuracyReport[]> = {};
+
+    if (ticketIds.length > 0) {
+      const serviceClient = createServiceClient();
+
+      // Read confirmations
+      const { data: reads } = await serviceClient
+        .from('trainer_read_confirmations')
+        .select('hubspot_ticket_id, user_id, read_at, user_profiles(display_name, email)')
+        .in('hubspot_ticket_id', ticketIds);
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      for (const r of (reads || []) as any[]) {
+        const tid = r.hubspot_ticket_id;
+        if (!readsByTicket[tid]) readsByTicket[tid] = [];
+        readsByTicket[tid].push({
+          userId: r.user_id,
+          displayName: r.user_profiles?.display_name || r.user_profiles?.email || 'Unknown',
+          readAt: r.read_at,
+        });
+      }
+
+      // Comment counts (fetch ticket IDs and count in JS)
+      const { data: allComments } = await serviceClient
+        .from('trainer_comments')
+        .select('hubspot_ticket_id')
+        .in('hubspot_ticket_id', ticketIds);
+
+      for (const c of allComments || []) {
+        commentCountByTicket[c.hubspot_ticket_id] = (commentCountByTicket[c.hubspot_ticket_id] || 0) + 1;
+      }
+
+      // Inaccuracy reports
+      const { data: reports } = await serviceClient
+        .from('trainer_inaccuracy_reports')
+        .select('id, hubspot_ticket_id, user_id, reason, resolved_at, resolved_by, created_at, user_profiles(display_name, email)')
+        .in('hubspot_ticket_id', ticketIds)
+        .order('created_at', { ascending: true });
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      for (const r of (reports || []) as any[]) {
+        const tid = r.hubspot_ticket_id;
+        if (!inaccuracyByTicket[tid]) inaccuracyByTicket[tid] = [];
+        inaccuracyByTicket[tid].push({
+          id: r.id,
+          userId: r.user_id,
+          displayName: r.user_profiles?.display_name || r.user_profiles?.email || 'Unknown',
+          reason: r.reason,
+          createdAt: r.created_at,
+          resolvedAt: r.resolved_at,
+          resolvedBy: r.resolved_by,
+        });
+      }
+    }
+
+    // Count team members with access to the trainer queue
+    const serviceClientForCount = createServiceClient();
+    const { count: teamMemberCount } = await serviceClientForCount
+      .from('user_permissions')
+      .select('*', { count: 'exact', head: true })
+      .eq('resource', 'queue:support-trainer');
+
     // Resolve owner names (DB first, HubSpot API fallback for support-only agents)
     const ownerIds = [...new Set(allTickets.map((t) => t.hubspot_owner_id).filter(Boolean))];
     const ownerMap: Record<string, string> = {};
@@ -154,6 +244,9 @@ export async function GET(request: NextRequest) {
         isClosed: ticket.is_closed || false,
         linearTask: ticket.linear_task || null,
         analysis: analyses[ticket.hubspot_ticket_id] || null,
+        readBy: readsByTicket[ticket.hubspot_ticket_id] || [],
+        commentCount: commentCountByTicket[ticket.hubspot_ticket_id] || 0,
+        inaccuracyReports: inaccuracyByTicket[ticket.hubspot_ticket_id] || [],
       };
     });
 
@@ -190,6 +283,12 @@ export async function GET(request: NextRequest) {
         byDifficulty,
       },
       userRole: currentUser.role,
+      currentUser: {
+        id: currentUser.id,
+        displayName: currentUser.displayName || currentUser.email,
+        role: currentUser.role,
+      },
+      teamMemberCount: teamMemberCount || 0,
     };
 
     return NextResponse.json(response);

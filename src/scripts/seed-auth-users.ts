@@ -80,10 +80,41 @@ const USERS = [
     permissions: ['portal'],
   },
   {
-    email: 'david@opusbehavioral.com', // Update with David's actual email
-    displayName: 'David',              // Update with David's full name
+    email: 'ddelacruz@opusbehavioral.com',
+    displayName: 'Davied Dela Cruz',
     role: 'cs_manager',
-    permissions: ['queue:support-manager'],
+    permissions: ['queue:support-trainer', 'queue:support-manager'],
+  },
+  // Support Agents — trainer queue only
+  {
+    email: 'hsalcedo@opusbehavioral.com',
+    displayName: 'Hanz Christian Salcedo',
+    role: 'support_agent',
+    permissions: ['queue:support-trainer'],
+  },
+  {
+    email: 'lpulido@opusbehavioral.com',
+    displayName: 'Louis Raphael Pulido',
+    role: 'support_agent',
+    permissions: ['queue:support-trainer'],
+  },
+  {
+    email: 'nreyes@opusbehavioral.com',
+    displayName: 'Nica',
+    role: 'support_agent',
+    permissions: ['queue:support-trainer'],
+  },
+  {
+    email: 'sdizon@opusbehavioral.com',
+    displayName: 'Sharmaine Dizon',
+    role: 'support_agent',
+    permissions: ['queue:support-trainer'],
+  },
+  {
+    email: 'ionyeka@opusbehavioral.com',
+    displayName: 'Winner Iluore',
+    role: 'support_agent',
+    permissions: ['queue:support-trainer'],
   },
 ];
 
