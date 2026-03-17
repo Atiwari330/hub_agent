@@ -18,7 +18,8 @@
     "enrich": "tsx src/scripts/enrich-domain.ts",
     "quality": "tsx src/scripts/run-support-quality.ts",
     "sop-audit": "tsx src/scripts/run-sop-audit.ts",
-    "rcm-audit": "tsx src/scripts/run-rcm-audit.ts"
+    "rcm-audit": "tsx src/scripts/run-rcm-audit.ts",
+    "policy-gaps": "tsx src/scripts/run-policy-gaps.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.2",
