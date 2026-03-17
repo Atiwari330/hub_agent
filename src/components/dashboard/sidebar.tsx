@@ -983,8 +983,8 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
                       className={`flex items-center py-2 text-sm transition-colors ${
                         isCollapsed
                           ? 'px-0 justify-center'
-                          : 'px-4'
-                      } rounded-lg ${
+                          : 'px-4 pl-14'
+                      } ${
                         isOnSupportTrainer
                           ? 'bg-indigo-600 text-white'
                           : 'text-slate-300 hover:bg-slate-800'
