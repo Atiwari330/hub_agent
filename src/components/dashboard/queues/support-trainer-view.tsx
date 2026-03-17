@@ -402,18 +402,6 @@ export function SupportTrainerView({ userRole }: { userRole: string }) {
 
         <div className="flex-1" />
 
-        {/* Difficulty filter */}
-        <select
-          value={difficultyFilter}
-          onChange={(e) => setDifficultyFilter(e.target.value as DifficultyFilter)}
-          className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white"
-        >
-          <option value="all">All Difficulty</option>
-          <option value="beginner">Beginner</option>
-          <option value="intermediate">Intermediate</option>
-          <option value="advanced">Advanced</option>
-        </select>
-
         {/* Refresh */}
         <button
           onClick={fetchData}
@@ -730,13 +718,6 @@ function TicketRow({
             </div>
           )}
 
-          {/* Difficulty badge */}
-          {a?.difficulty_level && (
-            <div className="shrink-0 ml-3">
-              <DifficultyBadge difficulty={a.difficulty_level} />
-            </div>
-          )}
-
           {/* Re-analyze / Analyze button (VP only) */}
           {userRole === 'vp_revops' && (
             <div className="shrink-0 ml-auto pl-3"
@@ -869,11 +850,6 @@ function TicketRow({
 
                 <div className="text-gray-500">Ball In Court</div>
                 <div className="text-gray-900">{ticket.ballInCourt || 'N/A'}</div>
-
-                <div className="text-gray-500">Difficulty Level</div>
-                <div className="text-gray-900">
-                  <DifficultyBadge difficulty={a.difficulty_level} />
-                </div>
 
                 <div className="text-gray-500">Confidence</div>
                 <div className="text-gray-900">{(a.confidence * 100).toFixed(0)}%</div>
