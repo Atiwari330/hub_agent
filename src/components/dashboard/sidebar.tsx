@@ -368,7 +368,9 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
           hasPermission(user, RESOURCES.QUEUE_DEAL_COACH) ||
           hasPermission(user, RESOURCES.QUEUE_DOMAIN_ENRICHMENT) ||
           hasPermission(user, RESOURCES.QUEUE_COMPLIANCE_RESEARCH) ||
-          hasPermission(user, RESOURCES.QUEUE_DEAL_HEALTH)) && (
+          hasPermission(user, RESOURCES.QUEUE_DEAL_HEALTH) ||
+          hasPermission(user, RESOURCES.QUEUE_SUPPORT_MANAGER) ||
+          hasPermission(user, RESOURCES.QUEUE_SUPPORT_TRAINER)) && (
         <div className="mt-4">
           {!isCollapsed && (
             <button
@@ -814,7 +816,9 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
                 hasPermission(user, RESOURCES.QUEUE_FOLLOW_UP) ||
                 hasPermission(user, RESOURCES.QUEUE_PITCH_QUEUE) ||
                 hasPermission(user, RESOURCES.QUEUE_SUPPORT_INTEL) ||
-                hasPermission(user, RESOURCES.QUEUE_RCM_AUDIT)) && (
+                hasPermission(user, RESOURCES.QUEUE_RCM_AUDIT) ||
+                hasPermission(user, RESOURCES.QUEUE_SUPPORT_MANAGER) ||
+                hasPermission(user, RESOURCES.QUEUE_SUPPORT_TRAINER)) && (
               <>
                 {!isCollapsed && (
                   <div className="px-4 pl-11 py-1.5 mt-2">

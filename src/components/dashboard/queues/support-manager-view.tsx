@@ -450,35 +450,37 @@ export function SupportManagerView({ userRole }: { userRole: string }) {
 
       {/* Controls */}
       <div className="flex flex-wrap items-center gap-3 mb-4">
-        {/* Analyze buttons */}
-        {!analyzing ? (
-          <>
-            {counts.unanalyzed > 0 && (
+        {/* Analyze buttons (VP only) */}
+        {userRole === 'vp_revops' && (
+          !analyzing ? (
+            <>
+              {counts.unanalyzed > 0 && (
+                <button
+                  onClick={() => handleBatchAnalyze(false)}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors"
+                >
+                  Analyze All ({counts.unanalyzed})
+                </button>
+              )}
+              {counts.analyzed > 0 && (
+                <button
+                  onClick={() => handleBatchAnalyze(true)}
+                  className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
+                >
+                  Re-analyze All ({counts.total})
+                </button>
+              )}
+            </>
+          ) : (
+            <div className="flex items-center gap-3">
               <button
-                onClick={() => handleBatchAnalyze(false)}
-                className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors"
+                onClick={handleCancel}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors"
               >
-                Analyze All ({counts.unanalyzed})
-              </button>
-            )}
-            {counts.analyzed > 0 && (
-              <button
-                onClick={() => handleBatchAnalyze(true)}
-                className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
-              >
-                Re-analyze All ({counts.total})
-              </button>
-            )}
-          </>
-        ) : (
-          <div className="flex items-center gap-3">
-            <button
-              onClick={handleCancel}
-              className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors"
-            >
-              Cancel
+                Cancel
             </button>
           </div>
+          )
         )}
 
         <div className="flex-1" />
@@ -692,37 +694,39 @@ function TicketRow({
             </div>
           )}
 
-          {/* Re-analyze / Analyze button */}
-          <div className="shrink-0 ml-auto pl-3"
-            onClick={(e) => e.stopPropagation()}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation(); }}
-          >
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                e.preventDefault();
-                onAnalyze();
-              }}
-              disabled={isAnalyzing}
-              className={`text-xs px-2.5 py-1 rounded transition-colors disabled:opacity-50 ${
-                a
-                  ? 'text-gray-400 hover:text-indigo-600 hover:bg-indigo-50'
-                  : 'bg-indigo-600 text-white hover:bg-indigo-700'
-              }`}
-              title={a ? 'Re-analyze this ticket' : 'Analyze this ticket'}
+          {/* Re-analyze / Analyze button (VP only) */}
+          {isVP && (
+            <div className="shrink-0 ml-auto pl-3"
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation(); }}
             >
-              {isAnalyzing ? (
-                <span className="flex items-center gap-1.5">
-                  <Spinner />
-                  <span>Analyzing...</span>
-                </span>
-              ) : a ? (
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-              ) : 'Analyze'}
-            </button>
-          </div>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  onAnalyze();
+                }}
+                disabled={isAnalyzing}
+                className={`text-xs px-2.5 py-1 rounded transition-colors disabled:opacity-50 ${
+                  a
+                    ? 'text-gray-400 hover:text-indigo-600 hover:bg-indigo-50'
+                    : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                }`}
+                title={a ? 'Re-analyze this ticket' : 'Analyze this ticket'}
+              >
+                {isAnalyzing ? (
+                  <span className="flex items-center gap-1.5">
+                    <Spinner />
+                    <span>Analyzing...</span>
+                  </span>
+                ) : a ? (
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                ) : 'Analyze'}
+              </button>
+            </div>
+          )}
 
           {/* Expand chevron */}
           <div className="w-6 shrink-0 flex justify-center ml-2">
@@ -946,14 +950,19 @@ function TicketRow({
       {isExpanded && !a && (
         <div className="px-6 pb-5 pt-3 bg-gray-50 border-t border-gray-100">
           <p className="text-sm text-gray-400 italic">
-            This ticket has not been analyzed yet.{' '}
-            <button
-              onClick={onAnalyze}
-              disabled={isAnalyzing}
-              className="text-indigo-600 hover:underline disabled:opacity-50"
-            >
-              {isAnalyzing ? 'Analyzing...' : 'Run analysis now'}
-            </button>
+            This ticket has not been analyzed yet.
+            {isVP && (
+              <>
+                {' '}
+                <button
+                  onClick={onAnalyze}
+                  disabled={isAnalyzing}
+                  className="text-indigo-600 hover:underline disabled:opacity-50"
+                >
+                  {isAnalyzing ? 'Analyzing...' : 'Run analysis now'}
+                </button>
+              </>
+            )}
           </p>
           <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-sm max-w-md">
             <div className="text-gray-500">Subject</div>
