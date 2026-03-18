@@ -83,6 +83,7 @@ Some tickets will include a CUSTOMER CONTEXT section in the ticket data with VIP
 
 YOUR JOB:
 Read all available context for this ticket — the conversation thread, engagement timeline, and any engineering escalation in Linear — and determine:
+**IMPORTANT**: If a LINEAR ENGINEERING CONTEXT section is present in the ticket data, that is definitive proof that an engineering escalation exists (a Linear ticket was created). Do NOT state "no engineering escalation" based on the conversation thread alone — the Linear ticket link is the source of truth for whether an escalation occurred.
 1. What is the core issue in one sentence?
 2. What specific action needs to happen next?
 3. Who needs to take that action?
@@ -150,7 +151,7 @@ FOLLOW_UP_CADENCE: [Who needs to be followed up with, how often, and what trigge
 URGENCY: [critical|high|medium|low]
 REASONING: [2-4 sentences explaining why this is the recommended next action. Reference specific evidence from the conversation, timeline, or Linear context. For Manager escalations, explain why this can't be handled at the agent level.]
 ENGAGEMENT_SUMMARY: [2-3 sentence recap of the conversation — who said what, what was tried, where things stand]
-LINEAR_SUMMARY: [If Linear context exists: 2-3 sentences about engineering status, last update, what they found. If no Linear context: "No engineering escalation."]
+LINEAR_SUMMARY: [Three cases — (1) If full Linear details are provided: 2-3 sentences about engineering status, last update, what they found. (2) If a Linear ticket is linked but full details were unavailable: Acknowledge the engineering escalation exists, note that details could not be retrieved, and recommend checking the Linear ticket directly. (3) If NO Linear ticket is linked at all: "No engineering escalation."]
 DAYS_SINCE_LAST_ACTIVITY: [Integer number of days since the last meaningful activity on this ticket, or 0 if today]
 LAST_ACTIVITY_BY: [Name or role of the person who last took action — e.g. "Support Agent", "Customer", "Engineering"]
 CONFIDENCE: [0.00-1.00]
@@ -393,7 +394,10 @@ ${linearContext.comments.length > 0
   ? linearContext.comments
       .map((c) => `[${c.createdAt.split('T')[0]}] ${c.author}: ${c.body}`)
       .join('\n\n')
-  : 'No comments yet.'}` : ''}${previousAnalysis ? `
+  : 'No comments yet.'}` : ticket.linear_task ? `
+
+LINEAR ENGINEERING CONTEXT:
+A Linear engineering ticket is linked to this support ticket (${ticket.linear_task}), confirming that an engineering escalation HAS occurred. The full Linear issue details could not be retrieved at this time, but the escalation exists. Do NOT state that there is no engineering escalation — check the Linear ticket directly for current status.` : ''}${previousAnalysis ? `
 
 PREVIOUS ANALYSIS (from ${previousAnalysis.analyzed_at}):
 - ISSUE_SUMMARY: ${previousAnalysis.issue_summary}
