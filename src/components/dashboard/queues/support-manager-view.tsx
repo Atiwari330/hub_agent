@@ -113,11 +113,12 @@ function AnalyzedTimestamp({ dateStr }: { dateStr: string }) {
 
 // --- Main Component ---
 
-export function SupportManagerView({ userRole }: { userRole: string }) {
+export function SupportManagerView({ userRole, canAnalyzeTicket }: { userRole: string; canAnalyzeTicket: boolean }) {
   const [previewRole, setPreviewRole] = useState<string | null>(null);
   const effectiveRole = previewRole || userRole;
   const isVP = effectiveRole === 'vp_revops';
   const isCSManager = effectiveRole === 'cs_manager';
+  const canAnalyze = isVP || (canAnalyzeTicket && !previewRole);
 
   const [data, setData] = useState<SupportManagerResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -584,6 +585,7 @@ export function SupportManagerView({ userRole }: { userRole: string }) {
               isAnalyzing={analyzingTickets.has(ticket.ticketId)}
               isVP={isVP}
               isCSManager={isCSManager}
+              canAnalyze={canAnalyze}
               onStatusChange={handleStatusChange}
               onDataRefresh={fetchData}
             />
@@ -618,6 +620,7 @@ function TicketRow({
   isAnalyzing,
   isVP,
   isCSManager,
+  canAnalyze,
   onStatusChange,
   onDataRefresh,
 }: {
@@ -628,6 +631,7 @@ function TicketRow({
   isAnalyzing: boolean;
   isVP: boolean;
   isCSManager: boolean;
+  canAnalyze: boolean;
   onStatusChange: (ticketId: string, status: string) => void;
   onDataRefresh: () => void;
 }) {
@@ -694,8 +698,8 @@ function TicketRow({
             </div>
           )}
 
-          {/* Re-analyze / Analyze button (VP only) */}
-          {isVP && (
+          {/* Re-analyze / Analyze button */}
+          {canAnalyze && (
             <div className="shrink-0 ml-auto pl-3"
               onClick={(e) => e.stopPropagation()}
               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation(); }}
@@ -951,7 +955,7 @@ function TicketRow({
         <div className="px-6 pb-5 pt-3 bg-gray-50 border-t border-gray-100">
           <p className="text-sm text-gray-400 italic">
             This ticket has not been analyzed yet.
-            {isVP && (
+            {canAnalyze && (
               <>
                 {' '}
                 <button

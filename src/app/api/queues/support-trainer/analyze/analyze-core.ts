@@ -45,7 +45,7 @@ export interface TicketTrainerAnalysis {
 }
 
 export type AnalyzeSupportTrainerResult =
-  | { success: true; analysis: TicketTrainerAnalysis }
+  | { success: true; analysis: TicketTrainerAnalysis; usage?: { inputTokens: number; outputTokens: number; totalTokens: number } }
   | { success: false; error: string; details?: string; statusCode?: number };
 
 // --- System Prompt ---
@@ -358,7 +358,15 @@ ${linearContext.comments.length > 0
       console.error('Error upserting trainer analysis:', upsertError);
     }
 
-    return { success: true, analysis: analysisData };
+    return {
+      success: true,
+      analysis: analysisData,
+      usage: result.totalUsage ? {
+        inputTokens: result.totalUsage.inputTokens ?? 0,
+        outputTokens: result.totalUsage.outputTokens ?? 0,
+        totalTokens: result.totalUsage.totalTokens ?? 0,
+      } : undefined,
+    };
   } catch (error) {
     console.error('Support trainer analysis error:', error);
     return {

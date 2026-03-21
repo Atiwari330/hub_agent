@@ -42,6 +42,7 @@ export const RESOURCES = {
   DEMO_TRACKER: 'demo_tracker',
   AE_HOME: 'ae_home',
   QUEUE_ENRICHMENT_VIEW: 'queue:enrichment-view',
+  ANALYZE_TICKET: 'analyze:ticket',
 } as const;
 
 export type Resource = (typeof RESOURCES)[keyof typeof RESOURCES];

@@ -83,7 +83,7 @@ function AnalyzedTimestamp({ dateStr }: { dateStr: string }) {
 
 // --- Main Component ---
 
-export function SupportTrainerView({ userRole }: { userRole: string }) {
+export function SupportTrainerView({ userRole, canAnalyzeTicket }: { userRole: string; canAnalyzeTicket: boolean }) {
   const [data, setData] = useState<SupportTrainerResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -469,6 +469,7 @@ export function SupportTrainerView({ userRole }: { userRole: string }) {
               onAnalyze={() => analyzeTicket(ticket.ticketId)}
               isAnalyzing={analyzingTickets.has(ticket.ticketId)}
               userRole={userRole}
+              canAnalyze={canAnalyzeTicket}
               currentUserId={data.currentUser?.id || ''}
               currentUserDisplayName={data.currentUser?.displayName || ''}
               teamMemberCount={data.teamMemberCount || 0}
@@ -512,6 +513,7 @@ function TicketRow({
   onAnalyze,
   isAnalyzing,
   userRole,
+  canAnalyze,
   currentUserId,
   currentUserDisplayName,
   teamMemberCount,
@@ -523,6 +525,7 @@ function TicketRow({
   onAnalyze: () => void;
   isAnalyzing: boolean;
   userRole: string;
+  canAnalyze: boolean;
   currentUserId: string;
   currentUserDisplayName: string;
   teamMemberCount: number;
@@ -718,8 +721,8 @@ function TicketRow({
             </div>
           )}
 
-          {/* Re-analyze / Analyze button (VP only) */}
-          {userRole === 'vp_revops' && (
+          {/* Re-analyze / Analyze button */}
+          {canAnalyze && (
             <div className="shrink-0 ml-auto pl-3"
               onClick={(e) => e.stopPropagation()}
               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation(); }}
@@ -1061,7 +1064,7 @@ function TicketRow({
         <div className="px-6 pb-5 pt-3 bg-gray-50 border-t border-gray-100">
           <p className="text-sm text-gray-400 italic">
             This ticket has not been analyzed yet.
-            {userRole === 'vp_revops' && (
+            {canAnalyze && (
               <>
                 {' '}
                 <button

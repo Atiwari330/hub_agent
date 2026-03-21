@@ -48,7 +48,7 @@ export interface TicketSupportManagerAnalysis {
 }
 
 export type AnalyzeSupportManagerResult =
-  | { success: true; analysis: TicketSupportManagerAnalysis }
+  | { success: true; analysis: TicketSupportManagerAnalysis; usage?: { inputTokens: number; outputTokens: number; totalTokens: number } }
   | { success: false; error: string; details?: string; statusCode?: number };
 
 // --- System Prompt ---
@@ -484,7 +484,15 @@ PREVIOUS ANALYSIS (from ${previousAnalysis.analyzed_at}):
       console.error('Error upserting support manager analysis:', upsertError);
     }
 
-    return { success: true, analysis: analysisData };
+    return {
+      success: true,
+      analysis: analysisData,
+      usage: result.totalUsage ? {
+        inputTokens: result.totalUsage.inputTokens ?? 0,
+        outputTokens: result.totalUsage.outputTokens ?? 0,
+        totalTokens: result.totalUsage.totalTokens ?? 0,
+      } : undefined,
+    };
   } catch (error) {
     console.error('Support manager analysis error:', error);
     return {

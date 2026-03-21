@@ -1,5 +1,6 @@
 import { requireAuth } from '@/lib/auth';
 import { AdminUsersView } from '@/components/dashboard/admin-users-view';
+import { AdminAnalysisUsage } from '@/components/dashboard/admin-analysis-usage';
 
 export default async function AdminPage() {
   const user = await requireAuth();
@@ -10,5 +11,10 @@ export default async function AdminPage() {
     redirect('/unauthorized');
   }
 
-  return <AdminUsersView />;
+  return (
+    <div className="space-y-6">
+      <AdminUsersView />
+      <AdminAnalysisUsage />
+    </div>
+  );
 }
