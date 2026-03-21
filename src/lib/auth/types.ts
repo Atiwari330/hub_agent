@@ -40,6 +40,8 @@ export const RESOURCES = {
   PORTAL: 'portal',
   HOT_TRACKER: 'hot_tracker',
   DEMO_TRACKER: 'demo_tracker',
+  AE_HOME: 'ae_home',
+  QUEUE_ENRICHMENT_VIEW: 'queue:enrichment-view',
 } as const;
 
 export type Resource = (typeof RESOURCES)[keyof typeof RESOURCES];
@@ -119,6 +121,11 @@ export function getResourceFromPath(pathname: string): Resource | null {
   if (pathname.includes('/queues/deal-intelligence'))
     return RESOURCES.QUEUE_DEAL_HEALTH;
 
+  // AE dashboard pages
+  if (pathname.includes('/dashboard/home')) return RESOURCES.AE_HOME;
+  if (pathname.includes('/dashboard/my-enrichment')) return RESOURCES.QUEUE_ENRICHMENT_VIEW;
+  if (pathname.includes('/dashboard/my-compliance')) return RESOURCES.QUEUE_ENRICHMENT_VIEW;
+
   // Hot Tracker
   if (pathname.includes('/dashboard/hot-tracker')) return RESOURCES.HOT_TRACKER;
 
@@ -131,6 +138,10 @@ export function getResourceFromPath(pathname: string): Resource | null {
   // Dashboard
   if (pathname === '/dashboard' || pathname === '/dashboard/')
     return RESOURCES.DASHBOARD;
+
+  // AE read-only API routes
+  if (pathname.includes('/api/my-enrichment')) return RESOURCES.QUEUE_ENRICHMENT_VIEW;
+  if (pathname.includes('/api/my-compliance')) return RESOURCES.QUEUE_ENRICHMENT_VIEW;
 
   // API routes
   if (pathname.includes('/api/portal')) return RESOURCES.PORTAL;
@@ -198,9 +209,9 @@ export function getDefaultLandingPage(user: UserWithPermissions): string {
     return '/dashboard';
   }
 
-  // Account Executives go to their portal
+  // Account Executives go to their dashboard home
   if (user.role === 'account_executive') {
-    return '/portal';
+    return '/dashboard/home';
   }
 
   // CS Manager goes to Support Manager Queue

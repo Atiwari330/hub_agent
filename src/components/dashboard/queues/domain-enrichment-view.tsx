@@ -98,7 +98,7 @@ const STATUS_ORDER: Record<string, number> = { enriched: 3, failed: 2, free_emai
 
 // --- Main Component ---
 
-export function DomainEnrichmentView() {
+export function DomainEnrichmentView({ readOnly = false, apiBasePath = '/api/queues/domain-enrichment' }: { readOnly?: boolean; apiBasePath?: string } = {}) {
   const [data, setData] = useState<DomainEnrichmentQueueResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -136,7 +136,7 @@ export function DomainEnrichmentView() {
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/queues/domain-enrichment');
+      const response = await fetch(apiBasePath);
       if (!response.ok) throw new Error('Failed to fetch domain enrichment data');
       const json: DomainEnrichmentQueueResponse = await response.json();
       setData(json);
@@ -146,7 +146,7 @@ export function DomainEnrichmentView() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [apiBasePath]);
 
   useEffect(() => {
     fetchData();
@@ -487,7 +487,7 @@ export function DomainEnrichmentView() {
       {/* Action Buttons Row */}
       {!loading && data && data.counts.total > 0 && (
         <div className="flex flex-wrap items-center gap-3 mb-4">
-          {data.counts.unenriched > 0 && !isBatchEnriching && (
+          {!readOnly && data.counts.unenriched > 0 && !isBatchEnriching && (
             <button
               onClick={handleEnrichUnenriched}
               className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
@@ -499,7 +499,7 @@ export function DomainEnrichmentView() {
             </button>
           )}
 
-          {!isBatchEnriching && processedDeals.filter((d) => d.enrichment && d.enrichment.status !== 'pending').length > 0 && (
+          {!readOnly && !isBatchEnriching && processedDeals.filter((d) => d.enrichment && d.enrichment.status !== 'pending').length > 0 && (
             <button
               onClick={handleReenrichFiltered}
               className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-white border border-indigo-300 text-indigo-600 hover:bg-indigo-50 transition-colors"
@@ -512,7 +512,7 @@ export function DomainEnrichmentView() {
           )}
 
           {/* Batch progress */}
-          {isBatchEnriching && batchProgress && (
+          {!readOnly && isBatchEnriching && batchProgress && (
             <div className="flex items-center gap-4 px-4 py-2 bg-indigo-50 rounded-lg border border-indigo-200">
               <div className="flex items-center gap-2">
                 <svg className="w-4 h-4 animate-spin text-indigo-600" fill="none" viewBox="0 0 24 24">
@@ -541,16 +541,18 @@ export function DomainEnrichmentView() {
 
           {/* Filters */}
           <div className="flex items-center gap-2">
-            <select
-              value={aeFilter}
-              onChange={(e) => setAeFilter(e.target.value)}
-              className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white"
-            >
-              <option value="all">All AEs</option>
-              {aeOptions.map((name) => (
-                <option key={name} value={name}>{name}</option>
-              ))}
-            </select>
+            {!readOnly && (
+              <select
+                value={aeFilter}
+                onChange={(e) => setAeFilter(e.target.value)}
+                className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white"
+              >
+                <option value="all">All AEs</option>
+                {aeOptions.map((name) => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
+              </select>
+            )}
             <select
               value={stageFilter}
               onChange={(e) => setStageFilter(e.target.value)}
@@ -676,7 +678,7 @@ export function DomainEnrichmentView() {
                       Enriched <SortIcon active={sortColumn === 'analyzedAt'} direction={sortDirection} />
                     </button>
                   </th>
-                  <th className="px-3 py-3 text-center font-medium text-gray-700">Action</th>
+                  {!readOnly && <th className="px-3 py-3 text-center font-medium text-gray-700">Action</th>}
                 </tr>
               </thead>
               <tbody>
@@ -737,38 +739,40 @@ export function DomainEnrichmentView() {
                         <td className="px-3 py-3 text-gray-500 text-xs">
                           {formatRelativeTime(deal.enrichment?.analyzedAt || null)}
                         </td>
-                        <td className="px-3 py-3 text-center" onClick={(e) => e.stopPropagation()}>
-                          {isEnriching ? (
-                            <span className="inline-flex items-center gap-1 text-xs text-indigo-600">
-                              <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                              </svg>
-                              Enriching...
-                            </span>
-                          ) : deal.enrichment?.status === 'enriched' ? (
-                            <button
-                              onClick={() => enrichDeal(deal, true)}
-                              className="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
-                            >
-                              Re-enrich
-                            </button>
-                          ) : (
-                            <button
-                              onClick={() => enrichDeal(deal)}
-                              className="inline-flex items-center gap-1 px-3 py-1 text-xs font-medium rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
-                            >
-                              Enrich
-                            </button>
-                          )}
-                        </td>
+                        {!readOnly && (
+                          <td className="px-3 py-3 text-center" onClick={(e) => e.stopPropagation()}>
+                            {isEnriching ? (
+                              <span className="inline-flex items-center gap-1 text-xs text-indigo-600">
+                                <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                </svg>
+                                Enriching...
+                              </span>
+                            ) : deal.enrichment?.status === 'enriched' ? (
+                              <button
+                                onClick={() => enrichDeal(deal, true)}
+                                className="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+                              >
+                                Re-enrich
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => enrichDeal(deal)}
+                                className="inline-flex items-center gap-1 px-3 py-1 text-xs font-medium rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
+                              >
+                                Enrich
+                              </button>
+                            )}
+                          </td>
+                        )}
                       </tr>
 
                       {/* Expandable Row */}
                       {isExpanded && (
                         <tr>
-                          <td colSpan={11} className="px-6 py-4 bg-gray-50/50 border-b border-gray-200">
-                            <ExpandedContent deal={deal} onEnrich={() => enrichDeal(deal)} isEnriching={isEnriching} />
+                          <td colSpan={readOnly ? 10 : 11} className="px-6 py-4 bg-gray-50/50 border-b border-gray-200">
+                            <ExpandedContent deal={deal} onEnrich={() => enrichDeal(deal)} isEnriching={isEnriching} readOnly={readOnly} apiBasePath={apiBasePath} />
                           </td>
                         </tr>
                       )}
@@ -802,7 +806,7 @@ interface DomainDetail {
   enriched_at: string | null;
 }
 
-function ExpandedContent({ deal, onEnrich, isEnriching }: { deal: DomainEnrichmentDeal; onEnrich: () => void; isEnriching: boolean }) {
+function ExpandedContent({ deal, onEnrich, isEnriching, readOnly = false, apiBasePath = '/api/queues/domain-enrichment' }: { deal: DomainEnrichmentDeal; onEnrich: () => void; isEnriching: boolean; readOnly?: boolean; apiBasePath?: string }) {
   const [details, setDetails] = useState<DomainDetail | null>(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
 
@@ -810,7 +814,7 @@ function ExpandedContent({ deal, onEnrich, isEnriching }: { deal: DomainEnrichme
     if (deal.enrichment?.status === 'enriched' && deal.enrichment.domain) {
       setLoadingDetails(true);
       // Fetch full domain data
-      fetch(`/api/queues/domain-enrichment/details?domain=${encodeURIComponent(deal.enrichment.domain)}`)
+      fetch(`${apiBasePath}/details?domain=${encodeURIComponent(deal.enrichment.domain)}`)
         .then((res) => res.json())
         .then((data) => setDetails(data))
         .catch(() => {/* ignore */})
@@ -822,8 +826,8 @@ function ExpandedContent({ deal, onEnrich, isEnriching }: { deal: DomainEnrichme
   if (!deal.enrichment || deal.enrichment.status === 'pending') {
     return (
       <div className="text-sm text-gray-500 flex items-center gap-3">
-        <span>Click Enrich to scrape and analyze the company website.</span>
-        {!isEnriching && (
+        <span>{readOnly ? 'This deal has not been enriched yet.' : 'Click Enrich to scrape and analyze the company website.'}</span>
+        {!readOnly && !isEnriching && (
           <button
             onClick={onEnrich}
             className="inline-flex items-center gap-1 px-3 py-1 text-xs font-medium rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"

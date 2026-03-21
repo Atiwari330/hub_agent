@@ -204,6 +204,10 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
   const isOnDemoTracker = pathname === '/dashboard/demo-tracker';
   // Admin
   const isOnAdmin = pathname === '/dashboard/admin';
+  // AE pages
+  const isOnAEHome = pathname === '/dashboard/home';
+  const isOnMyEnrichment = pathname === '/dashboard/my-enrichment';
+  const isOnMyCompliance = pathname === '/dashboard/my-compliance';
 
   return (
     <aside className={`fixed left-0 top-0 h-screen bg-slate-900 text-slate-100 flex flex-col transition-all duration-300 ${isCollapsed ? 'w-16' : 'w-64'}`}>
@@ -226,6 +230,83 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto py-4 scrollbar-thin">
+        {/* AE Home Link */}
+        {hasPermission(user, RESOURCES.AE_HOME) && (
+          <>
+            <div className="mb-2">
+              <Link
+                href="/dashboard/home"
+                className={`flex items-center gap-3 py-2.5 text-sm font-medium transition-colors ${isCollapsed ? 'px-0 justify-center' : 'px-4'} ${
+                  isOnAEHome
+                    ? 'bg-indigo-600 text-white'
+                    : 'text-slate-300 hover:bg-slate-800'
+                }`}
+                title={isCollapsed ? 'Home' : undefined}
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                </svg>
+                {!isCollapsed && <span>Home</span>}
+              </Link>
+            </div>
+            {!isCollapsed && (
+              <div className="px-4 py-2">
+                <div className="border-t border-slate-700"></div>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* AE Research Section */}
+        {hasPermission(user, RESOURCES.QUEUE_ENRICHMENT_VIEW) && (
+          <>
+            {!isCollapsed && (
+              <div className="px-4 pt-2 pb-1">
+                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Research</span>
+              </div>
+            )}
+            <ul className="space-y-0.5">
+              <li>
+                <Link
+                  href="/dashboard/my-enrichment"
+                  className={`flex items-center gap-3 py-2 text-sm transition-colors ${isCollapsed ? 'px-0 justify-center' : 'px-4 pl-6'} ${
+                    isOnMyEnrichment
+                      ? 'bg-indigo-600 text-white'
+                      : 'text-slate-300 hover:bg-slate-800'
+                  }`}
+                  title={isCollapsed ? 'Domain Enrichment' : undefined}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+                  </svg>
+                  {!isCollapsed && <span>Domain Enrichment</span>}
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/dashboard/my-compliance"
+                  className={`flex items-center gap-3 py-2 text-sm transition-colors ${isCollapsed ? 'px-0 justify-center' : 'px-4 pl-6'} ${
+                    isOnMyCompliance
+                      ? 'bg-indigo-600 text-white'
+                      : 'text-slate-300 hover:bg-slate-800'
+                  }`}
+                  title={isCollapsed ? 'Compliance Research' : undefined}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                  </svg>
+                  {!isCollapsed && <span>Compliance Research</span>}
+                </Link>
+              </li>
+            </ul>
+            {!isCollapsed && (
+              <div className="px-4 py-2">
+                <div className="border-t border-slate-700"></div>
+              </div>
+            )}
+          </>
+        )}
+
         {/* Mission Control Link - only show if user has dashboard permission */}
         {hasPermission(user, RESOURCES.DASHBOARD) && (
           <>
@@ -1047,27 +1128,29 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
       <div className={`border-t border-slate-700 flex-shrink-0 ${isCollapsed ? 'p-2' : 'p-3'}`}>
         {isCollapsed ? (
           <div className="flex flex-col items-center gap-3">
-            {/* Sync button when collapsed - show for all users */}
-            <button
-              onClick={handleSync}
-              disabled={syncing}
-              className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-700 rounded transition-colors disabled:opacity-50"
-              title={syncing ? 'Syncing...' : `Sync with HubSpot (${formatRelativeTime(lastSync)})`}
-            >
-              <svg
-                className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
+            {/* Sync button when collapsed - show for VP only */}
+            {user.role === 'vp_revops' && (
+              <button
+                onClick={handleSync}
+                disabled={syncing}
+                className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-700 rounded transition-colors disabled:opacity-50"
+                title={syncing ? 'Syncing...' : `Sync with HubSpot (${formatRelativeTime(lastSync)})`}
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                />
-              </svg>
-            </button>
+                <svg
+                  className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                  />
+                </svg>
+              </button>
+            )}
             {/* Logout button when collapsed */}
             <a
               href="/api/auth/logout"
@@ -1113,27 +1196,29 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
                   )}
                 </div>
               </div>
-              {/* Sync button */}
-              <button
-                onClick={handleSync}
-                disabled={syncing}
-                className="flex-shrink-0 p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-700 rounded transition-colors disabled:opacity-50"
-                title="Sync with HubSpot"
-              >
-                <svg
-                  className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
+              {/* Sync button - VP only */}
+              {user.role === 'vp_revops' && (
+                <button
+                  onClick={handleSync}
+                  disabled={syncing}
+                  className="flex-shrink-0 p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-700 rounded transition-colors disabled:opacity-50"
+                  title="Sync with HubSpot"
                 >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                  />
-                </svg>
-              </button>
+                  <svg
+                    className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                    />
+                  </svg>
+                </button>
+              )}
             </div>
 
             {/* User info and logout */}

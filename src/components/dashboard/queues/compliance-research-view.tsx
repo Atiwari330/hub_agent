@@ -100,9 +100,11 @@ const STATUS_ORDER: Record<string, number> = { completed: 3, failed: 2, research
 function ComplianceDetailModal({
   domain,
   onClose,
+  apiBasePath = '/api/queues/compliance-research',
 }: {
   domain: string;
   onClose: () => void;
+  apiBasePath?: string;
 }) {
   const [details, setDetails] = useState<ComplianceResearchDetails | null>(null);
   const [loading, setLoading] = useState(true);
@@ -114,7 +116,7 @@ function ComplianceDetailModal({
   useEffect(() => {
     async function fetchDetails() {
       try {
-        const res = await fetch(`/api/queues/compliance-research/details?domain=${encodeURIComponent(domain)}`);
+        const res = await fetch(`${apiBasePath}/details?domain=${encodeURIComponent(domain)}`);
         if (!res.ok) throw new Error('Failed to fetch details');
         const data: ComplianceResearchDetails = await res.json();
         setDetails(data);
@@ -440,7 +442,7 @@ function ComplianceDetailModal({
 
 // --- Main Component ---
 
-export function ComplianceResearchView() {
+export function ComplianceResearchView({ readOnly = false, apiBasePath = '/api/queues/compliance-research' }: { readOnly?: boolean; apiBasePath?: string } = {}) {
   const [data, setData] = useState<ComplianceResearchQueueResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -481,7 +483,7 @@ export function ComplianceResearchView() {
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/queues/compliance-research');
+      const response = await fetch(apiBasePath);
       if (!response.ok) throw new Error('Failed to fetch compliance research data');
       const json: ComplianceResearchQueueResponse = await response.json();
       setData(json);
@@ -491,7 +493,7 @@ export function ComplianceResearchView() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [apiBasePath]);
 
   useEffect(() => {
     fetchData();
@@ -820,7 +822,7 @@ export function ComplianceResearchView() {
       {!loading && data && data.counts.total > 0 && (
         <div className="flex flex-wrap items-center gap-3 mb-4">
           {/* Batch Actions */}
-          {!isBatchResearching && (
+          {!readOnly && !isBatchResearching && (
             <>
               {data.counts.unresearched > 0 && (
                 <button
@@ -842,7 +844,7 @@ export function ComplianceResearchView() {
           )}
 
           {/* Batch Progress */}
-          {isBatchResearching && batchProgress && (
+          {!readOnly && isBatchResearching && batchProgress && (
             <div className="flex items-center gap-3 flex-1">
               <div className="flex-1">
                 <div className="flex justify-between text-sm text-gray-600 mb-1">
@@ -881,16 +883,18 @@ export function ComplianceResearchView() {
           />
 
           {/* AE Filter */}
-          <select
-            value={aeFilter}
-            onChange={(e) => setAeFilter(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          >
-            <option value="all">All AEs</option>
-            {aeOptions.map((name) => (
-              <option key={name} value={name}>{name}</option>
-            ))}
-          </select>
+          {!readOnly && (
+            <select
+              value={aeFilter}
+              onChange={(e) => setAeFilter(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              <option value="all">All AEs</option>
+              {aeOptions.map((name) => (
+                <option key={name} value={name}>{name}</option>
+              ))}
+            </select>
+          )}
 
           {/* Clear Filters */}
           {hasActiveFilters && (
@@ -931,14 +935,16 @@ export function ComplianceResearchView() {
             <table className="w-full">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-200">
-                  <th className="px-3 py-3 text-left">
-                    <input
-                      type="checkbox"
-                      checked={selectedDeals.size === processedDeals.length && processedDeals.length > 0}
-                      onChange={toggleSelectAll}
-                      className="rounded border-gray-300"
-                    />
-                  </th>
+                  {!readOnly && (
+                    <th className="px-3 py-3 text-left">
+                      <input
+                        type="checkbox"
+                        checked={selectedDeals.size === processedDeals.length && processedDeals.length > 0}
+                        onChange={toggleSelectAll}
+                        className="rounded border-gray-300"
+                      />
+                    </th>
+                  )}
                   <th className="px-3 py-3 text-left">
                     <button onClick={() => handleSort('status')} className="flex items-center gap-1 text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Status <SortIcon active={sortColumn === 'status'} direction={sortDirection} />
@@ -975,9 +981,11 @@ export function ComplianceResearchView() {
                       Researched <SortIcon active={sortColumn === 'researchedAt'} direction={sortDirection} />
                     </button>
                   </th>
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Action
-                  </th>
+                  {!readOnly && (
+                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Action
+                    </th>
+                  )}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -990,14 +998,16 @@ export function ComplianceResearchView() {
                       key={deal.dealId}
                       className={`hover:bg-gray-50 transition-colors ${isSelected ? 'bg-indigo-50' : ''}`}
                     >
-                      <td className="px-3 py-3">
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() => toggleSelect(deal.dealId)}
-                          className="rounded border-gray-300"
-                        />
-                      </td>
+                      {!readOnly && (
+                        <td className="px-3 py-3">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleSelect(deal.dealId)}
+                            className="rounded border-gray-300"
+                          />
+                        </td>
+                      )}
                       <td className="px-3 py-3">
                         <ResearchStatusBadge status={deal.research?.status || null} />
                         {deal.research?.confidenceScore !== undefined && deal.research?.confidenceScore !== null && (
@@ -1053,42 +1063,55 @@ export function ComplianceResearchView() {
                           ? formatRelativeTime(deal.research.researchedAt)
                           : '-'}
                       </td>
-                      <td className="px-3 py-3">
-                        <div className="flex items-center gap-2">
-                          {deal.research?.status === 'completed' ? (
-                            <>
-                              <button
-                                onClick={() => deal.domain && setDetailDomain(deal.domain)}
-                                className="text-xs text-indigo-600 hover:underline font-medium"
-                              >
-                                View
-                              </button>
-                              <button
-                                onClick={() => researchDeal(deal, true)}
-                                disabled={isResearching || isBatchResearching}
-                                className="text-xs text-gray-500 hover:text-gray-700 disabled:opacity-50"
-                              >
-                                Re-run
-                              </button>
-                            </>
-                          ) : (
+                      {readOnly ? (
+                        deal.research?.status === 'completed' && (
+                          <td className="px-3 py-3">
                             <button
-                              onClick={() => researchDeal(deal)}
-                              disabled={isResearching || isBatchResearching}
-                              className="px-3 py-1.5 bg-indigo-600 text-white text-xs font-medium rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50"
+                              onClick={() => deal.domain && setDetailDomain(deal.domain)}
+                              className="text-xs text-indigo-600 hover:underline font-medium"
                             >
-                              {isResearching ? (
-                                <span className="flex items-center gap-1.5">
-                                  <span className="animate-spin h-3 w-3 border-2 border-white border-t-transparent rounded-full" />
-                                  Researching...
-                                </span>
-                              ) : (
-                                'Research'
-                              )}
+                              View
                             </button>
-                          )}
-                        </div>
-                      </td>
+                          </td>
+                        )
+                      ) : (
+                        <td className="px-3 py-3">
+                          <div className="flex items-center gap-2">
+                            {deal.research?.status === 'completed' ? (
+                              <>
+                                <button
+                                  onClick={() => deal.domain && setDetailDomain(deal.domain)}
+                                  className="text-xs text-indigo-600 hover:underline font-medium"
+                                >
+                                  View
+                                </button>
+                                <button
+                                  onClick={() => researchDeal(deal, true)}
+                                  disabled={isResearching || isBatchResearching}
+                                  className="text-xs text-gray-500 hover:text-gray-700 disabled:opacity-50"
+                                >
+                                  Re-run
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                onClick={() => researchDeal(deal)}
+                                disabled={isResearching || isBatchResearching}
+                                className="px-3 py-1.5 bg-indigo-600 text-white text-xs font-medium rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50"
+                              >
+                                {isResearching ? (
+                                  <span className="flex items-center gap-1.5">
+                                    <span className="animate-spin h-3 w-3 border-2 border-white border-t-transparent rounded-full" />
+                                    Researching...
+                                  </span>
+                                ) : (
+                                  'Research'
+                                )}
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   );
                 })}
@@ -1106,6 +1129,7 @@ export function ComplianceResearchView() {
         <ComplianceDetailModal
           domain={detailDomain}
           onClose={() => setDetailDomain(null)}
+          apiBasePath={apiBasePath}
         />
       )}
 
