@@ -23,7 +23,7 @@
     },
     {
       "path": "/api/cron/sync-tickets",
-      "schedule": "45 2 * * *"
+      "schedule": "0 * * * *"
     },
     {
       "path": "/api/cron/hot-tracker",
@@ -34,12 +34,8 @@
       "schedule": "0 4 * * *"
     },
     {
-      "path": "/api/cron/analyze-support",
-      "schedule": "0 * * * *"
-    },
-    {
       "path": "/api/cron/analyze-support?mode=full",
-      "schedule": "0 8 * * *"
+      "schedule": "10 * * * *"
     }
   ]
 }
