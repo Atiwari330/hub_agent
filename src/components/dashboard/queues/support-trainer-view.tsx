@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { getHubSpotTicketUrl } from '@/lib/hubspot/urls';
 import type { SupportTrainerResponse, SupportTrainerTicket } from '@/app/api/queues/support-trainer/route';
 
@@ -84,10 +85,12 @@ function AnalyzedTimestamp({ dateStr }: { dateStr: string }) {
 // --- Main Component ---
 
 export function SupportTrainerView({ userRole, canAnalyzeTicket }: { userRole: string; canAnalyzeTicket: boolean }) {
+  const searchParams = useSearchParams();
+  const deepLinkTicketId = searchParams.get('ticket');
   const [data, setData] = useState<SupportTrainerResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [expandedTicket, setExpandedTicket] = useState<string | null>(null);
+  const [expandedTicket, setExpandedTicket] = useState<string | null>(deepLinkTicketId);
   const [difficultyFilter, setDifficultyFilter] = useState<DifficultyFilter>('all');
   const [sortColumn, setSortColumn] = useState<SortColumn>('difficulty');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
@@ -95,6 +98,7 @@ export function SupportTrainerView({ userRole, canAnalyzeTicket }: { userRole: s
   const [analyzingTickets, setAnalyzingTickets] = useState<Set<string>>(new Set());
   const [progress, setProgress] = useState<{ current: number; total: number; currentTicket: string } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const deepLinkScrolled = useRef(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -114,6 +118,17 @@ export function SupportTrainerView({ userRole, canAnalyzeTicket }: { userRole: s
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Scroll to deep-linked ticket after data loads
+  useEffect(() => {
+    if (deepLinkTicketId && data && !deepLinkScrolled.current) {
+      deepLinkScrolled.current = true;
+      requestAnimationFrame(() => {
+        const el = document.getElementById(`ticket-${deepLinkTicketId}`);
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      });
+    }
+  }, [deepLinkTicketId, data]);
 
   // Recompute counts from tickets array
   const recomputeCounts = useCallback((tickets: SupportTrainerTicket[]): SupportTrainerResponse['counts'] => {
@@ -648,8 +663,19 @@ function TicketRow({
     }
   };
 
+  const [linkCopied, setLinkCopied] = useState(false);
+
+  const handleCopyLink = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const url = `${window.location.origin}/dashboard/queues/support-trainer?ticket=${ticket.ticketId}`;
+    navigator.clipboard.writeText(url).then(() => {
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
+    });
+  };
+
   return (
-    <div className="border-b border-gray-200 last:border-0">
+    <div id={`ticket-${ticket.ticketId}`} className="border-b border-gray-200 last:border-0">
       {/* Collapsed row */}
       <div
         role="button"
@@ -668,6 +694,11 @@ function TicketRow({
           ) : (
             <div className="w-1.5 h-8 rounded-sm shrink-0 mr-4 bg-gray-200" />
           )}
+
+          {/* Ticket ID */}
+          <span className="text-[10px] text-gray-400 font-mono shrink-0 mr-2 w-14" title={`Ticket #${ticket.ticketId}`}>
+            #{ticket.ticketId}
+          </span>
 
           {/* Company */}
           <div className="w-56 shrink-0 text-sm font-semibold text-gray-900 truncate">
@@ -755,6 +786,25 @@ function TicketRow({
             </div>
           )}
 
+          {/* Copy link */}
+          <div className="shrink-0 ml-2" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation(); }}>
+            <button
+              onClick={handleCopyLink}
+              className="text-gray-300 hover:text-indigo-500 transition-colors p-1 rounded hover:bg-indigo-50"
+              title="Copy link to this ticket"
+            >
+              {linkCopied ? (
+                <svg className="w-3.5 h-3.5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              ) : (
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                </svg>
+              )}
+            </button>
+          </div>
+
           {/* Expand chevron */}
           <div className="w-6 shrink-0 flex justify-center ml-2">
             <svg
@@ -834,7 +884,10 @@ function TicketRow({
 
             {/* Right column: Metadata + Collaboration */}
             <div className="space-y-3">
-              <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Ticket Details</h4>
+              <div className="flex items-center gap-2">
+                <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Ticket Details</h4>
+                <span className="text-xs font-mono text-gray-400">#{ticket.ticketId}</span>
+              </div>
               <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
                 <div className="text-gray-500">Subject</div>
                 <div className="text-gray-900 truncate" title={a.ticket_subject || undefined}>{a.ticket_subject || 'N/A'}</div>
