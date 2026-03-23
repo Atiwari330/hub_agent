@@ -696,7 +696,7 @@ function TicketRow({
           )}
 
           {/* Ticket ID */}
-          <span className="text-[10px] text-gray-400 font-mono shrink-0 mr-2 w-14" title={`Ticket #${ticket.ticketId}`}>
+          <span className="text-[10px] text-gray-400 font-mono shrink-0 mr-3" title={`Ticket #${ticket.ticketId}`}>
             #{ticket.ticketId}
           </span>
 
