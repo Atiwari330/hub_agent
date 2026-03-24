@@ -14,14 +14,6 @@
       "schedule": "0 3 * * *"
     },
     {
-      "path": "/api/cron/daily-scorecard",
-      "schedule": "0 12 * * 1-5"
-    },
-    {
-      "path": "/api/cron/weekly-scorecard",
-      "schedule": "0 13 * * 1"
-    },
-    {
       "path": "/api/cron/sync-tickets",
       "schedule": "0 * * * *"
     },
@@ -36,6 +28,10 @@
     {
       "path": "/api/cron/analyze-support?mode=full",
       "schedule": "10 * * * *"
+    },
+    {
+      "path": "/api/cron/co-destiny-report",
+      "schedule": "30 12 * * 1-5"
     }
   ]
 }

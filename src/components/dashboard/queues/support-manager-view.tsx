@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { getHubSpotTicketUrl } from '@/lib/hubspot/urls';
 import type { SupportManagerResponse, SupportManagerTicket } from '@/app/api/queues/support-manager/route';
 import { VoiceMemoRecorder } from './voice-memo-recorder';
@@ -114,6 +115,8 @@ function AnalyzedTimestamp({ dateStr }: { dateStr: string }) {
 // --- Main Component ---
 
 export function SupportManagerView({ userRole, canAnalyzeTicket }: { userRole: string; canAnalyzeTicket: boolean }) {
+  const searchParams = useSearchParams();
+  const deepLinkTicketId = searchParams.get('ticket');
   const [previewRole, setPreviewRole] = useState<string | null>(null);
   const effectiveRole = previewRole || userRole;
   const isVP = effectiveRole === 'vp_revops';
@@ -123,7 +126,7 @@ export function SupportManagerView({ userRole, canAnalyzeTicket }: { userRole: s
   const [data, setData] = useState<SupportManagerResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [expandedTicket, setExpandedTicket] = useState<string | null>(null);
+  const [expandedTicket, setExpandedTicket] = useState<string | null>(deepLinkTicketId);
   const [urgencyFilter, setUrgencyFilter] = useState<UrgencyFilter>('all');
   const [actionOwnerView, setActionOwnerView] = useState<ActionOwnerView>(isCSManager ? 'team' : 'all');
   const [sortColumn, setSortColumn] = useState<SortColumn>('urgency');
@@ -132,6 +135,7 @@ export function SupportManagerView({ userRole, canAnalyzeTicket }: { userRole: s
   const [analyzingTickets, setAnalyzingTickets] = useState<Set<string>>(new Set());
   const [progress, setProgress] = useState<{ current: number; total: number; currentTicket: string } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const deepLinkScrolled = useRef(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -153,6 +157,17 @@ export function SupportManagerView({ userRole, canAnalyzeTicket }: { userRole: s
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Scroll to deep-linked ticket after data loads
+  useEffect(() => {
+    if (deepLinkTicketId && data && !deepLinkScrolled.current) {
+      deepLinkScrolled.current = true;
+      requestAnimationFrame(() => {
+        const el = document.getElementById(`ticket-${deepLinkTicketId}`);
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      });
+    }
+  }, [deepLinkTicketId, data]);
 
   // Recompute counts from tickets array
   const recomputeCounts = useCallback((tickets: SupportManagerTicket[]): SupportManagerResponse['counts'] => {
@@ -638,7 +653,7 @@ function TicketRow({
   const a = ticket.analysis;
 
   return (
-    <div className="border-b border-gray-200 last:border-0">
+    <div id={`ticket-${ticket.ticketId}`} className="border-b border-gray-200 last:border-0">
       {/* Collapsed row */}
       <div
         role="button"
