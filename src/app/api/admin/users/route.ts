@@ -5,8 +5,8 @@ import { checkApiAuth } from '@/lib/auth/api';
 // Default permissions by role
 const DEFAULT_PERMISSIONS: Record<string, string[]> = {
   vp_revops: [],
-  cs_manager: ['queue:support-manager'],
-  support_agent: ['queue:support-trainer'],
+  cs_manager: ['queue:support-manager', 'queue:support-trainer', 'queue:support-action-board', 'analyze:ticket'],
+  support_agent: ['queue:support-trainer', 'queue:support-action-board'],
   account_executive: ['portal'],
   cmo: ['queue:ppl-sequence', 'hot_tracker'],
   ceo: ['queue:ppl-sequence', 'hot_tracker'],

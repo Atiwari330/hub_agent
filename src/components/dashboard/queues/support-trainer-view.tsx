@@ -382,8 +382,8 @@ export function SupportTrainerView({ userRole, canAnalyzeTicket }: { userRole: s
 
       {/* Controls */}
       <div className="flex flex-wrap items-center gap-3 mb-4">
-        {/* Analyze buttons (VP only) */}
-        {userRole === 'vp_revops' && (
+        {/* Analyze buttons (requires analyze:ticket permission) */}
+        {canAnalyzeTicket && (
           !analyzing ? (
             <>
               {counts.unanalyzed > 0 && (

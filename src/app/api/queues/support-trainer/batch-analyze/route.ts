@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/client';
 import { checkApiAuth } from '@/lib/auth/api';
-import { RESOURCES } from '@/lib/auth';
+import { RESOURCES, hasPermission } from '@/lib/auth';
 import { analyzeSupportTrainerTicket } from '../analyze/analyze-core';
 
 const MAX_BATCH_SIZE = 100;
@@ -55,6 +55,10 @@ interface DoneEvent {
 export async function POST(request: NextRequest) {
   const authResult = await checkApiAuth(RESOURCES.QUEUE_SUPPORT_TRAINER);
   if (authResult instanceof NextResponse) return authResult;
+
+  if (!hasPermission(authResult, RESOURCES.ANALYZE_TICKET)) {
+    return NextResponse.json({ error: 'Forbidden: analyze permission required' }, { status: 403 });
+  }
 
   try {
     const body: BatchAnalyzeRequest = await request.json();
