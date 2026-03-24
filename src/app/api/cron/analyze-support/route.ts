@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/client';
 import { analyzeSupportTrainerTicket } from '@/app/api/queues/support-trainer/analyze/analyze-core';
 import { analyzeSupportManagerTicket } from '@/app/api/queues/support-manager/analyze/analyze-core';
+import { analyzeActionBoardTicket } from '@/app/api/queues/support-action-board/analyze/analyze-core';
 
 const DELAY_BETWEEN_CALLS_MS = 500;
 
@@ -56,11 +57,13 @@ export async function GET(request: Request) {
 
     let trainerTicketIds: string[] = [];
     let managerTicketIds: string[] = [];
+    let actionBoardTicketIds: string[] = [];
 
     if (isFull) {
       // Full mode: re-analyze all open tickets
       trainerTicketIds = allTicketIds;
       managerTicketIds = allTicketIds;
+      actionBoardTicketIds = allTicketIds;
     } else {
       // New mode: only unanalyzed tickets
       const { data: trainerAnalyses } = await supabase
@@ -73,16 +76,24 @@ export async function GET(request: Request) {
         .select('hubspot_ticket_id')
         .in('hubspot_ticket_id', allTicketIds);
 
+      const { data: actionBoardAnalyses } = await supabase
+        .from('ticket_action_board_analyses')
+        .select('hubspot_ticket_id')
+        .in('hubspot_ticket_id', allTicketIds);
+
       const analyzedTrainer = new Set((trainerAnalyses || []).map((a) => a.hubspot_ticket_id));
       const analyzedManager = new Set((managerAnalyses || []).map((a) => a.hubspot_ticket_id));
+      const analyzedActionBoard = new Set((actionBoardAnalyses || []).map((a) => a.hubspot_ticket_id));
 
       trainerTicketIds = allTicketIds.filter((id) => !analyzedTrainer.has(id));
       managerTicketIds = allTicketIds.filter((id) => !analyzedManager.has(id));
+      actionBoardTicketIds = allTicketIds.filter((id) => !analyzedActionBoard.has(id));
     }
 
     const results = {
       trainer: { success: 0, failed: 0, total: trainerTicketIds.length },
       manager: { success: 0, failed: 0, total: managerTicketIds.length },
+      actionBoard: { success: 0, failed: 0, total: actionBoardTicketIds.length },
     };
 
     // Analyze trainer tickets
@@ -115,6 +126,23 @@ export async function GET(request: Request) {
       } catch (err) {
         results.manager.failed++;
         console.error(`Manager analysis error for ${ticketId}:`, err);
+      }
+      await new Promise((resolve) => setTimeout(resolve, DELAY_BETWEEN_CALLS_MS));
+    }
+
+    // Analyze action board tickets
+    for (const ticketId of actionBoardTicketIds) {
+      try {
+        const result = await analyzeActionBoardTicket(ticketId);
+        if (result.success) {
+          results.actionBoard.success++;
+        } else {
+          results.actionBoard.failed++;
+          console.error(`Action board analysis failed for ${ticketId}: ${result.error}`);
+        }
+      } catch (err) {
+        results.actionBoard.failed++;
+        console.error(`Action board analysis error for ${ticketId}:`, err);
       }
       await new Promise((resolve) => setTimeout(resolve, DELAY_BETWEEN_CALLS_MS));
     }

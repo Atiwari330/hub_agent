@@ -198,6 +198,7 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
   const isOnRcmAudit = pathname === '/dashboard/queues/rcm-audit';
   const isOnSupportManager = pathname === '/dashboard/queues/support-manager';
   const isOnSupportTrainer = pathname === '/dashboard/queues/support-trainer';
+  const isOnSupportActionBoard = pathname === '/dashboard/queues/support-action-board';
   // Hot Tracker
   const isOnHotTracker = pathname === '/dashboard/hot-tracker';
   // Demo Tracker
@@ -1078,6 +1079,31 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
                         </svg>
                       ) : (
                         <span>Support Trainer</span>
+                      )}
+                    </Link>
+                  </li>
+                  )}
+                  {hasPermission(user, RESOURCES.QUEUE_SUPPORT_ACTION_BOARD) && (
+                  <li>
+                    <Link
+                      href="/dashboard/queues/support-action-board"
+                      className={`flex items-center py-2 text-sm transition-colors ${
+                        isCollapsed
+                          ? 'px-0 justify-center'
+                          : 'px-4 pl-14'
+                      } ${
+                        isOnSupportActionBoard
+                          ? 'bg-indigo-600 text-white'
+                          : 'text-slate-300 hover:bg-slate-800'
+                      }`}
+                      title={isCollapsed ? 'Action Board' : undefined}
+                    >
+                      {isCollapsed ? (
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                        </svg>
+                      ) : (
+                        <span>Action Board</span>
                       )}
                     </Link>
                   </li>

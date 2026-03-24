@@ -36,6 +36,7 @@ export const RESOURCES = {
   QUEUE_SUPPORT_MANAGER: 'queue:support-manager',
   QUEUE_PRE_DEMO_COACH: 'queue:pre-demo-coach',
   QUEUE_SUPPORT_TRAINER: 'queue:support-trainer',
+  QUEUE_SUPPORT_ACTION_BOARD: 'queue:support-action-board',
   API_AGENT: 'api:agent',
   PORTAL: 'portal',
   HOT_TRACKER: 'hot_tracker',
@@ -43,6 +44,7 @@ export const RESOURCES = {
   AE_HOME: 'ae_home',
   QUEUE_ENRICHMENT_VIEW: 'queue:enrichment-view',
   ANALYZE_TICKET: 'analyze:ticket',
+  STRATEGIC_DIRECTIVES: 'strategic:directives',
 } as const;
 
 export type Resource = (typeof RESOURCES)[keyof typeof RESOURCES];
@@ -119,6 +121,8 @@ export function getResourceFromPath(pathname: string): Resource | null {
     return RESOURCES.QUEUE_PRE_DEMO_COACH;
   if (pathname.includes('/queues/support-trainer'))
     return RESOURCES.QUEUE_SUPPORT_TRAINER;
+  if (pathname.includes('/queues/support-action-board'))
+    return RESOURCES.QUEUE_SUPPORT_ACTION_BOARD;
   if (pathname.includes('/queues/deal-intelligence'))
     return RESOURCES.QUEUE_DEAL_HEALTH;
 
@@ -190,10 +194,14 @@ export function getResourceFromPath(pathname: string): Resource | null {
     return RESOURCES.QUEUE_PRE_DEMO_COACH;
   if (pathname.includes('/api/queues/support-trainer'))
     return RESOURCES.QUEUE_SUPPORT_TRAINER;
+  if (pathname.includes('/api/queues/support-action-board'))
+    return RESOURCES.QUEUE_SUPPORT_ACTION_BOARD;
   if (pathname.includes('/api/queues/deal-intelligence'))
     return RESOURCES.QUEUE_DEAL_HEALTH;
   if (pathname.includes('/api/queues/create-cs-task'))
     return RESOURCES.QUEUE_CS_HYGIENE;
+  if (pathname.includes('/api/strategic-directives'))
+    return RESOURCES.STRATEGIC_DIRECTIVES;
   if (pathname.includes('/api/hot-tracker')) return RESOURCES.HOT_TRACKER;
   if (pathname.includes('/api/demo-tracker')) return RESOURCES.DEMO_TRACKER;
   if (pathname.match(/\/api\/ae\/[^/]+/)) return RESOURCES.AE_DETAIL;
