@@ -97,7 +97,7 @@ export async function GET(request: Request) {
       // CS Hygiene Properties
       qbr_notes: company.properties.qbr_notes,
       // Co-Destiny (VIP) Flag
-      is_co_destiny: company.properties.is_co_destiny === 'Yes',
+      is_co_destiny: company.properties.is_co_destiny === 'true',
       // Metadata
       synced_at: new Date().toISOString(),
     }));
