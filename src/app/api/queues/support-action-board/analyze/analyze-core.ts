@@ -143,6 +143,7 @@ TICKET HYGIENE:
 - **Missing Linear task**: If the ticket involves engineering or developer work (API requests, custom development, bug investigations, code changes) and no Linear task is linked, include an action item to create a Linear task so the engineering work can be tracked and followed up on. Note: Copilot/Nabla form configuration is NOT engineering work — it is handled by the implementation/onboarding team and does NOT need a Linear task.
 - **Copilot AI / Nabla configuration**: If the ticket involves Copilot AI form setup or configuration (mapping form fields to Nabla's output sections), this requires clinical section expertise and is NOT something support agents should handle independently. Include an action item to escalate to the implementation/onboarding team (Saagar's team) for the correct mapping. This is a handoff, not a collaboration — the implementation team owns Copilot configuration.
 - **Missing company association**: If the COMPANY name in the ticket metadata shows "Unknown" or is missing, include an action item for the agent to associate the ticket with the correct Company record in HubSpot. Every ticket must be linked to a Company so it can be properly tracked and reported on.
+- **Co-Destiny (VIP) accounts**: If the ticket metadata shows "Co-Destiny Account: YES", this is a VIP customer requiring elevated attention. Any blocking issue (billing, claims, workflow disruption, documentation failures) must be treated with critical urgency. Include an action item for the CS Manager to be notified immediately. Response times must be same-day. The support team should be pushing for resolution updates daily.
 
 COMPLETION AUDIT:
 When ACTION_ITEM_COMPLETIONS are provided, you must verify each claimed completion against the conversation and engagement timeline:
@@ -380,6 +381,7 @@ TICKET METADATA:
 - Assigned Rep: ${ownerName || 'Unassigned'}
 - Last Customer Message: ${ticket.last_customer_message_at || 'Unknown'}
 - Last Agent Message: ${ticket.last_agent_message_at || 'Unknown'}
+- Co-Destiny Account: ${ticket.is_co_destiny ? 'YES — VIP customer requiring elevated attention' : 'No'}
 
 COMPANY:
 - Name: ${ticket.hs_primary_company_name || 'Unknown'}${customerContext ? `

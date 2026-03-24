@@ -166,7 +166,10 @@ function computeStartHereScore(ticket: ActionBoardTicket): number {
   // Review coverage — no reviews today = boost (15%)
   const reviewScore = ticket.todayReviews.length === 0 ? 15 : 0;
 
-  return waitScore + tempScore + simplicityScore + reviewScore;
+  // Co-Destiny (VIP) boost — always prioritize VIP tickets
+  const coDestinyBoost = ticket.isCoDestiny ? 30 : 0;
+
+  return waitScore + tempScore + simplicityScore + reviewScore + coDestinyBoost;
 }
 
 // --- Main Component ---
@@ -540,6 +543,9 @@ export function SupportActionBoardView({ userRole, canAnalyzeTicket }: Props) {
             <ResponseClock hours={startHereTicket.analysis.hours_since_customer_waiting} />
           </div>
           <div className="flex items-center gap-3">
+            {startHereTicket.isCoDestiny && (
+              <span className="inline-flex items-center px-1 py-0.5 rounded text-[9px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">VIP</span>
+            )}
             <span className="text-sm font-medium text-white">{startHereTicket.companyName || 'Unknown'}</span>
             <span className="text-xs text-gray-400">—</span>
             <span className="text-sm text-gray-300 truncate">{startHereTicket.analysis.situation_summary}</span>
@@ -751,7 +757,12 @@ function TicketRow({
         </div>
 
         {/* Company */}
-        <div className="w-40 truncate text-sm font-medium">{ticket.companyName || 'Unknown'}</div>
+        <div className="w-40 flex items-center gap-1.5 truncate text-sm font-medium">
+          {ticket.isCoDestiny && (
+            <span className="inline-flex items-center px-1 py-0.5 rounded text-[9px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30" title="Co-Destiny (VIP)">VIP</span>
+          )}
+          <span className="truncate">{ticket.companyName || 'Unknown'}</span>
+        </div>
 
         {/* Summary */}
         <div className="flex-1 truncate text-sm text-gray-400">
@@ -986,6 +997,12 @@ function TicketRow({
                   <span className="text-gray-200 font-mono">{ticket.ageDays}d</span>
                   <span className="text-gray-500">Confidence</span>
                   <span className="text-gray-200">{Math.round(a.confidence * 100)}%</span>
+                  {ticket.isCoDestiny && (
+                    <>
+                      <span className="text-gray-500">Status</span>
+                      <span className="text-amber-400 font-semibold">Co-Destiny (VIP)</span>
+                    </>
+                  )}
                 </div>
               </div>
 

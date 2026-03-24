@@ -96,6 +96,8 @@ export async function GET(request: Request) {
       latest_meeting_date: toTimestamp(company.properties.latest_meeting_date),
       // CS Hygiene Properties
       qbr_notes: company.properties.qbr_notes,
+      // Co-Destiny (VIP) Flag
+      is_co_destiny: company.properties.is_co_destiny === 'Yes',
       // Metadata
       synced_at: new Date().toISOString(),
     }));

@@ -37,6 +37,7 @@ export interface ActionBoardTicket {
   ballInCourt: string | null;
   software: string | null;
   companyName: string | null;
+  isCoDestiny: boolean;
   assignedRep: string | null;
   ageDays: number;
   isClosed: boolean;
@@ -266,6 +267,7 @@ export async function GET(request: NextRequest) {
         ballInCourt: ticket.ball_in_court,
         software: ticket.software,
         companyName: ticket.hs_primary_company_name,
+        isCoDestiny: ticket.is_co_destiny || false,
         assignedRep: ticket.hubspot_owner_id ? ownerMap[ticket.hubspot_owner_id] || null : null,
         ageDays,
         isClosed: ticket.is_closed || false,

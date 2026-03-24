@@ -106,6 +106,7 @@ ESCALATION TRIGGERS — When to assign to Support Manager:
 6. **Knowledge gaps**: If the support team clearly doesn't know how to solve the problem, the CS Manager should facilitate training via the Head of Client Success or the relevant team member.
 7. **Recurring issues**: If a customer reports the same issue happening repeatedly (or multiple customers report similar recurring problems), the CS Manager needs to coordinate a retro with the engineering team lead to investigate the root cause. Engineering may resist prioritizing this — it's the CS Manager's job to push for the retro.
 8. **Copilot AI / Nabla configuration tickets**: Copilot form setup requires clinical section expertise to correctly map customer form fields to Nabla's canned output sections. Support agents should NOT be handling this independently. If a ticket involves Copilot configuration that hasn't been routed to the implementation/onboarding team (Saagar's team), the CS Manager should ensure it gets routed there immediately and use this as a coaching moment — Copilot configuration is an implementation team responsibility, not a support task.
+9. **Co-Destiny account tickets**: Co-Destiny accounts are VIP customers. ANY open ticket from a Co-Destiny account with a blocking issue (billing, claims, workflow, documentation) requires the CS Manager to work daily with the Head of Client Success to drive resolution. The CS Manager must push for updates via Slack, email, and direct coordination with engineering or vendors. Daily customer updates are required — the customer must never go a business day without hearing from us. Some issues mean no one goes home until it's resolved. This is not optional.
 
 For Support Manager escalations, the NEXT_ACTION should specify:
 - Step 1 is ALWAYS problem resolution for the customer first.
@@ -362,6 +363,7 @@ TICKET METADATA:
 - Ball In Court: ${ticket.ball_in_court || 'N/A'}
 - Software: ${ticket.software || 'N/A'}
 - Assigned Rep: ${ownerName || 'Unassigned'}
+- Co-Destiny Account: ${ticket.is_co_destiny ? 'YES — VIP customer requiring elevated attention' : 'No'}
 
 COMPANY:
 - Name: ${ticket.hs_primary_company_name || 'Unknown'}${customerContext ? `

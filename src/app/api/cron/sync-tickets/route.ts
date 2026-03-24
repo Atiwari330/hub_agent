@@ -175,6 +175,26 @@ export async function GET(request: Request) {
       .eq('is_closed', true)
       .lt('closed_date', ninetyDaysAgo.toISOString());
 
+    // Propagate co-destiny flag from companies to open tickets
+    // Reset all open tickets to false, then set true for co-destiny companies
+    await supabase
+      .from('support_tickets')
+      .update({ is_co_destiny: false })
+      .eq('is_closed', false)
+      .eq('is_co_destiny', true);
+    const { data: coDestinyCompanies } = await supabase
+      .from('companies')
+      .select('hubspot_company_id')
+      .eq('is_co_destiny', true);
+    if (coDestinyCompanies && coDestinyCompanies.length > 0) {
+      const coDestinyIds = coDestinyCompanies.map(c => c.hubspot_company_id);
+      await supabase
+        .from('support_tickets')
+        .update({ is_co_destiny: true })
+        .eq('is_closed', false)
+        .in('hs_primary_company_id', coDestinyIds);
+    }
+
     const duration = Date.now() - startTime;
 
     // Log success

@@ -256,6 +256,7 @@ TICKET METADATA:
 - Ball In Court: ${ticket.ball_in_court || 'N/A'}
 - Software: ${ticket.software || 'N/A'}
 - Assigned Rep: ${ownerName || 'Unassigned'}
+- Co-Destiny Account: ${ticket.is_co_destiny ? 'YES — VIP customer' : 'No'}
 
 COMPANY:
 - Name: ${ticket.hs_primary_company_name || 'Unknown'}${customerContext ? `
