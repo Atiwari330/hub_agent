@@ -19,7 +19,8 @@
     "quality": "tsx src/scripts/run-support-quality.ts",
     "sop-audit": "tsx src/scripts/run-sop-audit.ts",
     "rcm-audit": "tsx src/scripts/run-rcm-audit.ts",
-    "policy-gaps": "tsx src/scripts/run-policy-gaps.ts"
+    "policy-gaps": "tsx src/scripts/run-policy-gaps.ts",
+    "inspect-ticket": "tsx src/scripts/inspect-ticket.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.2",

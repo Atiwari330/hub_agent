@@ -134,6 +134,11 @@ YOUR ANALYSIS MUST INCLUDE:
 
 14. **KNOWLEDGE_USED** — Comma-separated list of knowledge areas retrieved, followed by a dash and one sentence explaining how the knowledge informed your analysis. If none retrieved, write "none".
 
+TICKET HYGIENE:
+- **Drive toward closure**: If the conversation shows the customer's issue appears resolved (fix confirmed, question answered, workaround provided) but the ticket is still open, include an action item for an agent to send a friendly closing message: "It looks like we were able to resolve this for you — I'm going to close out this ticket. If anything else comes up, feel free to open a new ticket or reach back out." Do not leave resolved tickets lingering.
+- **Missing Linear task**: If the ticket involves engineering or developer work (API requests, custom development, bug investigations, code changes) and no Linear task is linked, include an action item to create a Linear task so the engineering work can be tracked and followed up on.
+- **Copilot AI / Nabla configuration**: If the ticket involves Copilot AI form setup or configuration (mapping form fields to Nabla's output sections), this requires clinical section expertise and is NOT something support agents should handle independently. Include an action item to connect with the implementation/onboarding team (Saagar's team) for guidance on the correct mapping.
+
 COMPLETION AUDIT:
 When ACTION_ITEM_COMPLETIONS are provided, you must verify each claimed completion against the conversation and engagement timeline:
 - If an agent claimed "replied to customer" but no new outbound message appears after their claimed completion time → include a VERIFICATION_FLAG in your response noting the discrepancy: "UNVERIFIED: [agent name] marked '[action]' as done at [time], but no corresponding activity found in HubSpot."
@@ -405,7 +410,12 @@ ${linearContext.comments.length > 0
   ? linearContext.comments
       .map((c) => `[${c.createdAt.split('T')[0]}] ${c.author}: ${c.body}`)
       .join('\n\n')
-  : 'No comments yet.'}` : ticket.linear_task ? `
+  : 'No comments yet.'}${linearContext.relatedIssues.length > 0 ? `
+
+Related Linear Issues (${linearContext.relatedIssues.length}):
+${linearContext.relatedIssues
+  .map((ri) => `- ${ri.identifier}: ${ri.title} (${ri.relationType}) — State: ${ri.state}, Priority: ${ri.priority}, Assignee: ${ri.assignee || 'Unassigned'}`)
+  .join('\n')}` : ''}` : ticket.linear_task ? `
 
 LINEAR ENGINEERING CONTEXT:
 A Linear engineering ticket is linked to this support ticket (${ticket.linear_task}), confirming that an engineering escalation HAS occurred. Full details could not be retrieved. Do NOT state there is no engineering escalation.` : ''}${relatedTicketsContext}${completionsContext}`;

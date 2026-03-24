@@ -324,10 +324,12 @@ The **To Do list** (Home tab, center panel) is the primary task management inter
 - ⚠️ The logic for how a Form Group's aggregate status is determined when only some component documents are completed is **not fully documented**. This is a known knowledge gap. Escalate to the engineering team if a client reports unexpected behavior.
 
 ### "Copilot isn't populating the right fields"
+- Opus Copilot AI is powered by **Nabla**, a third-party AI transcription/note platform that Opus is an authorized reseller of.
 - The form must use the **AI Autofill** component (not a standard text input) for Copilot to populate a field.
 - The specific Copilot field selected within that component must match the correct Copilot output section.
-- ⚠️ Field labels in the form may not exactly match Copilot's section names — this requires careful mapping during setup. Work with the client to match them as closely as possible.
-- 🔧 If setup assistance is needed, this is typically handled during onboarding or as a configuration task.
+- Nabla provides a set of **canned clinical sections** it can populate, including: chief complaint, history of present illness (HPI), medications, assessment, plan, symptoms, social history, and others (36 total). Customer forms often use different naming or split sections differently (e.g., social history across two form sections). Mapping customer form fields to the correct Nabla output section requires **clinical documentation expertise**.
+- ⚠️ Field labels in the form may not exactly match Copilot's section names — this requires careful mapping during setup.
+- 🔧 **Copilot/Nabla configuration is NOT a support agent task.** This must be coordinated with the implementation/onboarding team (Saagar's team), who have the clinical section expertise to correctly map customer form fields to Nabla's output sections. If a support ticket involves Copilot form setup or configuration, the support team should connect internally with Saagar's team for guidance on the mapping — do not attempt this independently.
 
 ### "ROI won't let me remove the expiration date"
 - The expiration date is required. This is by design and aligns with HIPAA/state law compliance (most states require ROIs to have an expiration of one year or less).

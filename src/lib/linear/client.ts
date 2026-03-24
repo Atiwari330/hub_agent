@@ -23,6 +23,15 @@ export interface LinearComment {
   createdAt: string;
 }
 
+export interface LinearRelatedIssue {
+  identifier: string;
+  title: string;
+  state: string;
+  priority: string;
+  assignee: string | null;
+  relationType: string;
+}
+
 export interface LinearIssueContext {
   issueId: string;
   identifier: string;
@@ -34,6 +43,7 @@ export interface LinearIssueContext {
   createdAt: string;
   updatedAt: string;
   comments: LinearComment[];
+  relatedIssues: LinearRelatedIssue[];
 }
 
 // --- Extract Issue ID from URL ---
@@ -113,6 +123,29 @@ export async function fetchLinearIssueContext(
       4: 'Low',
     };
 
+    // Fetch related issues
+    const relatedIssues: LinearRelatedIssue[] = [];
+    try {
+      const relationsConnection = await issue.relations();
+      for (const relation of relationsConnection.nodes || []) {
+        const relatedIssue = await relation.relatedIssue;
+        if (relatedIssue) {
+          const relState = await relatedIssue.state;
+          const relAssignee = await relatedIssue.assignee;
+          relatedIssues.push({
+            identifier: relatedIssue.identifier,
+            title: relatedIssue.title,
+            state: relState?.name || 'Unknown',
+            priority: priorityLabels[relatedIssue.priority] || 'Unknown',
+            assignee: relAssignee?.name || null,
+            relationType: relation.type || 'related',
+          });
+        }
+      }
+    } catch (err) {
+      console.warn(`Could not fetch relations for ${identifier}:`, err);
+    }
+
     return {
       issueId: issue.id,
       identifier: issue.identifier,
@@ -124,6 +157,7 @@ export async function fetchLinearIssueContext(
       createdAt: issue.createdAt.toISOString(),
       updatedAt: issue.updatedAt.toISOString(),
       comments,
+      relatedIssues,
     };
   } catch (error) {
     console.error(`Failed to fetch Linear issue context for "${linearTaskValue}":`, error);

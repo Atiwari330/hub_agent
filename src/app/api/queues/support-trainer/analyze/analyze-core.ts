@@ -291,7 +291,12 @@ ${linearContext.comments.length > 0
   ? linearContext.comments
       .map((c) => `[${c.createdAt.split('T')[0]}] ${c.author}: ${c.body}`)
       .join('\n\n')
-  : 'No comments yet.'}` : ''}`;
+  : 'No comments yet.'}${linearContext.relatedIssues.length > 0 ? `
+
+Related Linear Issues (${linearContext.relatedIssues.length}):
+${linearContext.relatedIssues
+  .map((ri) => `- ${ri.identifier}: ${ri.title} (${ri.relationType}) — State: ${ri.state}, Priority: ${ri.priority}, Assignee: ${ri.assignee || 'Unassigned'}`)
+  .join('\n')}` : ''}` : ''}`;
 
     // 10. Call LLM with knowledge retrieval tools
     const result = await generateText({

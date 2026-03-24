@@ -97,12 +97,15 @@ ACTION OWNER CATEGORIES:
 
 ESCALATION TRIGGERS — When to assign to Support Manager:
 1. **Ticket age 60+ days**: Any ticket open this long represents a systemic failure. The CS Manager needs to intervene, drive resolution, and then conduct a retro with the team.
+   - **Zombie ticket pattern**: If a ticket is 90+ days old with sporadic activity spread across months, this likely means the customer has been reopening the same ticket for separate issues instead of opening new ones. This is a process failure. The NEXT_ACTION must include: (1) Resolve the current issue, (2) The CS Manager must conduct a retrospective with the entire support team reviewing this ticket end-to-end — covering why new tickets were not created for new issues, how the lack of separate tickets prevented proper tracking, and what the correct process is going forward. The team must understand: when a customer's original issue is resolved and they come back with a new problem, the agent should politely close the current ticket and open a fresh one so each issue is tracked independently.
+   - **Missing Linear task**: If the ticket involves engineering/developer work (API requests, custom development, bug fixes requiring code changes) and no Linear task is linked, flag this as a process gap. Engineering work without a Linear ticket cannot be tracked, prioritized, or followed up on.
 2. **Angry/frustrated customer**: When a customer is visibly upset, threatening escalation, or has lost trust — this needs the CS Manager's direct involvement.
 3. **Agent mistakes**: If a support agent has clearly mishandled the ticket (wrong information, dropped follow-ups, dismissive responses) — the CS Manager needs to manage this.
 4. **Legal/compliance threats**: Any mention of regulatory action, information blocking, lawsuits, or formal complaints — the CS Manager and Head of Client Success need to discuss and formulate a response plan.
 5. **Complex vendor situations**: Issues involving PracticeSuite coordination, data migrations, or multi-party dependencies — the CS Manager and Head of Client Success need to problem-solve together.
 6. **Knowledge gaps**: If the support team clearly doesn't know how to solve the problem, the CS Manager should facilitate training via the Head of Client Success or the relevant team member.
 7. **Recurring issues**: If a customer reports the same issue happening repeatedly (or multiple customers report similar recurring problems), the CS Manager needs to coordinate a retro with the engineering team lead to investigate the root cause. Engineering may resist prioritizing this — it's the CS Manager's job to push for the retro.
+8. **Copilot AI / Nabla configuration tickets**: Copilot form setup requires clinical section expertise to correctly map customer form fields to Nabla's canned output sections. Support agents should NOT be handling this independently. If a ticket involves Copilot configuration that hasn't been routed to the implementation/onboarding team (Saagar's team), the CS Manager should ensure it gets routed there immediately and use this as a coaching moment — Copilot configuration is an implementation team responsibility, not a support task.
 
 For Support Manager escalations, the NEXT_ACTION should specify:
 - Step 1 is ALWAYS problem resolution for the customer first.
@@ -394,7 +397,12 @@ ${linearContext.comments.length > 0
   ? linearContext.comments
       .map((c) => `[${c.createdAt.split('T')[0]}] ${c.author}: ${c.body}`)
       .join('\n\n')
-  : 'No comments yet.'}` : ticket.linear_task ? `
+  : 'No comments yet.'}${linearContext.relatedIssues.length > 0 ? `
+
+Related Linear Issues (${linearContext.relatedIssues.length}):
+${linearContext.relatedIssues
+  .map((ri) => `- ${ri.identifier}: ${ri.title} (${ri.relationType}) — State: ${ri.state}, Priority: ${ri.priority}, Assignee: ${ri.assignee || 'Unassigned'}`)
+  .join('\n')}` : ''}` : ticket.linear_task ? `
 
 LINEAR ENGINEERING CONTEXT:
 A Linear engineering ticket is linked to this support ticket (${ticket.linear_task}), confirming that an engineering escalation HAS occurred. The full Linear issue details could not be retrieved at this time, but the escalation exists. Do NOT state that there is no engineering escalation — check the Linear ticket directly for current status.` : ''}${previousAnalysis ? `

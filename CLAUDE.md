@@ -215,9 +215,40 @@ Query params:
 -- Creates table: ae_targets (with $100k default per AE)
 ```
 
+## Support Ticket Analysis System
+
+Support tickets sync from HubSpot hourly (`/api/cron/sync-tickets`) into `support_tickets` table. Each ticket gets three independent LLM analyses (`/api/cron/analyze-support`):
+
+| Queue | Table | Prompt File | Purpose |
+|-------|-------|-------------|---------|
+| Action Board | `ticket_action_board_analyses` | `src/app/api/queues/support-action-board/analyze/analyze-core.ts` | Operational actions for agents |
+| Trainer | `ticket_trainer_analyses` | `src/app/api/queues/support-trainer/analyze/analyze-core.ts` | Training material for new hires |
+| Manager | `ticket_support_manager_analyses` | `src/app/api/queues/support-manager/analyze/analyze-core.ts` | Triage & escalation for CS Manager |
+
+Each analysis fetches: ticket metadata, HubSpot conversation thread, engagement timeline, Linear context (if linked), customer knowledge (`src/lib/ai/knowledge/customers/`), support knowledge (`src/lib/ai/knowledge/support/`), and related open tickets from the same company.
+
+### Iterating on Ticket Analysis
+
+When the user spots an issue with a ticket's analysis (wrong action owner, bad temperature, irrelevant suggestion, etc.), use this workflow:
+
+1. **Inspect the ticket** to get full context:
+```bash
+npx tsx src/scripts/inspect-ticket.ts <ticket_id>
+npx tsx src/scripts/inspect-ticket.ts --company "Company Name"
+npx tsx src/scripts/inspect-ticket.ts --subject "keyword"
+npx tsx src/scripts/inspect-ticket.ts <ticket_id> --engagements  # include raw HubSpot data
+```
+
+2. **Read the relevant prompt** in the `analyze-core.ts` file for the affected queue
+3. **Fix the prompt/logic** based on the issue
+4. **User re-analyzes** via the UI's Re-analyze button to verify
+
+The inspect script outputs: ticket metadata, all three analysis results, action item completions, and shift reviews — everything needed to diagnose analysis quality issues.
+
 ## Diagnostic Scripts
 
 Located in `src/scripts/`:
+- `inspect-ticket.ts` - Full ticket inspection (metadata + all analyses + completions + reviews)
 - `check-close-dates.ts` - Compare HubSpot vs DB close dates
 - `find-hubspot-properties.ts` - List all HubSpot deal properties
 - `test-new-properties.ts` - Test fetching new properties
