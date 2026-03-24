@@ -20,8 +20,8 @@ interface WorkflowRun {
   status: string;
   started_at: string;
   completed_at: string | null;
-  error_message: string | null;
-  metadata: Record<string, unknown> | null;
+  error: string | null;
+  result: Record<string, unknown> | null;
 }
 
 const ROLE_LABELS: Record<string, string> = {
@@ -67,6 +67,9 @@ export function AdminUsersView() {
 
   // Delete confirmation
   const [deletingUser, setDeletingUser] = useState<string | null>(null);
+
+  // Workflow run detail modal
+  const [selectedRun, setSelectedRun] = useState<WorkflowRun | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
@@ -434,13 +437,17 @@ export function AdminUsersView() {
                     : null;
 
                   return (
-                    <tr key={run.id} className="hover:bg-gray-50/50">
+                    <tr
+                      key={run.id}
+                      className="hover:bg-gray-50/50 cursor-pointer"
+                      onClick={() => setSelectedRun(run)}
+                    >
                       <td className="px-4 py-2 text-xs text-gray-900 font-medium">
                         {run.workflow_name}
                       </td>
                       <td className="px-4 py-2">
                         <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium ${
-                          run.status === 'success' ? 'bg-emerald-100 text-emerald-700' :
+                          run.status === 'completed' || run.status === 'success' ? 'bg-emerald-100 text-emerald-700' :
                           run.status === 'failed' ? 'bg-red-100 text-red-700' :
                           run.status === 'running' ? 'bg-blue-100 text-blue-700' :
                           'bg-gray-100 text-gray-600'
@@ -455,7 +462,7 @@ export function AdminUsersView() {
                         {duration !== null ? `${duration}s` : '-'}
                       </td>
                       <td className="px-4 py-2 text-xs text-gray-500 max-w-xs truncate">
-                        {run.error_message || formatMetadata(run.metadata) || '-'}
+                        {run.error || formatResult(run.result) || '-'}
                       </td>
                     </tr>
                   );
@@ -465,17 +472,112 @@ export function AdminUsersView() {
           </div>
         </div>
       )}
+      {/* Workflow Run Detail Modal */}
+      {selectedRun && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+          onClick={() => setSelectedRun(null)}
+        >
+          <div
+            className="bg-white rounded-lg shadow-xl max-w-lg w-full mx-4 max-h-[80vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
+              <div className="flex items-center gap-3">
+                <h3 className="font-semibold text-gray-900">{selectedRun.workflow_name}</h3>
+                <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium ${
+                  selectedRun.status === 'completed' || selectedRun.status === 'success' ? 'bg-emerald-100 text-emerald-700' :
+                  selectedRun.status === 'failed' ? 'bg-red-100 text-red-700' :
+                  selectedRun.status === 'running' ? 'bg-blue-100 text-blue-700' :
+                  'bg-gray-100 text-gray-600'
+                }`}>
+                  {selectedRun.status}
+                </span>
+              </div>
+              <button
+                onClick={() => setSelectedRun(null)}
+                className="text-gray-400 hover:text-gray-600 text-lg leading-none"
+              >
+                &times;
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="px-5 py-4 space-y-4">
+              {/* Timestamps */}
+              <div className="grid grid-cols-3 gap-3 text-sm">
+                <div>
+                  <span className="text-gray-500 text-xs">Started</span>
+                  <p className="text-gray-900 text-xs mt-0.5">{formatFull(selectedRun.started_at)}</p>
+                </div>
+                <div>
+                  <span className="text-gray-500 text-xs">Completed</span>
+                  <p className="text-gray-900 text-xs mt-0.5">{selectedRun.completed_at ? formatFull(selectedRun.completed_at) : '-'}</p>
+                </div>
+                <div>
+                  <span className="text-gray-500 text-xs">Duration</span>
+                  <p className="text-gray-900 text-xs mt-0.5">
+                    {selectedRun.completed_at && selectedRun.started_at
+                      ? `${Math.round((new Date(selectedRun.completed_at).getTime() - new Date(selectedRun.started_at).getTime()) / 1000)}s`
+                      : '-'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Error */}
+              {selectedRun.error && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                  <p className="text-xs font-medium text-red-700 mb-1">Error</p>
+                  <pre className="text-xs text-red-800 whitespace-pre-wrap break-words font-mono">{selectedRun.error}</pre>
+                </div>
+              )}
+
+              {/* Result */}
+              {selectedRun.result && (
+                <div>
+                  <p className="text-xs font-medium text-gray-500 mb-2">Result Details</p>
+                  <dl className="space-y-1.5 text-xs">
+                    {Object.entries(selectedRun.result).map(([key, value]) => (
+                      <div key={key}>
+                        {typeof value === 'object' && value !== null ? (
+                          <div>
+                            <dt className="text-gray-500 mb-0.5">{formatKey(key)}</dt>
+                            <dd className="bg-gray-50 rounded p-2 font-mono text-[11px] text-gray-700 whitespace-pre-wrap break-words">
+                              {JSON.stringify(value, null, 2)}
+                            </dd>
+                          </div>
+                        ) : (
+                          <div className="flex justify-between">
+                            <dt className="text-gray-500">{formatKey(key)}</dt>
+                            <dd className="text-gray-900 font-medium">{String(value ?? '-')}</dd>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </dl>
+                </div>
+              )}
+
+              {/* No details */}
+              {!selectedRun.error && !selectedRun.result && (
+                <p className="text-xs text-gray-400 italic">No details available for this run.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 // --- Helpers ---
 
-function formatMetadata(metadata: Record<string, unknown> | null): string | null {
-  if (!metadata) return null;
+function formatResult(result: Record<string, unknown> | null): string | null {
+  if (!result) return null;
   // Format analyze-support results
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const results = metadata.results as any;
+  const results = result.results as any;
   if (results?.trainer && results?.manager) {
     const parts: string[] = [];
     if (results.trainer.total > 0) {
@@ -487,8 +589,26 @@ function formatMetadata(metadata: Record<string, unknown> | null): string | null
     if (parts.length > 0) return parts.join(', ');
   }
   // Generic: show mode if present
-  if (metadata.mode) return `mode: ${metadata.mode}`;
+  if (result.mode) return `mode: ${result.mode}`;
+  // Show sync summary if present
+  if (result.dealsSync !== undefined) return `${result.dealsSync} deals synced`;
+  if (result.ticketsSynced !== undefined) return `${result.ticketsSynced} tickets synced`;
   return null;
+}
+
+function formatFull(dateStr: string): string {
+  return new Date(dateStr).toLocaleString([], {
+    month: 'short', day: 'numeric', year: 'numeric',
+    hour: 'numeric', minute: '2-digit', second: '2-digit',
+  });
+}
+
+function formatKey(key: string): string {
+  return key
+    .replace(/([A-Z])/g, ' $1')
+    .replace(/[_-]/g, ' ')
+    .replace(/^\w/, (c) => c.toUpperCase())
+    .trim();
 }
 
 function formatRelative(dateStr: string): string {

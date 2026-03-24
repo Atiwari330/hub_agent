@@ -159,9 +159,9 @@ export async function GET(request: Request) {
     const duration = Math.round((Date.now() - startTime) / 1000);
 
     await supabase.from('workflow_runs').update({
-      status: 'success',
+      status: 'completed',
       completed_at: new Date().toISOString(),
-      metadata: { mode, duration_seconds: duration, results },
+      result: { mode, duration_seconds: duration, results },
     }).eq('id', workflowId);
 
     return NextResponse.json({
@@ -176,7 +176,7 @@ export async function GET(request: Request) {
     await supabase.from('workflow_runs').update({
       status: 'failed',
       completed_at: new Date().toISOString(),
-      error_message: error instanceof Error ? error.message : 'Unknown error',
+      error: error instanceof Error ? error.message : 'Unknown error',
     }).eq('id', workflowId);
 
     return NextResponse.json(
