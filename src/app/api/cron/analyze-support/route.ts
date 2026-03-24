@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase/client';
 import { analyzeSupportTrainerTicket } from '@/app/api/queues/support-trainer/analyze/analyze-core';
 import { analyzeSupportManagerTicket } from '@/app/api/queues/support-manager/analyze/analyze-core';
 import { analyzeActionBoardTicket } from '@/app/api/queues/support-action-board/analyze/analyze-core';
+import { isBusinessHours } from '@/lib/utils/business-hours';
 
 const DELAY_BETWEEN_CALLS_MS = 500;
 
@@ -24,6 +25,14 @@ function verifyCronSecret(request: Request): boolean {
 export async function GET(request: Request) {
   if (!verifyCronSecret(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  // Skip outside business hours (9 AM – 7 PM ET, Mon–Fri)
+  if (!isBusinessHours()) {
+    return NextResponse.json({
+      skipped: true,
+      reason: 'Outside business hours (9 AM – 7 PM ET, Mon–Fri)',
+    });
   }
 
   const supabase = createServiceClient();

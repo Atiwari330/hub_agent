@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/client';
 import { getOpenTickets, getRecentlyClosedTickets } from '@/lib/hubspot/tickets';
+import { isBusinessHours } from '@/lib/utils/business-hours';
 
 // Convert empty strings to null for timestamp fields
 const toTimestamp = (value: string | undefined | null): string | null => {
@@ -37,6 +38,14 @@ export async function GET(request: Request) {
   // Verify the request is from Vercel Cron
   if (!verifyCronSecret(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  // Skip outside business hours (9 AM – 7 PM ET, Mon–Fri)
+  if (!isBusinessHours()) {
+    return NextResponse.json({
+      skipped: true,
+      reason: 'Outside business hours (9 AM – 7 PM ET, Mon–Fri)',
+    });
   }
 
   const supabase = createServiceClient();
