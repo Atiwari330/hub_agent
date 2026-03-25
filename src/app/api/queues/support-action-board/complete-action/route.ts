@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/client';
 import { checkApiAuth } from '@/lib/auth/api';
 import { RESOURCES } from '@/lib/auth';
+import { routeEvent } from '@/lib/events/event-router';
 
 export async function POST(request: NextRequest) {
   const authResult = await checkApiAuth(RESOURCES.QUEUE_SUPPORT_ACTION_BOARD);
@@ -41,6 +42,17 @@ export async function POST(request: NextRequest) {
     if (error) {
       return NextResponse.json({ error: 'Failed to record completion', details: error.message }, { status: 500 });
     }
+
+    // Emit internal event to trigger verification pass (async, don't block response)
+    routeEvent({
+      source: 'internal',
+      type: 'action_completed',
+      ticketId,
+      timestamp: new Date().toISOString(),
+      metadata: { actionItemId, completionId: data.id },
+    }).catch((err) => {
+      console.error('[complete-action] Failed to route event:', err);
+    });
 
     return NextResponse.json({ success: true, completion: data });
   } catch (error) {

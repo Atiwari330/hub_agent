@@ -18,9 +18,10 @@ function verifyCronSecret(request: Request): boolean {
 /**
  * GET /api/cron/analyze-support
  *
- * Two modes controlled by query param:
- *   ?mode=full   → Re-analyze ALL open tickets (daily at 8am)
- *   (default)    → Analyze only UNANALYZED tickets (hourly)
+ * Three modes controlled by query param:
+ *   ?mode=full    → Re-analyze ALL open tickets across all queues
+ *   ?mode=changed → Re-analyze only action board tickets with stale analyses (safety net for webhooks)
+ *   (default)     → Analyze only UNANALYZED tickets (new tickets)
  */
 export async function GET(request: Request) {
   if (!verifyCronSecret(request)) {
@@ -41,13 +42,14 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const mode = url.searchParams.get('mode') || 'new';
   const isFull = mode === 'full';
+  const isChanged = mode === 'changed';
 
   try {
     const startTime = Date.now();
 
     await supabase.from('workflow_runs').insert({
       id: workflowId,
-      workflow_name: isFull ? 'analyze-support-full' : 'analyze-support-new',
+      workflow_name: `analyze-support-${mode}`,
       status: 'running',
       started_at: new Date().toISOString(),
     });
@@ -68,7 +70,33 @@ export async function GET(request: Request) {
     let managerTicketIds: string[] = [];
     let actionBoardTicketIds: string[] = [];
 
-    if (isFull) {
+    if (isChanged) {
+      // Changed mode: safety net for webhooks — only re-analyze action board tickets
+      // whose analysis is stale (analyzed_at older than 1 hour, or missing pass_versions)
+      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+
+      const { data: staleAnalyses } = await supabase
+        .from('ticket_action_board_analyses')
+        .select('hubspot_ticket_id, analyzed_at')
+        .in('hubspot_ticket_id', allTicketIds)
+        .lt('analyzed_at', oneHourAgo);
+
+      const staleIds = new Set((staleAnalyses || []).map((a) => a.hubspot_ticket_id));
+
+      // Also include tickets with no analysis at all
+      const { data: allAnalyses } = await supabase
+        .from('ticket_action_board_analyses')
+        .select('hubspot_ticket_id')
+        .in('hubspot_ticket_id', allTicketIds);
+
+      const analyzedSet = new Set((allAnalyses || []).map((a) => a.hubspot_ticket_id));
+      const unanalyzed = allTicketIds.filter((id) => !analyzedSet.has(id));
+
+      actionBoardTicketIds = [...unanalyzed, ...allTicketIds.filter((id) => staleIds.has(id))];
+      // Trainer and manager queues not affected by webhook changes — skip them in changed mode
+      trainerTicketIds = [];
+      managerTicketIds = [];
+    } else if (isFull) {
       // Full mode: re-analyze all open tickets
       trainerTicketIds = allTicketIds;
       managerTicketIds = allTicketIds;

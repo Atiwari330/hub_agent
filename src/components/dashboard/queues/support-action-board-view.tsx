@@ -3,7 +3,8 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { getHubSpotTicketUrl } from '@/lib/hubspot/urls';
 import type { ActionBoardResponse, ActionBoardTicket, ProgressNoteInfo } from '@/app/api/queues/support-action-board/route';
-import type { ActionItem } from '@/app/api/queues/support-action-board/analyze/analyze-core';
+import type { ActionItem, RelatedTicketInfo } from '@/app/api/queues/support-action-board/analyze/analyze-core';
+import { useRealtimeSubscription, type ConnectionStatus } from '@/hooks/use-realtime-subscription';
 
 // --- Types ---
 
@@ -17,6 +18,22 @@ interface Props {
 }
 
 // --- Helper Components ---
+
+function computeLiveHours(lastCustomerMessageAt: string | null, lastAgentMessageAt: string | null): number | null {
+  if (!lastCustomerMessageAt) return null;
+  const customerTime = new Date(lastCustomerMessageAt).getTime();
+  const agentTime = lastAgentMessageAt ? new Date(lastAgentMessageAt).getTime() : 0;
+  // Only show wait time if customer message is more recent than agent response
+  if (agentTime >= customerTime) return null;
+  const hours = (Date.now() - customerTime) / (1000 * 60 * 60);
+  return hours > 0 ? hours : null;
+}
+
+function formatHours(hours: number): string {
+  if (hours >= 24) return `${Math.floor(hours / 24)}d ${Math.round(hours % 24)}h`;
+  if (hours >= 1) return `${Math.floor(hours)}h ${Math.round((hours % 1) * 60)}m`;
+  return `${Math.round(hours * 60)}m`;
+}
 
 function ResponseClock({ hours }: { hours: number | null }) {
   if (hours === null || hours === 0) {
@@ -36,16 +53,25 @@ function ResponseClock({ hours }: { hours: number | null }) {
     bg = 'bg-yellow-50 border border-yellow-200';
   }
 
-  const display = hours >= 24
-    ? `${Math.floor(hours / 24)}d ${Math.round(hours % 24)}h`
-    : hours >= 1
-      ? `${Math.floor(hours)}h ${Math.round((hours % 1) * 60)}m`
-      : `${Math.round(hours * 60)}m`;
-
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-bold ${color} ${bg}`}>
-      {display}
+      {formatHours(hours)}
     </span>
+  );
+}
+
+function ConnectionIndicator({ status }: { status: ConnectionStatus }) {
+  const config: Record<ConnectionStatus, { color: string; label: string }> = {
+    connected: { color: 'bg-emerald-500', label: 'Live' },
+    connecting: { color: 'bg-yellow-500 animate-pulse', label: 'Connecting...' },
+    disconnected: { color: 'bg-red-500', label: 'Offline' },
+  };
+  const { color, label } = config[status];
+  return (
+    <div className="flex items-center gap-1.5" title={`Realtime: ${label}`}>
+      <div className={`w-2 h-2 rounded-full ${color}`} />
+      <span className="text-[10px] text-gray-400">{label}</span>
+    </div>
   );
 }
 
@@ -185,6 +211,178 @@ export function SupportActionBoardView({ userRole, canAnalyzeTicket }: Props) {
     fetchData();
   }, [fetchData]);
 
+  // --- Realtime Subscriptions ---
+
+  const handleAnalysisChange = useCallback((payload: { new: Record<string, unknown> }) => {
+    const row = payload.new;
+    if (!row || !row.hubspot_ticket_id) return;
+    const ticketId = row.hubspot_ticket_id as string;
+
+    setData((prev) => {
+      if (!prev) return prev;
+      const updatedTickets = prev.tickets.map((t) => {
+        if (t.ticketId !== ticketId) return t;
+        return {
+          ...t,
+          analysis: {
+            hubspot_ticket_id: row.hubspot_ticket_id as string,
+            situation_summary: row.situation_summary as string,
+            action_items: (row.action_items || []) as ActionItem[],
+            customer_temperature: row.customer_temperature as string,
+            temperature_reason: row.temperature_reason as string,
+            response_guidance: row.response_guidance as string,
+            response_draft: row.response_draft as string,
+            context_snapshot: row.context_snapshot as string,
+            related_tickets: (row.related_tickets || []) as RelatedTicketInfo[],
+            hours_since_customer_waiting: row.hours_since_customer_waiting as number,
+            hours_since_last_outbound: row.hours_since_last_outbound as number,
+            hours_since_last_activity: row.hours_since_last_activity as number,
+            status_tags: (row.status_tags || []) as string[],
+            confidence: parseFloat(row.confidence as string),
+            knowledge_used: row.knowledge_used as string,
+            ticket_subject: row.ticket_subject as string,
+            company_name: row.company_name as string,
+            assigned_rep: row.assigned_rep as string,
+            age_days: row.age_days as number,
+            is_closed: row.is_closed as boolean,
+            has_linear: row.has_linear as boolean,
+            linear_state: row.linear_state as string,
+            analyzed_at: row.analyzed_at as string,
+          },
+        };
+      });
+      return { ...prev, tickets: updatedTickets };
+    });
+  }, []);
+
+  const handleCompletionInsert = useCallback((payload: { new: Record<string, unknown> }) => {
+    const row = payload.new;
+    if (!row || !row.hubspot_ticket_id) return;
+    const ticketId = row.hubspot_ticket_id as string;
+
+    setData((prev) => {
+      if (!prev) return prev;
+      const updatedTickets = prev.tickets.map((t) => {
+        if (t.ticketId !== ticketId) return t;
+        // Skip if we already have this completion (from optimistic update)
+        if (t.completions.some((c) => c.id === row.id)) return t;
+        return {
+          ...t,
+          completions: [
+            ...t.completions,
+            {
+              id: row.id as string,
+              actionItemId: row.action_item_id as string,
+              actionDescription: row.action_description as string,
+              completedBy: row.completed_by as string,
+              completedByName: 'You',
+              completedAt: row.completed_at as string,
+              verified: row.verified as boolean | null,
+              verificationNote: row.verification_note as string | null,
+            },
+          ],
+        };
+      });
+      return { ...prev, tickets: updatedTickets };
+    });
+  }, []);
+
+  const handleNoteChange = useCallback((payload: { new: Record<string, unknown> }) => {
+    const row = payload.new;
+    if (!row || !row.hubspot_ticket_id) return;
+    const ticketId = row.hubspot_ticket_id as string;
+
+    setData((prev) => {
+      if (!prev) return prev;
+      const updatedTickets = prev.tickets.map((t) => {
+        if (t.ticketId !== ticketId) return t;
+        // Skip if we already have this note (from optimistic update)
+        if (t.progressNotes.some((n) => n.id === row.id)) return t;
+        const newNote: ProgressNoteInfo = {
+          id: row.id as string,
+          userId: row.user_id as string,
+          userName: 'Unknown',
+          noteText: row.note_text as string,
+          createdAt: row.created_at as string,
+        };
+        return {
+          ...t,
+          progressNotes: [...t.progressNotes, newNote],
+          currentUserHasNote: t.currentUserHasNote || row.user_id === prev.userId,
+        };
+      });
+      return { ...prev, tickets: updatedTickets };
+    });
+  }, []);
+
+  const handleTicketUpdate = useCallback((payload: { new: Record<string, unknown> }) => {
+    const row = payload.new;
+    if (!row || !row.hubspot_ticket_id) return;
+    const ticketId = row.hubspot_ticket_id as string;
+
+    setData((prev) => {
+      if (!prev) return prev;
+      const updatedTickets = prev.tickets.map((t) => {
+        if (t.ticketId !== ticketId) return t;
+        return {
+          ...t,
+          subject: (row.subject as string) ?? t.subject,
+          priority: (row.priority as string) ?? t.priority,
+          ballInCourt: (row.ball_in_court as string) ?? t.ballInCourt,
+          software: (row.software as string) ?? t.software,
+          companyName: (row.hs_primary_company_name as string) ?? t.companyName,
+          isCoDestiny: (row.is_co_destiny as boolean) ?? t.isCoDestiny,
+          isClosed: (row.is_closed as boolean) ?? t.isClosed,
+          lastCustomerMessageAt: (row.last_customer_message_at as string) ?? t.lastCustomerMessageAt,
+          lastAgentMessageAt: (row.last_agent_message_at as string) ?? t.lastAgentMessageAt,
+        };
+      });
+      return { ...prev, tickets: updatedTickets };
+    });
+  }, []);
+
+  const realtimeSubscriptions = useMemo(() => [
+    {
+      table: 'ticket_action_board_analyses',
+      event: '*' as const,
+      onPayload: handleAnalysisChange,
+    },
+    {
+      table: 'action_item_completions',
+      event: 'INSERT' as const,
+      onPayload: handleCompletionInsert,
+    },
+    {
+      table: 'progress_notes',
+      event: '*' as const,
+      onPayload: handleNoteChange,
+    },
+    {
+      table: 'support_tickets',
+      event: 'UPDATE' as const,
+      onPayload: handleTicketUpdate,
+    },
+  ], [handleAnalysisChange, handleCompletionInsert, handleNoteChange, handleTicketUpdate]);
+
+  const { status: realtimeStatus } = useRealtimeSubscription({
+    channelName: 'action-board-live',
+    subscriptions: realtimeSubscriptions,
+    enabled: !!data,
+  });
+
+  // --- Live Timing Recalculation (every 60s) ---
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setData((prev) => {
+        if (!prev) return prev;
+        // Trigger a shallow copy to force re-render with updated times
+        return { ...prev, tickets: [...prev.tickets] };
+      });
+    }, 60_000);
+    return () => clearInterval(interval);
+  }, []);
+
   // --- Actions ---
 
   const handleAnalyze = async (ticketId: string) => {
@@ -195,7 +393,8 @@ export function SupportActionBoardView({ userRole, canAnalyzeTicket }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ticketId }),
       });
-      if (res.ok) {
+      if (res.ok && realtimeStatus !== 'connected') {
+        // Fallback: refetch if realtime isn't connected
         await fetchData();
       }
     } catch (err) {
@@ -248,6 +447,31 @@ export function SupportActionBoardView({ userRole, canAnalyzeTicket }: Props) {
   };
 
   const handleCompleteAction = async (ticketId: string, actionItem: ActionItem) => {
+    // Optimistic update
+    const optimisticCompletion = {
+      id: `optimistic-${Date.now()}`,
+      actionItemId: actionItem.id,
+      actionDescription: actionItem.description,
+      completedBy: data?.userId || '',
+      completedByName: 'You',
+      completedAt: new Date().toISOString(),
+      verified: null,
+      verificationNote: null,
+    };
+
+    const prevData = data;
+    setData((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        tickets: prev.tickets.map((t) =>
+          t.ticketId === ticketId
+            ? { ...t, completions: [...t.completions, optimisticCompletion] }
+            : t
+        ),
+      };
+    });
+
     try {
       const res = await fetch('/api/queues/support-action-board/complete-action', {
         method: 'POST',
@@ -258,30 +482,74 @@ export function SupportActionBoardView({ userRole, canAnalyzeTicket }: Props) {
           actionDescription: actionItem.description,
         }),
       });
-      if (res.ok) {
-        await fetchData();
+      if (!res.ok) {
+        // Revert on failure
+        setData(prevData);
       }
+      // On success, realtime subscription will update with the real row
     } catch (err) {
       console.error('Complete action error:', err);
+      setData(prevData);
     }
   };
 
   const handleSubmitNote = async (ticketId: string) => {
     if (noteText.trim().length < 10) return;
     setSubmittingNote(true);
+
+    // Optimistic update
+    const optimisticNote: ProgressNoteInfo = {
+      id: `optimistic-${Date.now()}`,
+      userId: data?.userId || '',
+      userName: 'You',
+      noteText: noteText.trim(),
+      createdAt: new Date().toISOString(),
+    };
+
+    const prevData = data;
+    const savedNoteText = noteText.trim();
+    setNoteTicketId(null);
+    setNoteText('');
+
+    setData((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        tickets: prev.tickets.map((t) =>
+          t.ticketId === ticketId
+            ? {
+                ...t,
+                progressNotes: [...t.progressNotes, optimisticNote],
+                currentUserHasNote: true,
+              }
+            : t
+        ),
+        noteProgress: {
+          ...prev.noteProgress,
+          noted: prev.tickets.find((t) => t.ticketId === ticketId)?.currentUserHasNote
+            ? prev.noteProgress.noted
+            : prev.noteProgress.noted + 1,
+        },
+      };
+    });
+
     try {
       const res = await fetch('/api/queues/support-action-board/progress-note', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ticketId, noteText: noteText.trim() }),
+        body: JSON.stringify({ ticketId, noteText: savedNoteText }),
       });
-      if (res.ok) {
-        setNoteTicketId(null);
-        setNoteText('');
-        await fetchData();
+      if (!res.ok) {
+        // Revert on failure
+        setData(prevData);
+        setNoteTicketId(ticketId);
+        setNoteText(savedNoteText);
       }
     } catch (err) {
       console.error('Submit note error:', err);
+      setData(prevData);
+      setNoteTicketId(ticketId);
+      setNoteText(savedNoteText);
     } finally {
       setSubmittingNote(false);
     }
@@ -313,8 +581,8 @@ export function SupportActionBoardView({ userRole, canAnalyzeTicket }: Props) {
 
       switch (sortColumn) {
         case 'responseWait': {
-          const aWait = a.analysis?.hours_since_customer_waiting ?? 0;
-          const bWait = b.analysis?.hours_since_customer_waiting ?? 0;
+          const aWait = computeLiveHours(a.lastCustomerMessageAt, a.lastAgentMessageAt) ?? a.analysis?.hours_since_customer_waiting ?? 0;
+          const bWait = computeLiveHours(b.lastCustomerMessageAt, b.lastAgentMessageAt) ?? b.analysis?.hours_since_customer_waiting ?? 0;
           return (aWait - bWait) * dir;
         }
         case 'companyName':
@@ -383,7 +651,10 @@ export function SupportActionBoardView({ userRole, canAnalyzeTicket }: Props) {
       <div className="border-b border-slate-800 px-6 py-4">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-semibold">Support Action Board</h1>
+            <div className="flex items-center gap-3">
+              <h1 className="text-xl font-semibold">Support Action Board</h1>
+              <ConnectionIndicator status={realtimeStatus} />
+            </div>
             <p className="text-sm text-gray-400 mt-0.5">
               {data.counts.total} open tickets · {data.counts.analyzed} analyzed · {data.counts.unanalyzed} pending
             </p>
@@ -625,6 +896,10 @@ function TicketRow({
   const completedActionIds = new Set(ticket.completions.map((c) => c.actionItemId));
   const isWritingNote = noteTicketId === ticket.ticketId;
 
+  // Use live-computed wait time if raw timestamps available, else fall back to analysis snapshot
+  const liveCustomerWait = computeLiveHours(ticket.lastCustomerMessageAt, ticket.lastAgentMessageAt);
+  const customerWaitHours = liveCustomerWait ?? a?.hours_since_customer_waiting ?? null;
+
   return (
     <div className={`border-b border-slate-800 ${!ticket.currentUserHasNote ? 'border-l-2 border-l-indigo-500' : ''}`}>
       {/* Collapsed Row */}
@@ -634,7 +909,7 @@ function TicketRow({
       >
         {/* Response Clock */}
         <div className="w-20">
-          <ResponseClock hours={a?.hours_since_customer_waiting ?? null} />
+          <ResponseClock hours={customerWaitHours} />
         </div>
 
         {/* Status Tags */}
@@ -980,7 +1255,7 @@ function TicketRow({
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span className="text-gray-400">Customer waiting</span>
-                    <ResponseClock hours={a.hours_since_customer_waiting} />
+                    <ResponseClock hours={customerWaitHours} />
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-400">Last outbound</span>

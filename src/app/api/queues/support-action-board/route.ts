@@ -43,6 +43,8 @@ export interface ActionBoardTicket {
   completions: ActionItemCompletion[];
   progressNotes: ProgressNoteInfo[];
   currentUserHasNote: boolean;
+  lastCustomerMessageAt: string | null;
+  lastAgentMessageAt: string | null;
 }
 
 export interface ActionBoardResponse {
@@ -271,6 +273,8 @@ export async function GET(request: NextRequest) {
         completions: completionsMap[ticket.hubspot_ticket_id] || [],
         progressNotes: notesMap[ticket.hubspot_ticket_id] || [],
         currentUserHasNote: userNotedSet.has(ticket.hubspot_ticket_id),
+        lastCustomerMessageAt: ticket.last_customer_message_at || null,
+        lastAgentMessageAt: ticket.last_agent_message_at || null,
       };
     });
 

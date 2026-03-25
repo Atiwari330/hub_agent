@@ -1,0 +1,51 @@
+import { generateText } from 'ai';
+import { getModelForPass } from './models';
+import type { TicketContext, TemperaturePassResult } from './types';
+
+export async function runTemperaturePass(context: TicketContext): Promise<TemperaturePassResult> {
+  const model = getModelForPass('temperature');
+
+  const systemPrompt = `You are a customer sentiment analyst for a healthcare SaaS support team.
+
+Analyze the customer's tone, word choice, and communication patterns across the full conversation thread. Consider:
+- Explicit frustration signals (demanding, threatening, all caps, repeated follow-ups)
+- Implicit signals (increasingly terse replies, formal tone shift, CC'ing managers)
+- Trend direction: is sentiment improving or deteriorating?
+- Time pressure: how long have they been waiting?
+
+Output EXACTLY two fields:
+
+CUSTOMER_TEMPERATURE: One of: calm | frustrated | escalating | angry
+
+TEMPERATURE_REASON: One sentence explaining your assessment.`;
+
+  const userPrompt = `TICKET: ${context.ticket.subject || 'N/A'}
+COMPANY: ${context.ticket.hs_primary_company_name || 'Unknown'}
+AGE: ${context.ageDays !== null ? `${context.ageDays} days` : 'Unknown'}
+LAST CUSTOMER MESSAGE: ${context.ticket.last_customer_message_at || 'Unknown'}
+LAST AGENT MESSAGE: ${context.ticket.last_agent_message_at || 'Unknown'}
+CO-DESTINY (VIP): ${context.ticket.is_co_destiny ? 'YES' : 'No'}
+
+FULL CONVERSATION THREAD (${context.conversationMessages.length} messages):
+${context.conversationText}`;
+
+  const result = await generateText({
+    model,
+    system: systemPrompt,
+    prompt: userPrompt,
+  });
+
+  const text = result.text || '';
+
+  const tempMatch = text.match(/CUSTOMER_TEMPERATURE:\s*(\w+)/i);
+  const reasonMatch = text.match(/TEMPERATURE_REASON:\s*(.+?)(?=\n[A-Z_]+:|\n\n|$)/is);
+
+  const rawTemp = (tempMatch?.[1] || 'calm').toLowerCase();
+  const validTemps = ['calm', 'frustrated', 'escalating', 'angry'];
+  const temperature = validTemps.includes(rawTemp) ? rawTemp : 'calm';
+
+  return {
+    customer_temperature: temperature,
+    temperature_reason: reasonMatch?.[1]?.trim() || '',
+  };
+}

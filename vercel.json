@@ -26,8 +26,12 @@
       "schedule": "0 4 * * *"
     },
     {
+      "path": "/api/cron/analyze-support?mode=changed",
+      "schedule": "0 * * * *"
+    },
+    {
       "path": "/api/cron/analyze-support?mode=full",
-      "schedule": "10 * * * *"
+      "schedule": "0 13 * * 1-5"
     },
     {
       "path": "/api/cron/co-destiny-report",
