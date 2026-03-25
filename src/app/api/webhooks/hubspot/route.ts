@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { createServiceClient } from '@/lib/supabase/client';
-import { routeEvent } from '@/lib/events/event-router';
+import { routeEventSync } from '@/lib/events/event-router';
 import type { TicketEventType } from '@/lib/events/event-router';
 
 // --- HubSpot webhook payload types ---
@@ -203,7 +203,8 @@ export async function POST(request: NextRequest) {
   }
 
   // Process each event (normalize and route)
-  // We respond 200 immediately — analysis runs async via routeEvent
+  // Analysis runs synchronously so Vercel doesn't kill the function before it completes.
+  // HubSpot allows up to 30 seconds for webhook responses.
   const results: Array<{ eventId: number; routed: boolean; type?: string }> = [];
 
   for (const event of validEvents) {
@@ -214,7 +215,7 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      await routeEvent({
+      await routeEventSync({
         source: 'hubspot',
         type: normalized.type,
         ticketId: normalized.ticketId,

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { createServiceClient } from '@/lib/supabase/client';
-import { routeEvent } from '@/lib/events/event-router';
+import { routeEventSync } from '@/lib/events/event-router';
 import type { TicketEventType } from '@/lib/events/event-router';
 
 // --- Linear webhook payload types ---
@@ -115,7 +115,7 @@ export async function POST(request: NextRequest) {
 
   // Route the event
   try {
-    const result = await routeEvent({
+    const result = await routeEventSync({
       source: 'linear',
       type: eventType,
       ticketId,
