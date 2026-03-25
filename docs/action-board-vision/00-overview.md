@@ -96,7 +96,7 @@ Each phase is documented in its own file with specific implementation details, f
 | 2 | [02-multi-pass-analysis.md](./02-multi-pass-analysis.md) | Decompose monolithic LLM call into specialized passes | None | **COMPLETE** |
 | 3 | [03-event-driven-webhooks.md](./03-event-driven-webhooks.md) | HubSpot/Linear webhooks → targeted analysis triggers | Phase 2 | **COMPLETE** |
 | 4 | [04-living-action-items.md](./04-living-action-items.md) | Action item lifecycle: auto-complete, auto-generate, staleness | Phases 2, 3 | **COMPLETE** |
-| 5 | [05-quality-layers.md](./05-quality-layers.md) | Self-critique, confidence calibration, quality gates | Phase 2 | Not started |
+| 5 | [05-quality-layers.md](./05-quality-layers.md) | Self-critique, confidence calibration, quality gates | Phase 2 | **COMPLETE** |
 | 6 | [06-proactive-intelligence.md](./06-proactive-intelligence.md) | Escalation prediction, SLA monitoring, pattern detection | Phases 1, 2, 3 | Not started |
 | 7 | [07-contextual-memory.md](./07-contextual-memory.md) | Analysis history, diff-aware updates, ticket evolution narrative | Phase 2 | Not started |
 
@@ -264,5 +264,32 @@ All work is on branch `feature/realtime-action-board`. Phases 1 and 2 are comple
 - `src/app/api/webhooks/hubspot/route.ts` — Fetches message text for agent_message events (enables auto-complete)
 - `src/scripts/test-living-action-items.ts` — End-to-end test script for the full lifecycle
 
+### Phase 5 deviations from plan:
+
+1. **No quality dashboard UI.** The plan listed a quality metrics view (Step 5) as optional. Not built — quality data is in the `quality_reviews` table for future use.
+
+2. **Batch analysis skips quality review.** The `batch-analyze` route now calls `runAnalysisPipeline` directly with `skipQualityReview: true` instead of going through `analyzeActionBoardTicket`. This avoids the latency penalty (~26s per ticket) during bulk operations.
+
+3. **Refinement runs once by default.** `QUALITY_MAX_REFINEMENT_ATTEMPTS` defaults to 1. The plan showed a re-review loop; the code supports multiple attempts but one pass is sufficient in practice.
+
+4. **`pass_approved` uses the env threshold, not the LLM's judgment.** The reviewer outputs PASS_APPROVED but we override it based on `QUALITY_REVIEW_THRESHOLD` (default 0.70) to keep control with the operator.
+
+### Key files created (Phase 5):
+- `src/lib/ai/passes/quality-review-pass.ts` — 6-dimension quality evaluation
+- `src/lib/ai/passes/refinement-pass.ts` — Targeted fix for flagged fields
+- `supabase/migrations/064_quality_reviews.sql` — Quality metrics storage
+- `src/scripts/test-quality-layers.ts` — End-to-end test
+
+### Key files modified (Phase 5):
+- `src/lib/ai/passes/orchestrator.ts` — Quality review + refinement integrated as final pipeline step; `AnalysisOptions.skipQualityReview` added; `applyRefinements()` merges fixes
+- `src/lib/ai/passes/types.ts` — Added `QualityReviewResult`, `QualityIssue`, `RefinementResult` types; `quality_review` and `refinement` PassTypes
+- `src/lib/ai/passes/models.ts` — `quality_review` and `refinement` route to Sonnet by default
+- `src/app/api/queues/support-action-board/batch-analyze/route.ts` — Skips quality review
+
+### Env vars (Phase 5):
+- `QUALITY_REVIEW_ENABLED` — `true`/`false` (default: `true`)
+- `QUALITY_REVIEW_THRESHOLD` — min score to pass (default: `0.70`)
+- `QUALITY_MAX_REFINEMENT_ATTEMPTS` — max retries (default: `1`)
+
 ### Branch status:
-All phases (1-4) are merged to `main`. Next phase should branch from `main`.
+All phases (1-5) are merged to `main`. Next phase should branch from `main`.
