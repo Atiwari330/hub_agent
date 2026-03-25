@@ -216,4 +216,20 @@ All work is on branch `feature/realtime-action-board`. Phases 1 and 2 are comple
 ### Key files modified (Phase 3):
 - `src/app/api/queues/support-action-board/complete-action/route.ts` — Emits `action_completed` internal event
 - `src/app/api/cron/analyze-support/route.ts` — Added `mode=changed` for safety-net cron
+- `src/middleware.ts` — Added `/api/webhooks/` to skip list (webhooks verify their own signatures)
 - `vercel.json` — Changed cron from every-10-min full to hourly changed + daily full
+
+### Phase 3 deployment lessons (important for future phases):
+
+1. **Middleware blocks new API routes by default.** `src/middleware.ts` requires Supabase auth on all `/api/` routes. New public routes (webhooks, external callbacks) MUST be added to the skip list in middleware, or they'll 401 before reaching the handler. See `WEBHOOK_ROUTES` array.
+
+2. **Vercel serverless kills async work after response.** Never use fire-and-forget (`promise.catch()` without `await`) for work that calls external APIs. The function gets killed after the response is sent. Webhook handlers must use `routeEventSync()` (awaits analysis) not `routeEvent()` (fire-and-forget). The `routeEvent()` function still exists but should only be used from contexts where the caller already awaits (e.g., internal events from `complete-action` where it's ok if the verification pass fails silently).
+
+3. **HubSpot signature verification uses the public URL.** The `verifyHubSpotSignature` function hardcodes the public Vercel domain (`hub-agent-oe65.vercel.app`) because Vercel's internal `request.url` includes deployment-specific subdomains that don't match what HubSpot used to compute the signature. If the domain changes, update the `publicUrl` constant in `src/app/api/webhooks/hubspot/route.ts`.
+
+4. **Linear webhook not yet registered.** The handler code exists and `LINEAR_WEBHOOK_SECRET` is in `.env.local` (blank). Linear webhooks haven't been set up in Linear's settings yet — low priority since most events come from HubSpot.
+
+5. **`conversation.newMessage` depends on `hs_conversation_id` column.** This column may not exist on `support_tickets` yet. Until the sync populates it, customer/agent message events from HubSpot conversations will be silently ignored (ticket lookup returns null).
+
+### Branch status:
+All work has been merged to `main` and is deployed to production. The `feature/realtime-action-board` branch still exists but `main` is ahead. Next phase should branch from `main`.
