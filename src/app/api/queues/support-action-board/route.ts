@@ -18,6 +18,29 @@ export interface ActionItemCompletion {
   verificationNote: string | null;
 }
 
+export interface LiveActionItem {
+  id: string;
+  ticketId: string;
+  description: string;
+  who: string;
+  priority: string;
+  status: 'active' | 'completed' | 'superseded' | 'expired';
+  statusTags: string[];
+  createdAt: string;
+  createdByPass: string | null;
+  completedAt: string | null;
+  completedBy: string | null;
+  completedByName: string | null;
+  completedMethod: string | null;
+  supersededAt: string | null;
+  supersededBy: string | null;
+  expiredAt: string | null;
+  expiredReason: string | null;
+  verified: boolean | null;
+  verificationNote: string | null;
+  sortOrder: number;
+}
+
 export interface ProgressNoteInfo {
   id: string;
   userId: string;
@@ -40,6 +63,7 @@ export interface ActionBoardTicket {
   isClosed: boolean;
   linearTask: string | null;
   analysis: TicketActionBoardAnalysis | null;
+  actionItems: LiveActionItem[];
   completions: ActionItemCompletion[];
   progressNotes: ProgressNoteInfo[];
   currentUserHasNote: boolean;
@@ -105,8 +129,9 @@ export async function GET(request: NextRequest) {
 
     const ticketIds = allTickets.map((t) => t.hubspot_ticket_id);
 
-    // Fetch analyses, completions, and progress notes in parallel
+    // Fetch analyses, action items, completions, and progress notes
     const analyses: Record<string, TicketActionBoardAnalysis> = {};
+    const actionItemsMap: Record<string, LiveActionItem[]> = {};
     const completionsMap: Record<string, ActionItemCompletion[]> = {};
     const notesMap: Record<string, ProgressNoteInfo[]> = {};
     const userNotedSet = new Set<string>();
@@ -151,7 +176,65 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      // Fetch recent completions (last 7 days)
+      // Fetch action items from the living action_items table
+      // Active items + recently completed/superseded/expired (last 24h) for context
+      const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      for (let i = 0; i < ticketIds.length; i += batchSize) {
+        const batch = ticketIds.slice(i, i + batchSize);
+        const { data: itemRows } = await supabase
+          .from('action_items')
+          .select('*')
+          .in('hubspot_ticket_id', batch)
+          .or(`status.eq.active,completed_at.gte.${dayAgo},superseded_at.gte.${dayAgo},expired_at.gte.${dayAgo}`)
+          .order('sort_order', { ascending: true });
+
+        if (itemRows && itemRows.length > 0) {
+          // Resolve completed_by user names
+          const completedByIds = [...new Set(
+            itemRows.filter((r) => r.completed_by).map((r) => r.completed_by as string)
+          )];
+          const userNameMap = new Map<string, string>();
+          if (completedByIds.length > 0) {
+            const { data: users } = await serviceClient
+              .from('user_profiles')
+              .select('id, display_name, email')
+              .in('id', completedByIds);
+            for (const u of users || []) {
+              userNameMap.set(u.id, u.display_name || u.email || 'Unknown');
+            }
+          }
+
+          for (const row of itemRows) {
+            if (!actionItemsMap[row.hubspot_ticket_id]) {
+              actionItemsMap[row.hubspot_ticket_id] = [];
+            }
+            actionItemsMap[row.hubspot_ticket_id].push({
+              id: row.id,
+              ticketId: row.hubspot_ticket_id,
+              description: row.description,
+              who: row.who,
+              priority: row.priority,
+              status: row.status,
+              statusTags: row.status_tags || [],
+              createdAt: row.created_at,
+              createdByPass: row.created_by_pass,
+              completedAt: row.completed_at,
+              completedBy: row.completed_by,
+              completedByName: row.completed_by ? userNameMap.get(row.completed_by) || null : null,
+              completedMethod: row.completed_method,
+              supersededAt: row.superseded_at,
+              supersededBy: row.superseded_by,
+              expiredAt: row.expired_at,
+              expiredReason: row.expired_reason,
+              verified: row.verified,
+              verificationNote: row.verification_note,
+              sortOrder: row.sort_order,
+            });
+          }
+        }
+      }
+
+      // Fetch recent completions from legacy table (last 7 days, for backward compat)
       const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
       const { data: completionRows } = await supabase
         .from('action_item_completions')
@@ -270,6 +353,7 @@ export async function GET(request: NextRequest) {
         isClosed: ticket.is_closed || false,
         linearTask: ticket.linear_task || null,
         analysis: analyses[ticket.hubspot_ticket_id] || null,
+        actionItems: actionItemsMap[ticket.hubspot_ticket_id] || [],
         completions: completionsMap[ticket.hubspot_ticket_id] || [],
         progressNotes: notesMap[ticket.hubspot_ticket_id] || [],
         currentUserHasNote: userNotedSet.has(ticket.hubspot_ticket_id),

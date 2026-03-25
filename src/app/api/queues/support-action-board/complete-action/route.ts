@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/client';
 import { checkApiAuth } from '@/lib/auth/api';
 import { RESOURCES } from '@/lib/auth';
+import { completeActionItems } from '@/lib/ai/passes/action-items-db';
 import { routeEvent } from '@/lib/events/event-router';
 
 export async function POST(request: NextRequest) {
@@ -20,8 +21,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const supabase = await createServerSupabaseClient();
+    // Update the action_items table directly
+    await completeActionItems(ticketId, [actionItemId], 'manual', user.id);
 
+    // Also write to legacy action_item_completions for backward compat
+    const supabase = await createServerSupabaseClient();
     const { data, error } = await supabase
       .from('action_item_completions')
       .upsert(
@@ -40,7 +44,7 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (error) {
-      return NextResponse.json({ error: 'Failed to record completion', details: error.message }, { status: 500 });
+      console.warn('[complete-action] Legacy completion upsert failed:', error.message);
     }
 
     // Emit internal event to trigger verification pass (async, don't block response)
@@ -49,7 +53,7 @@ export async function POST(request: NextRequest) {
       type: 'action_completed',
       ticketId,
       timestamp: new Date().toISOString(),
-      metadata: { actionItemId, completionId: data.id },
+      metadata: { actionItemId, completionId: data?.id },
     }).catch((err) => {
       console.error('[complete-action] Failed to route event:', err);
     });

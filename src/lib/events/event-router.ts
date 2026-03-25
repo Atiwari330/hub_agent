@@ -1,5 +1,6 @@
 import { createServiceClient } from '@/lib/supabase/client';
 import { runAnalysisPipeline } from '@/lib/ai/passes/orchestrator';
+import { runAutoCompleteCheck } from '@/lib/ai/passes/auto-complete-check';
 import type { PassType } from '@/lib/ai/passes/types';
 
 // --- Event types ---
@@ -55,7 +56,7 @@ export async function routeEvent(event: TicketEvent): Promise<{ eventId: string;
   const eventId = await logWebhookEvent(event, passes);
 
   // Run analysis asynchronously (don't await — webhook must respond fast)
-  runAnalysisForEvent(eventId, event.ticketId, passes).catch((err) => {
+  runAnalysisForEvent(eventId, event.ticketId, passes, event).catch((err) => {
     console.error(`[event-router] Analysis failed for event ${eventId}:`, err);
     markEventError(eventId, err instanceof Error ? err.message : 'Unknown error');
   });
@@ -76,7 +77,7 @@ export async function routeEventSync(event: TicketEvent): Promise<{ eventId: str
   const eventId = await logWebhookEvent(event, passes);
 
   try {
-    await runAnalysisForEvent(eventId, event.ticketId, passes);
+    await runAnalysisForEvent(eventId, event.ticketId, passes, event);
   } catch (err) {
     console.error(`[event-router] Analysis failed for event ${eventId}:`, err);
     await markEventError(eventId, err instanceof Error ? err.message : 'Unknown error');
@@ -109,10 +110,20 @@ async function logWebhookEvent(event: TicketEvent, passes: PassType[]): Promise<
   return data.id;
 }
 
-async function runAnalysisForEvent(eventId: string, ticketId: string, passes: PassType[]): Promise<void> {
+async function runAnalysisForEvent(eventId: string, ticketId: string, passes: PassType[], event?: TicketEvent): Promise<void> {
   const supabase = createServiceClient();
 
   try {
+    // Run auto-complete check for agent messages before the main analysis
+    if (event?.type === 'agent_message' && event.metadata?.messageText) {
+      try {
+        await runAutoCompleteCheck(ticketId, event.metadata.messageText as string);
+      } catch (err) {
+        console.error(`[event-router] Auto-complete check failed for ${ticketId}:`, err);
+        // Don't fail the main analysis if auto-complete check fails
+      }
+    }
+
     await runAnalysisPipeline(ticketId, { passes });
 
     // Mark event as processed

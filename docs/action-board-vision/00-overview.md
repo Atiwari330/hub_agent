@@ -95,7 +95,7 @@ Each phase is documented in its own file with specific implementation details, f
 | 1 | [01-realtime-ui.md](./01-realtime-ui.md) | Supabase Realtime subscriptions + live UI updates | None | **COMPLETE** |
 | 2 | [02-multi-pass-analysis.md](./02-multi-pass-analysis.md) | Decompose monolithic LLM call into specialized passes | None | **COMPLETE** |
 | 3 | [03-event-driven-webhooks.md](./03-event-driven-webhooks.md) | HubSpot/Linear webhooks → targeted analysis triggers | Phase 2 | **COMPLETE** |
-| 4 | [04-living-action-items.md](./04-living-action-items.md) | Action item lifecycle: auto-complete, auto-generate, staleness | Phases 2, 3 | Not started |
+| 4 | [04-living-action-items.md](./04-living-action-items.md) | Action item lifecycle: auto-complete, auto-generate, staleness | Phases 2, 3 | **COMPLETE** |
 | 5 | [05-quality-layers.md](./05-quality-layers.md) | Self-critique, confidence calibration, quality gates | Phase 2 | Not started |
 | 6 | [06-proactive-intelligence.md](./06-proactive-intelligence.md) | Escalation prediction, SLA monitoring, pattern detection | Phases 1, 2, 3 | Not started |
 | 7 | [07-contextual-memory.md](./07-contextual-memory.md) | Analysis history, diff-aware updates, ticket evolution narrative | Phase 2 | Not started |
@@ -231,5 +231,38 @@ All work is on branch `feature/realtime-action-board`. Phases 1 and 2 are comple
 
 5. **`conversation.newMessage` depends on `hs_conversation_id` column.** This column may not exist on `support_tickets` yet. Until the sync populates it, customer/agent message events from HubSpot conversations will be silently ignored (ticket lookup returns null).
 
+### Phase 4 deviations from plan:
+
+1. **Centralized DB operations module.** Instead of scattering Supabase calls across passes and endpoints, created `src/lib/ai/passes/action-items-db.ts` which centralizes all action_items table reads/writes (getActiveActionItems, insertActionItems, supersedeActionItems, completeActionItems, expireActionItems) and event logging. All passes and API routes use this module.
+
+2. **Backward compatibility is dual-write.** The action-item-pass writes to both the new `action_items` table AND returns the combined items for the JSONB column in `ticket_action_board_analyses`. The complete-action endpoint writes to both `action_items` and legacy `action_item_completions`. The GET endpoint fetches from both tables (action_items for living items, action_item_completions for legacy). The UI gracefully falls back to JSONB data if no living items exist for a ticket.
+
+3. **Auto-complete check runs before analysis on agent_message.** The event router runs `runAutoCompleteCheck()` before the standard analysis passes for `agent_message` events. This ensures items are auto-completed before the action-item-pass runs its keep/supersede/new evaluation. The check only fires if `event.metadata.messageText` is present.
+
+4. **Implicitly dropped items are superseded.** If the LLM doesn't mention an existing item in either KEEP_ITEMS or SUPERSEDE_ITEMS, it's treated as implicitly superseded with reason "Implicitly replaced by updated analysis". This prevents orphaned active items.
+
+5. **Safety net for empty results.** If the LLM supersedes all items but doesn't create new ones, the pass logs a warning and falls back to keeping the existing items rather than leaving the ticket with zero action items.
+
+6. **HubSpot webhook fetches message text.** The webhook handler now calls HubSpot's conversations API to fetch the actual message body for `agent_message` events (via `fetchMessageText()`). This was necessary because HubSpot's webhook payload only says "a message happened" — it doesn't include the text. Without this, auto-complete detection would never fire.
+
+### Key files created (Phase 4):
+- `src/lib/ai/passes/action-items-db.ts` — Centralized action_items table operations
+- `src/lib/ai/passes/auto-complete-check.ts` — Auto-completion detection from agent messages
+- `src/lib/ai/passes/staleness-check.ts` — Background relevance checking for old items
+- `src/app/api/cron/action-item-staleness/route.ts` — Cron endpoint (every 15 min)
+- `supabase/migrations/063_action_items_table.sql` — New tables + data migration
+
+### Key files modified (Phase 4):
+- `src/lib/ai/passes/action-item-pass.ts` — Keep/supersede/new lifecycle logic
+- `src/lib/events/event-router.ts` — Auto-complete check on agent_message events
+- `src/app/api/queues/support-action-board/route.ts` — Fetches from action_items table, new LiveActionItem type
+- `src/app/api/queues/support-action-board/complete-action/route.ts` — Dual-write to action_items + legacy table
+- `src/components/dashboard/queues/support-action-board-view.tsx` — Lifecycle-aware rendering, ActionItemCard component, realtime subscription
+- `vercel.json` — Added action-item-staleness cron
+
+### Key files also modified (Phase 4):
+- `src/app/api/webhooks/hubspot/route.ts` — Fetches message text for agent_message events (enables auto-complete)
+- `src/scripts/test-living-action-items.ts` — End-to-end test script for the full lifecycle
+
 ### Branch status:
-All work has been merged to `main` and is deployed to production. The `feature/realtime-action-board` branch still exists but `main` is ahead. Next phase should branch from `main`.
+All phases (1-4) are merged to `main`. Next phase should branch from `main`.

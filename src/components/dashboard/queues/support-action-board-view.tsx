@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { getHubSpotTicketUrl } from '@/lib/hubspot/urls';
-import type { ActionBoardResponse, ActionBoardTicket, ProgressNoteInfo } from '@/app/api/queues/support-action-board/route';
+import type { ActionBoardResponse, ActionBoardTicket, ProgressNoteInfo, LiveActionItem } from '@/app/api/queues/support-action-board/route';
 import type { ActionItem, RelatedTicketInfo } from '@/app/api/queues/support-action-board/analyze/analyze-core';
 import { useRealtimeSubscription, type ConnectionStatus } from '@/hooks/use-realtime-subscription';
 
@@ -315,6 +315,51 @@ export function SupportActionBoardView({ userRole, canAnalyzeTicket }: Props) {
     });
   }, []);
 
+  const handleActionItemChange = useCallback((payload: { new: Record<string, unknown> }) => {
+    const row = payload.new;
+    if (!row || !row.hubspot_ticket_id) return;
+    const ticketId = row.hubspot_ticket_id as string;
+
+    setData((prev) => {
+      if (!prev) return prev;
+      const updatedTickets = prev.tickets.map((t) => {
+        if (t.ticketId !== ticketId) return t;
+        const updatedItem: LiveActionItem = {
+          id: row.id as string,
+          ticketId: row.hubspot_ticket_id as string,
+          description: row.description as string,
+          who: row.who as string,
+          priority: row.priority as string,
+          status: row.status as LiveActionItem['status'],
+          statusTags: (row.status_tags || []) as string[],
+          createdAt: row.created_at as string,
+          createdByPass: row.created_by_pass as string | null,
+          completedAt: row.completed_at as string | null,
+          completedBy: row.completed_by as string | null,
+          completedByName: null, // Will be resolved on next full fetch
+          completedMethod: row.completed_method as string | null,
+          supersededAt: row.superseded_at as string | null,
+          supersededBy: row.superseded_by as string | null,
+          expiredAt: row.expired_at as string | null,
+          expiredReason: row.expired_reason as string | null,
+          verified: row.verified as boolean | null,
+          verificationNote: row.verification_note as string | null,
+          sortOrder: row.sort_order as number,
+        };
+        // Replace existing or add new
+        const existingIdx = t.actionItems.findIndex((ai) => ai.id === updatedItem.id);
+        const newItems = [...t.actionItems];
+        if (existingIdx >= 0) {
+          newItems[existingIdx] = updatedItem;
+        } else {
+          newItems.push(updatedItem);
+        }
+        return { ...t, actionItems: newItems };
+      });
+      return { ...prev, tickets: updatedTickets };
+    });
+  }, []);
+
   const handleTicketUpdate = useCallback((payload: { new: Record<string, unknown> }) => {
     const row = payload.new;
     if (!row || !row.hubspot_ticket_id) return;
@@ -358,11 +403,16 @@ export function SupportActionBoardView({ userRole, canAnalyzeTicket }: Props) {
       onPayload: handleNoteChange,
     },
     {
+      table: 'action_items',
+      event: '*' as const,
+      onPayload: handleActionItemChange,
+    },
+    {
       table: 'support_tickets',
       event: 'UPDATE' as const,
       onPayload: handleTicketUpdate,
     },
-  ], [handleAnalysisChange, handleCompletionInsert, handleNoteChange, handleTicketUpdate]);
+  ], [handleAnalysisChange, handleCompletionInsert, handleNoteChange, handleActionItemChange, handleTicketUpdate]);
 
   const { status: realtimeStatus } = useRealtimeSubscription({
     channelName: 'action-board-live',
@@ -446,29 +496,34 @@ export function SupportActionBoardView({ userRole, canAnalyzeTicket }: Props) {
     }
   };
 
-  const handleCompleteAction = async (ticketId: string, actionItem: ActionItem) => {
-    // Optimistic update
-    const optimisticCompletion = {
-      id: `optimistic-${Date.now()}`,
-      actionItemId: actionItem.id,
-      actionDescription: actionItem.description,
-      completedBy: data?.userId || '',
-      completedByName: 'You',
-      completedAt: new Date().toISOString(),
-      verified: null,
-      verificationNote: null,
-    };
-
+  const handleCompleteAction = async (ticketId: string, actionItem: LiveActionItem | ActionItem) => {
+    // Optimistic update: mark the action item as completed in local state
     const prevData = data;
     setData((prev) => {
       if (!prev) return prev;
       return {
         ...prev,
-        tickets: prev.tickets.map((t) =>
-          t.ticketId === ticketId
-            ? { ...t, completions: [...t.completions, optimisticCompletion] }
-            : t
-        ),
+        tickets: prev.tickets.map((t) => {
+          if (t.ticketId !== ticketId) return t;
+          return {
+            ...t,
+            actionItems: t.actionItems.map((ai) =>
+              ai.id === actionItem.id
+                ? { ...ai, status: 'completed' as const, completedAt: new Date().toISOString(), completedMethod: 'manual', completedByName: 'You' }
+                : ai
+            ),
+            completions: [...t.completions, {
+              id: `optimistic-${Date.now()}`,
+              actionItemId: actionItem.id,
+              actionDescription: actionItem.description,
+              completedBy: data?.userId || '',
+              completedByName: 'You',
+              completedAt: new Date().toISOString(),
+              verified: null,
+              verificationNote: null,
+            }],
+          };
+        }),
       };
     });
 
@@ -483,7 +538,6 @@ export function SupportActionBoardView({ userRole, canAnalyzeTicket }: Props) {
         }),
       });
       if (!res.ok) {
-        // Revert on failure
         setData(prevData);
       }
       // On success, realtime subscription will update with the real row
@@ -827,7 +881,7 @@ export function SupportActionBoardView({ userRole, canAnalyzeTicket }: Props) {
             isExpanded={expandedTicket === ticket.ticketId}
             onToggle={() => setExpandedTicket(expandedTicket === ticket.ticketId ? null : ticket.ticketId)}
             onAnalyze={() => handleAnalyze(ticket.ticketId)}
-            onCompleteAction={(item) => handleCompleteAction(ticket.ticketId, item)}
+            onCompleteAction={(item: LiveActionItem) => handleCompleteAction(ticket.ticketId, item)}
             analyzing={analyzing === ticket.ticketId}
             canAnalyze={canAnalyzeTicket}
             isVP={isVP}
@@ -856,6 +910,102 @@ export function SupportActionBoardView({ userRole, canAnalyzeTicket }: Props) {
   );
 }
 
+// --- Action Item Card (lifecycle-aware) ---
+
+function ActionItemCard({ item, onComplete }: { item: LiveActionItem; onComplete?: () => void }) {
+  const isActive = item.status === 'active';
+  const isCompleted = item.status === 'completed';
+  const isSuperseded = item.status === 'superseded';
+  const isExpired = item.status === 'expired';
+  const isAutoCompleted = isCompleted && item.completedMethod === 'auto_detected';
+  const isUnverified = isCompleted && item.verified === false;
+
+  const bgClass = isCompleted
+    ? isUnverified
+      ? 'bg-red-950/30 border border-red-900'
+      : 'bg-emerald-950/30 border border-emerald-900'
+    : isSuperseded
+      ? 'bg-slate-800/50 border border-slate-700 opacity-60'
+      : isExpired
+        ? 'bg-slate-800/30 border border-slate-700 opacity-40'
+        : 'bg-slate-800';
+
+  return (
+    <div className={`flex items-start gap-3 p-3 rounded-lg ${bgClass}`}>
+      {/* Checkbox (only for active items) */}
+      {isActive && onComplete ? (
+        <button
+          onClick={(e) => { e.stopPropagation(); onComplete(); }}
+          className="mt-0.5 flex-shrink-0 w-5 h-5 rounded border border-gray-500 hover:border-indigo-400 flex items-center justify-center"
+        />
+      ) : (
+        <div className={`mt-0.5 flex-shrink-0 w-5 h-5 rounded border flex items-center justify-center ${
+          isCompleted ? 'bg-emerald-600 border-emerald-600' : 'border-gray-600'
+        }`}>
+          {isCompleted && (
+            <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+            </svg>
+          )}
+          {isSuperseded && (
+            <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+            </svg>
+          )}
+        </div>
+      )}
+
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-1">
+          <PriorityBadge priority={item.priority} />
+          <WhoBadge who={item.who} />
+          {item.statusTags.map((tag) => (
+            <StatusTag key={tag} tag={tag} />
+          ))}
+          {isAutoCompleted && (
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium bg-emerald-900/50 text-emerald-400">
+              Auto-detected
+            </span>
+          )}
+          {/* Item age */}
+          <span className="text-[10px] text-gray-500 ml-auto">
+            <AnalyzedTimestamp dateStr={item.createdAt} />
+          </span>
+        </div>
+
+        <p className={`text-sm ${
+          isCompleted || isSuperseded ? 'line-through text-gray-500' :
+          isExpired ? 'text-gray-600' : 'text-gray-200'
+        }`}>
+          {item.description}
+        </p>
+
+        {/* Status detail line */}
+        {isCompleted && (
+          <p className="text-xs text-gray-500 mt-1">
+            {isAutoCompleted ? 'Auto-completed' : `Completed by ${item.completedByName || 'agent'}`}
+            {item.completedAt && <> · <AnalyzedTimestamp dateStr={item.completedAt} /></>}
+            {isUnverified && (
+              <span className="text-red-400 font-medium ml-2">
+                Unverified — {item.verificationNote || 'No matching activity found'}
+              </span>
+            )}
+            {item.verified === true && (
+              <span className="text-emerald-400 ml-2">Verified</span>
+            )}
+          </p>
+        )}
+        {isSuperseded && item.expiredReason && (
+          <p className="text-xs text-gray-500 mt-1">Replaced: {item.expiredReason}</p>
+        )}
+        {isExpired && item.expiredReason && (
+          <p className="text-xs text-gray-500 mt-1">Expired: {item.expiredReason}</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // --- Ticket Row Component ---
 
 interface TicketRowProps {
@@ -863,7 +1013,7 @@ interface TicketRowProps {
   isExpanded: boolean;
   onToggle: () => void;
   onAnalyze: () => void;
-  onCompleteAction: (item: ActionItem) => void;
+  onCompleteAction: (item: LiveActionItem) => void;
   analyzing: boolean;
   canAnalyze: boolean;
   isVP: boolean;
@@ -893,8 +1043,17 @@ function TicketRow({
   userId,
 }: TicketRowProps) {
   const a = ticket.analysis;
-  const completedActionIds = new Set(ticket.completions.map((c) => c.actionItemId));
+  const [showExpired, setShowExpired] = useState(false);
   const isWritingNote = noteTicketId === ticket.ticketId;
+
+  // Separate action items by status
+  const activeItems = ticket.actionItems.filter((ai) => ai.status === 'active');
+  const completedItems = ticket.actionItems.filter((ai) => ai.status === 'completed');
+  const supersededItems = ticket.actionItems.filter((ai) => ai.status === 'superseded');
+  const expiredItems = ticket.actionItems.filter((ai) => ai.status === 'expired');
+  // Fall back to analysis.action_items if no living items exist yet (pre-migration)
+  const hasLivingItems = ticket.actionItems.length > 0;
+  const legacyCompletedIds = new Set(ticket.completions.map((c) => c.actionItemId));
 
   // Use live-computed wait time if raw timestamps available, else fall back to analysis snapshot
   const liveCustomerWait = computeLiveHours(ticket.lastCustomerMessageAt, ticket.lastAgentMessageAt);
@@ -1010,69 +1169,85 @@ function TicketRow({
 
               {/* Action Items */}
               <div className="bg-slate-900 border border-slate-700 rounded-lg p-4">
-                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Action Items</h3>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                    Action Items
+                    {hasLivingItems && (
+                      <span className="ml-2 text-gray-500 font-normal normal-case">
+                        {activeItems.length} active
+                        {completedItems.length > 0 && `, ${completedItems.length} done`}
+                        {supersededItems.length > 0 && `, ${supersededItems.length} replaced`}
+                      </span>
+                    )}
+                  </h3>
+                  {expiredItems.length > 0 && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setShowExpired(!showExpired); }}
+                      className="text-[10px] text-gray-500 hover:text-gray-300"
+                    >
+                      {showExpired ? 'Hide expired' : `Show ${expiredItems.length} expired`}
+                    </button>
+                  )}
+                </div>
                 <div className="space-y-3">
-                  {a.action_items.map((item) => {
-                    const isCompleted = completedActionIds.has(item.id);
-                    const completion = ticket.completions.find((c) => c.actionItemId === item.id);
-                    const isUnverified = completion?.verified === false;
+                  {hasLivingItems ? (
+                    <>
+                      {/* Active items */}
+                      {activeItems.map((item) => (
+                        <ActionItemCard
+                          key={item.id}
+                          item={item}
+                          onComplete={() => onCompleteAction(item)}
+                        />
+                      ))}
 
-                    return (
-                      <div
-                        key={item.id}
-                        className={`flex items-start gap-3 p-3 rounded-lg ${
-                          isCompleted
-                            ? isUnverified
-                              ? 'bg-red-950/30 border border-red-900'
-                              : 'bg-emerald-950/30 border border-emerald-900'
-                            : 'bg-slate-800'
-                        }`}
-                      >
-                        <button
-                          onClick={(e) => { e.stopPropagation(); if (!isCompleted) onCompleteAction(item); }}
-                          className={`mt-0.5 flex-shrink-0 w-5 h-5 rounded border ${
-                            isCompleted
-                              ? 'bg-emerald-600 border-emerald-600'
-                              : 'border-gray-500 hover:border-indigo-400'
-                          } flex items-center justify-center`}
-                          disabled={isCompleted}
-                        >
-                          {isCompleted && (
-                            <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                            </svg>
-                          )}
-                        </button>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <PriorityBadge priority={item.priority} />
-                            <WhoBadge who={item.who} />
-                            {item.status_tags.map((tag) => (
-                              <StatusTag key={tag} tag={tag} />
-                            ))}
+                      {/* Completed items */}
+                      {completedItems.map((item) => (
+                        <ActionItemCard key={item.id} item={item} />
+                      ))}
+
+                      {/* Superseded items (collapsed) */}
+                      {supersededItems.map((item) => (
+                        <ActionItemCard key={item.id} item={item} />
+                      ))}
+
+                      {/* Expired items (hidden by default) */}
+                      {showExpired && expiredItems.map((item) => (
+                        <ActionItemCard key={item.id} item={item} />
+                      ))}
+
+                      {activeItems.length === 0 && completedItems.length === 0 && (
+                        <p className="text-sm text-gray-500">No active action items.</p>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      {/* Fallback: render from analysis JSONB (pre-migration) */}
+                      {a.action_items.map((item) => {
+                        const isCompleted = legacyCompletedIds.has(item.id);
+                        const completion = ticket.completions.find((c) => c.actionItemId === item.id);
+                        return (
+                          <div
+                            key={item.id}
+                            className={`flex items-start gap-3 p-3 rounded-lg ${isCompleted ? 'bg-emerald-950/30 border border-emerald-900' : 'bg-slate-800'}`}
+                          >
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1">
+                                <PriorityBadge priority={item.priority} />
+                                <WhoBadge who={item.who} />
+                              </div>
+                              <p className={`text-sm ${isCompleted ? 'line-through text-gray-500' : 'text-gray-200'}`}>{item.description}</p>
+                              {isCompleted && completion && (
+                                <p className="text-xs text-gray-500 mt-1">Completed by {completion.completedByName}</p>
+                              )}
+                            </div>
                           </div>
-                          <p className={`text-sm ${isCompleted ? 'line-through text-gray-500' : 'text-gray-200'}`}>
-                            {item.description}
-                          </p>
-                          {isCompleted && completion && (
-                            <p className="text-xs text-gray-500 mt-1">
-                              Completed by {completion.completedByName} · <AnalyzedTimestamp dateStr={completion.completedAt} />
-                              {isUnverified && (
-                                <span className="text-red-400 font-medium ml-2">
-                                  ⚠ Unverified — {completion.verificationNote || 'No matching activity found'}
-                                </span>
-                              )}
-                              {completion.verified === true && (
-                                <span className="text-emerald-400 ml-2">✓ Verified</span>
-                              )}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                  {a.action_items.length === 0 && (
-                    <p className="text-sm text-gray-500">No action items extracted.</p>
+                        );
+                      })}
+                      {a.action_items.length === 0 && (
+                        <p className="text-sm text-gray-500">No action items extracted.</p>
+                      )}
+                    </>
                   )}
                 </div>
               </div>

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { createServiceClient } from '@/lib/supabase/client';
+import { getHubSpotClient } from '@/lib/hubspot/client';
 import { routeEventSync } from '@/lib/events/event-router';
 import type { TicketEventType } from '@/lib/events/event-router';
 
@@ -82,7 +83,22 @@ async function normalizeHubSpotEvent(event: HubSpotWebhookEvent): Promise<Normal
     if (!ticketId) return null;
 
     const type: TicketEventType = messageDirection === 'INCOMING' ? 'customer_message' : 'agent_message';
-    return { ticketId, type, metadata: { messageDirection, conversationId: objectId } };
+    const metadata: Record<string, unknown> = { messageDirection, conversationId: objectId };
+
+    // For agent messages, fetch the message text so auto-complete check can run
+    if (type === 'agent_message' && event.messageId) {
+      try {
+        const messageText = await fetchMessageText(String(objectId), event.messageId);
+        if (messageText) {
+          metadata.messageText = messageText;
+        }
+      } catch (err) {
+        console.warn('[hubspot-webhook] Could not fetch message text:', err);
+        // Continue without message text — auto-complete check will skip
+      }
+    }
+
+    return { ticketId, type, metadata };
   }
 
   // ticket.creation
@@ -122,6 +138,26 @@ async function normalizeHubSpotEvent(event: HubSpotWebhookEvent): Promise<Normal
 
   console.warn(`[hubspot-webhook] Unhandled subscription type: ${subscriptionType}`);
   return null;
+}
+
+/**
+ * Fetch the text content of a specific message from a HubSpot conversation thread.
+ * Used to get agent message text for auto-completion detection.
+ */
+async function fetchMessageText(threadId: string, messageId: string): Promise<string | null> {
+  try {
+    const hsClient = getHubSpotClient();
+    const response = await hsClient.apiRequest({
+      method: 'GET',
+      path: `/conversations/v3/conversations/threads/${threadId}/messages/${messageId}`,
+    });
+    const message = await response.json() as { text?: string; richText?: string };
+    // Prefer plain text, fall back to rich text stripped of HTML
+    return message.text || (message.richText ? message.richText.replace(/<[^>]*>/g, '') : null);
+  } catch (err) {
+    console.warn(`[hubspot-webhook] Failed to fetch message ${messageId} from thread ${threadId}:`, err);
+    return null;
+  }
 }
 
 /**
