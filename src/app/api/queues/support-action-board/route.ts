@@ -3,6 +3,8 @@ import { createServerSupabaseClient, createServiceClient } from '@/lib/supabase/
 import { checkApiAuth } from '@/lib/auth/api';
 import { RESOURCES } from '@/lib/auth';
 import { getOwnerById } from '@/lib/hubspot/owners';
+import { getActiveAlerts, getActivePatterns } from '@/lib/ai/intelligence/alert-utils';
+import type { AlertRecord, PatternRecord } from '@/lib/ai/intelligence/alert-utils';
 import type { TicketActionBoardAnalysis, ActionItem, RelatedTicketInfo } from './analyze/analyze-core';
 
 // --- Types ---
@@ -69,6 +71,8 @@ export interface ActionBoardTicket {
   currentUserHasNote: boolean;
   lastCustomerMessageAt: string | null;
   lastAgentMessageAt: string | null;
+  alerts: AlertRecord[];
+  escalationRiskScore: number | null;
 }
 
 export interface ActionBoardResponse {
@@ -84,6 +88,7 @@ export interface ActionBoardResponse {
     total: number;
   };
   changedTicketIds: string[];
+  patterns: PatternRecord[];
   userRole: string;
   userId: string;
 }
@@ -309,6 +314,12 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Fetch active alerts for all tickets
+    const alertsMap = ticketIds.length > 0 ? await getActiveAlerts(ticketIds) : {};
+
+    // Fetch active global patterns
+    const patterns = await getActivePatterns();
+
     // Resolve owner names
     const ownerIds = [...new Set(allTickets.map((t) => t.hubspot_owner_id).filter(Boolean))];
     const ownerMap: Record<string, string> = {};
@@ -359,6 +370,8 @@ export async function GET(request: NextRequest) {
         currentUserHasNote: userNotedSet.has(ticket.hubspot_ticket_id),
         lastCustomerMessageAt: ticket.last_customer_message_at || null,
         lastAgentMessageAt: ticket.last_agent_message_at || null,
+        alerts: alertsMap[ticket.hubspot_ticket_id] || [],
+        escalationRiskScore: ticket.escalation_risk_score != null ? parseFloat(ticket.escalation_risk_score) : null,
       };
     });
 
@@ -426,6 +439,7 @@ export async function GET(request: NextRequest) {
         total: tickets.length,
       },
       changedTicketIds,
+      patterns,
       userRole: currentUser.role,
       userId: currentUser.id,
     };

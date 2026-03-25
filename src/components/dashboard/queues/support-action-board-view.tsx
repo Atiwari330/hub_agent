@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { getHubSpotTicketUrl } from '@/lib/hubspot/urls';
 import type { ActionBoardResponse, ActionBoardTicket, ProgressNoteInfo, LiveActionItem } from '@/app/api/queues/support-action-board/route';
+import type { AlertRecord, PatternRecord } from '@/lib/ai/intelligence/alert-utils';
 import type { ActionItem, RelatedTicketInfo } from '@/app/api/queues/support-action-board/analyze/analyze-core';
 import { useRealtimeSubscription, type ConnectionStatus } from '@/hooks/use-realtime-subscription';
 
@@ -101,6 +102,30 @@ function TemperatureBadge({ temp }: { temp: string }) {
   const { label, color } = config[temp] || { label: temp, color: 'bg-gray-100 text-gray-500' };
   return (
     <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${color}`}>
+      {label}
+    </span>
+  );
+}
+
+function EscalationRiskBadge({ score }: { score: number | null }) {
+  if (score === null || score < 0.6) return null;
+  const label = score >= 0.9 ? 'Critical' : score >= 0.75 ? 'High' : 'Elevated';
+  const color = score >= 0.9 ? 'bg-red-600 text-white' : score >= 0.75 ? 'bg-orange-500 text-white' : 'bg-yellow-500 text-black';
+  return (
+    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold ${color}`} title={`Escalation risk: ${Math.round(score * 100)}%`}>
+      {label}
+    </span>
+  );
+}
+
+function AlertSeverityBadge({ severity, label }: { severity: string; label: string }) {
+  const colors: Record<string, string> = {
+    critical: 'bg-red-900/50 text-red-300 border border-red-800',
+    warning: 'bg-orange-900/50 text-orange-300 border border-orange-800',
+    info: 'bg-blue-900/50 text-blue-300 border border-blue-800',
+  };
+  return (
+    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium ${colors[severity] || colors.info}`}>
       {label}
     </span>
   );
@@ -380,7 +405,61 @@ export function SupportActionBoardView({ userRole, canAnalyzeTicket }: Props) {
           isClosed: (row.is_closed as boolean) ?? t.isClosed,
           lastCustomerMessageAt: (row.last_customer_message_at as string) ?? t.lastCustomerMessageAt,
           lastAgentMessageAt: (row.last_agent_message_at as string) ?? t.lastAgentMessageAt,
+          escalationRiskScore: row.escalation_risk_score != null ? parseFloat(row.escalation_risk_score as string) : t.escalationRiskScore,
         };
+      });
+      return { ...prev, tickets: updatedTickets };
+    });
+  }, []);
+
+  const handleAlertChange = useCallback((payload: { new: Record<string, unknown> }) => {
+    const row = payload.new;
+    if (!row || !row.hubspot_ticket_id) return;
+    const ticketId = row.hubspot_ticket_id as string;
+
+    // If the alert was resolved, remove it from the ticket
+    if (row.resolved_at) {
+      setData((prev) => {
+        if (!prev) return prev;
+        const updatedTickets = prev.tickets.map((t) => {
+          if (t.ticketId !== ticketId) return t;
+          return {
+            ...t,
+            alerts: t.alerts.filter((a) => a.id !== row.id),
+          };
+        });
+        return { ...prev, tickets: updatedTickets };
+      });
+      return;
+    }
+
+    const newAlert: AlertRecord = {
+      id: row.id as string,
+      ticketId: row.hubspot_ticket_id as string,
+      alertType: row.alert_type as string,
+      severity: row.severity as string,
+      title: row.title as string,
+      description: row.description as string,
+      metadata: (row.metadata || {}) as Record<string, unknown>,
+      acknowledgedBy: row.acknowledged_by as string | null,
+      acknowledgedAt: row.acknowledged_at as string | null,
+      createdAt: row.created_at as string,
+      expiresAt: row.expires_at as string | null,
+    };
+
+    setData((prev) => {
+      if (!prev) return prev;
+      const updatedTickets = prev.tickets.map((t) => {
+        if (t.ticketId !== ticketId) return t;
+        // Replace existing or add new
+        const existingIdx = t.alerts.findIndex((a) => a.id === newAlert.id);
+        const newAlerts = [...t.alerts];
+        if (existingIdx >= 0) {
+          newAlerts[existingIdx] = newAlert;
+        } else {
+          newAlerts.unshift(newAlert);
+        }
+        return { ...t, alerts: newAlerts };
       });
       return { ...prev, tickets: updatedTickets };
     });
@@ -412,7 +491,12 @@ export function SupportActionBoardView({ userRole, canAnalyzeTicket }: Props) {
       event: 'UPDATE' as const,
       onPayload: handleTicketUpdate,
     },
-  ], [handleAnalysisChange, handleCompletionInsert, handleNoteChange, handleActionItemChange, handleTicketUpdate]);
+    {
+      table: 'ticket_alerts',
+      event: '*' as const,
+      onPayload: handleAlertChange,
+    },
+  ], [handleAnalysisChange, handleCompletionInsert, handleNoteChange, handleActionItemChange, handleTicketUpdate, handleAlertChange]);
 
   const { status: realtimeStatus } = useRealtimeSubscription({
     channelName: 'action-board-live',
@@ -606,6 +690,32 @@ export function SupportActionBoardView({ userRole, canAnalyzeTicket }: Props) {
       setNoteText(savedNoteText);
     } finally {
       setSubmittingNote(false);
+    }
+  };
+
+  const handleAcknowledgeAlert = async (alertId: string) => {
+    // Optimistic update: mark as acknowledged
+    setData((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        tickets: prev.tickets.map((t) => ({
+          ...t,
+          alerts: t.alerts.map((a) =>
+            a.id === alertId ? { ...a, acknowledgedBy: prev.userId, acknowledgedAt: new Date().toISOString() } : a
+          ),
+        })),
+      };
+    });
+
+    try {
+      await fetch('/api/queues/support-action-board/acknowledge-alert', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ alertId }),
+      });
+    } catch (err) {
+      console.error('Acknowledge alert error:', err);
     }
   };
 
@@ -837,6 +947,64 @@ export function SupportActionBoardView({ userRole, canAnalyzeTicket }: Props) {
         </button>
       </div>
 
+      {/* Proactive Intelligence: Pattern Alerts Banner */}
+      {data.patterns && data.patterns.length > 0 && (
+        <div className="px-6 py-3 space-y-2">
+          {data.patterns.map((pattern) => (
+            <div key={pattern.id} className="bg-amber-950/30 border border-amber-800 rounded-lg px-4 py-3">
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-600 text-white">
+                      PATTERN
+                    </span>
+                    <span className="text-xs text-amber-300 font-medium">
+                      {pattern.affectedTicketIds.length} tickets affected
+                    </span>
+                    {pattern.confidence >= 0.8 && (
+                      <span className="text-[10px] text-amber-500">High confidence</span>
+                    )}
+                  </div>
+                  <p className="text-sm text-gray-200">{pattern.description}</p>
+                  {pattern.recommendedAction && (
+                    <p className="text-xs text-amber-400 mt-1">{pattern.recommendedAction}</p>
+                  )}
+                </div>
+                <span className="text-[10px] text-gray-500 whitespace-nowrap ml-4">
+                  {new Date(pattern.createdAt).toLocaleDateString()}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Proactive Intelligence: Global Alert Summary */}
+      {(() => {
+        const allAlerts = data.tickets.flatMap((t) => t.alerts || []);
+        const criticalCount = allAlerts.filter((a) => a.severity === 'critical').length;
+        const warningCount = allAlerts.filter((a) => a.severity === 'warning').length;
+        if (criticalCount === 0 && warningCount === 0) return null;
+        return (
+          <div className="px-6 py-2">
+            <div className="flex items-center gap-3 text-xs">
+              {criticalCount > 0 && (
+                <span className="flex items-center gap-1 text-red-400">
+                  <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                  {criticalCount} critical alert{criticalCount !== 1 ? 's' : ''}
+                </span>
+              )}
+              {warningCount > 0 && (
+                <span className="flex items-center gap-1 text-orange-400">
+                  <span className="w-2 h-2 rounded-full bg-orange-500" />
+                  {warningCount} warning{warningCount !== 1 ? 's' : ''}
+                </span>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Ticket List */}
       <div className="flex-1 overflow-auto px-6">
         {/* Column Headers */}
@@ -882,6 +1050,7 @@ export function SupportActionBoardView({ userRole, canAnalyzeTicket }: Props) {
             onToggle={() => setExpandedTicket(expandedTicket === ticket.ticketId ? null : ticket.ticketId)}
             onAnalyze={() => handleAnalyze(ticket.ticketId)}
             onCompleteAction={(item: LiveActionItem) => handleCompleteAction(ticket.ticketId, item)}
+            onAcknowledgeAlert={handleAcknowledgeAlert}
             analyzing={analyzing === ticket.ticketId}
             canAnalyze={canAnalyzeTicket}
             isVP={isVP}
@@ -1014,6 +1183,7 @@ interface TicketRowProps {
   onToggle: () => void;
   onAnalyze: () => void;
   onCompleteAction: (item: LiveActionItem) => void;
+  onAcknowledgeAlert: (alertId: string) => void;
   analyzing: boolean;
   canAnalyze: boolean;
   isVP: boolean;
@@ -1032,6 +1202,7 @@ function TicketRow({
   onToggle,
   onAnalyze,
   onCompleteAction,
+  onAcknowledgeAlert,
   analyzing,
   canAnalyze,
   noteTicketId,
@@ -1071,7 +1242,7 @@ function TicketRow({
           <ResponseClock hours={customerWaitHours} />
         </div>
 
-        {/* Status Tags */}
+        {/* Status Tags + Alert Indicators */}
         <div className="w-8 flex flex-wrap gap-0.5">
           {(a?.status_tags || []).slice(0, 2).map((tag) => (
             <div
@@ -1086,6 +1257,13 @@ function TicketRow({
               title={tag}
             />
           ))}
+          {/* Alert indicators */}
+          {(ticket.alerts || []).some((al) => al.alertType === 'sla_warning' && al.severity === 'critical') && (
+            <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" title="SLA Critical" />
+          )}
+          {(ticket.alerts || []).some((al) => al.alertType === 'stale' && al.severity !== 'info') && (
+            <div className="w-2 h-2 rounded-full bg-gray-400 animate-pulse" title="Stale" />
+          )}
         </div>
 
         {/* Company */}
@@ -1104,9 +1282,10 @@ function TicketRow({
         {/* Age */}
         <div className="w-12 text-right text-xs text-gray-400 font-mono">{ticket.ageDays}d</div>
 
-        {/* Temperature */}
-        <div className="w-16">
+        {/* Temperature + Escalation Risk */}
+        <div className="w-16 flex flex-col gap-0.5">
           {a ? <TemperatureBadge temp={a.customer_temperature} /> : <span className="text-xs text-gray-500">--</span>}
+          <EscalationRiskBadge score={ticket.escalationRiskScore} />
         </div>
 
         {/* Notes count */}
@@ -1257,11 +1436,58 @@ function TicketRow({
                 <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Customer Temperature</h3>
                 <div className="flex items-center gap-3">
                   <TemperatureBadge temp={a.customer_temperature} />
+                  <EscalationRiskBadge score={ticket.escalationRiskScore} />
                   {a.temperature_reason && (
                     <span className="text-sm text-gray-300">{a.temperature_reason}</span>
                   )}
                 </div>
               </div>
+
+              {/* Active Alerts */}
+              {ticket.alerts && ticket.alerts.length > 0 && (
+                <div className="bg-slate-900 border border-slate-700 rounded-lg p-4">
+                  <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+                    Alerts ({ticket.alerts.length})
+                  </h3>
+                  <div className="space-y-2">
+                    {ticket.alerts.map((alert) => (
+                      <div
+                        key={alert.id}
+                        className={`flex items-start justify-between p-3 rounded-lg ${
+                          alert.severity === 'critical' ? 'bg-red-950/30 border border-red-900' :
+                          alert.severity === 'warning' ? 'bg-orange-950/30 border border-orange-900' :
+                          'bg-blue-950/30 border border-blue-900'
+                        }`}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <AlertSeverityBadge severity={alert.severity} label={alert.title} />
+                            <span className="text-[10px] text-gray-500">
+                              <AnalyzedTimestamp dateStr={alert.createdAt} />
+                            </span>
+                          </div>
+                          <p className="text-sm text-gray-300">{alert.description}</p>
+                        </div>
+                        {!alert.acknowledgedBy && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onAcknowledgeAlert(alert.id);
+                            }}
+                            className="ml-2 text-[10px] text-gray-500 hover:text-gray-300 whitespace-nowrap"
+                            title="Dismiss this alert for yourself"
+                          >
+                            Dismiss
+                          </button>
+                        )}
+                        {alert.acknowledgedBy && (
+                          <span className="ml-2 text-[10px] text-gray-600 whitespace-nowrap">Dismissed</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Context Snapshot */}
               {a.context_snapshot && (

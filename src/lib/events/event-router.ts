@@ -1,6 +1,8 @@
 import { createServiceClient } from '@/lib/supabase/client';
 import { runAnalysisPipeline } from '@/lib/ai/passes/orchestrator';
 import { runAutoCompleteCheck } from '@/lib/ai/passes/auto-complete-check';
+import { predictEscalation } from '@/lib/ai/intelligence/escalation-predictor';
+import { resolveAlerts, resolveAllAlerts } from '@/lib/ai/intelligence/alert-utils';
 import type { PassType } from '@/lib/ai/passes/types';
 
 // --- Event types ---
@@ -126,6 +128,14 @@ async function runAnalysisForEvent(eventId: string, ticketId: string, passes: Pa
 
     await runAnalysisPipeline(ticketId, { passes });
 
+    // --- Phase 6: Proactive Intelligence hooks ---
+    try {
+      await runProactiveChecks(ticketId, event);
+    } catch (err) {
+      console.error(`[event-router] Proactive checks failed for ${ticketId}:`, err);
+      // Don't fail the main event processing if proactive checks fail
+    }
+
     // Mark event as processed
     await supabase
       .from('webhook_events')
@@ -146,6 +156,40 @@ async function markEventError(eventId: string, errorMessage: string): Promise<vo
       error: errorMessage,
     })
     .eq('id', eventId);
+}
+
+/**
+ * Run proactive intelligence checks after event processing.
+ * - Escalation prediction: after temperature-related events
+ * - Alert resolution: after agent responses and ticket closures
+ */
+async function runProactiveChecks(ticketId: string, event?: TicketEvent): Promise<void> {
+  if (!event) return;
+
+  // Resolve alerts based on event type
+  switch (event.type) {
+    case 'agent_message':
+      // Agent responded → resolve SLA and stale alerts
+      await resolveAlerts(ticketId, 'sla_warning');
+      await resolveAlerts(ticketId, 'stale');
+      break;
+
+    case 'ticket_closed':
+      // Ticket closed → resolve all alerts
+      await resolveAllAlerts(ticketId);
+      break;
+
+    case 'customer_message':
+      // Customer messaged → resolve stale alert (ticket is active)
+      await resolveAlerts(ticketId, 'stale');
+      break;
+  }
+
+  // Run escalation prediction after events that affect temperature
+  const temperatureEvents: TicketEventType[] = ['customer_message', 'ticket_created'];
+  if (temperatureEvents.includes(event.type)) {
+    await predictEscalation(ticketId);
+  }
 }
 
 /**

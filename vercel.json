@@ -40,6 +40,22 @@
     {
       "path": "/api/cron/action-item-staleness",
       "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/sla-monitor",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/escalation-sweep",
+      "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/cron/pattern-detector",
+      "schedule": "0 */2 * * *"
+    },
+    {
+      "path": "/api/cron/stale-checker",
+      "schedule": "0 13 * * 1-5"
     }
   ]
 }
