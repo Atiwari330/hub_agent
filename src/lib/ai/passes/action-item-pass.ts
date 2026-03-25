@@ -4,9 +4,11 @@ import { buildTicketMetadataSection, buildLinearSection } from './gather-context
 import { lookupSupportKnowledgeTool } from '@/lib/ai/tools/support-knowledge';
 import { getActiveActionItems, insertActionItems, supersedeActionItems } from './action-items-db';
 import type { TicketContext, ActionItemPassResult, ActionItem } from './types';
+import type { TicketChanges } from '@/lib/ai/memory/change-detector';
 
 interface ActionItemDeps {
   situationSummary?: string;
+  changes?: TicketChanges | null;
 }
 
 export async function runActionItemPass(
@@ -60,6 +62,11 @@ STATUS_TAGS: Comma-separated list of tags that apply to this ticket overall (fro
 
   if (deps?.situationSummary) {
     userPrompt += `\n\nSITUATION SUMMARY (from prior analysis):\n${deps.situationSummary}`;
+  }
+
+  // Add change context from Phase 7 memory
+  if (deps?.changes && !deps.changes.isFirstAnalysis && deps.changes.changeSummary) {
+    userPrompt += `\n\nWHAT CHANGED SINCE LAST ANALYSIS:\n${deps.changes.changeSummary}`;
   }
 
   // Include current active action items for the LLM to evaluate

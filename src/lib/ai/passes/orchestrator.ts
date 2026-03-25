@@ -9,9 +9,10 @@ import { runCrossTicketPass } from './cross-ticket-pass';
 import { runResponseDraftPass } from './response-draft-pass';
 import { runQualityReviewPass } from './quality-review-pass';
 import { runRefinementPass } from './refinement-pass';
+import { detectChanges } from '@/lib/ai/memory/change-detector';
+import type { TicketChanges } from '@/lib/ai/memory/change-detector';
 import type {
   PassType,
-  ALL_PASSES as ALL_PASSES_TYPE,
   AllPassResults,
   TicketContext,
   QualityReviewResult,
@@ -42,11 +43,19 @@ export async function runAnalysisPipeline(
   const context = await gatherTicketContext(ticketId, options?.readerClient);
   const passesToRun = options?.passes || ALL_PASSES;
 
-  // 2. Run independent passes in parallel
+  // 1b. Detect changes since last analysis (Phase 7: Contextual Memory)
+  let changes: TicketChanges | null = null;
+  try {
+    changes = await detectChanges(ticketId, context);
+  } catch (err) {
+    console.warn(`[orchestrator] Change detection failed for ${ticketId}, running without memory:`, err);
+  }
+
+  // 2. Run independent passes in parallel (with memory context)
   const [situationResult, temperatureResult, timingResult, verificationResult, crossTicketResult] =
     await Promise.all([
-      passesToRun.includes('situation') ? runSituationPass(context) : null,
-      passesToRun.includes('temperature') ? runTemperaturePass(context) : null,
+      passesToRun.includes('situation') ? runSituationPass(context, changes) : null,
+      passesToRun.includes('temperature') ? runTemperaturePass(context, changes) : null,
       runTimingPass(context), // always run — it's free (no LLM)
       passesToRun.includes('verification') && context.recentCompletions.filter(c => c.verified === null).length > 0
         ? runVerificationPass(context)
@@ -60,6 +69,7 @@ export async function runAnalysisPipeline(
   const actionResult = passesToRun.includes('action_items')
     ? await runActionItemPass(context, {
         situationSummary: situationResult?.situation_summary,
+        changes,
       })
     : null;
 
@@ -175,7 +185,45 @@ export async function runAnalysisPipeline(
     .update({ pass_versions: passVersions })
     .eq('hubspot_ticket_id', ticketId);
 
+  // 10. Store pass results for contextual memory (Phase 7)
+  await storePassResults(ticketId, allResults, serviceClient);
+
   return { analysis, qualityReview: qualityResult ?? undefined };
+}
+
+async function storePassResults(
+  ticketId: string,
+  results: AllPassResults,
+  supabase: SupabaseClient
+): Promise<void> {
+  const now = new Date().toISOString();
+  const rows: Array<{ hubspot_ticket_id: string; pass_type: string; result: unknown; created_at: string }> = [];
+
+  if (results.situation) {
+    rows.push({ hubspot_ticket_id: ticketId, pass_type: 'situation', result: results.situation, created_at: now });
+  }
+  if (results.actionItems) {
+    rows.push({ hubspot_ticket_id: ticketId, pass_type: 'action_items', result: results.actionItems, created_at: now });
+  }
+  if (results.temperature) {
+    rows.push({ hubspot_ticket_id: ticketId, pass_type: 'temperature', result: results.temperature, created_at: now });
+  }
+  if (results.timing) {
+    rows.push({ hubspot_ticket_id: ticketId, pass_type: 'timing', result: results.timing, created_at: now });
+  }
+  if (results.crossTicket) {
+    rows.push({ hubspot_ticket_id: ticketId, pass_type: 'cross_ticket', result: results.crossTicket, created_at: now });
+  }
+  if (results.responseDraft) {
+    rows.push({ hubspot_ticket_id: ticketId, pass_type: 'response_draft', result: results.responseDraft, created_at: now });
+  }
+
+  if (rows.length > 0) {
+    const { error } = await supabase.from('analysis_pass_results').insert(rows);
+    if (error) {
+      console.error('[orchestrator] Failed to store pass results:', error.message);
+    }
+  }
 }
 
 function applyRefinements(original: AllPassResults, refined: RefinementResult): AllPassResults {
