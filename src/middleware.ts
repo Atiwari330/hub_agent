@@ -7,6 +7,9 @@ const PUBLIC_ROUTES = ['/login', '/api/health', '/unauthorized'];
 // Routes that use CRON_SECRET instead of user auth
 const CRON_ROUTES = ['/api/cron/'];
 
+// Routes that use their own signature verification (webhooks)
+const WEBHOOK_ROUTES = ['/api/webhooks/'];
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
@@ -17,6 +20,11 @@ export async function middleware(request: NextRequest) {
 
   // Skip cron routes (they use CRON_SECRET)
   if (CRON_ROUTES.some((route) => pathname.startsWith(route))) {
+    return NextResponse.next();
+  }
+
+  // Skip webhook routes (they verify signatures themselves)
+  if (WEBHOOK_ROUTES.some((route) => pathname.startsWith(route))) {
     return NextResponse.next();
   }
 
