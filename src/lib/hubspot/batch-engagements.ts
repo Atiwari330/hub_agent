@@ -123,6 +123,11 @@ async function batchFetchEmailDetails(emailIds: string[]): Promise<Map<string, H
           'hs_email_direction',
           'hs_timestamp',
           'hs_email_from_email',
+          'hs_email_open_count',
+          'hs_email_first_open_date',
+          'hs_email_last_open_date',
+          'hs_email_click_count',
+          'hs_email_status',
         ],
         propertiesWithHistory: [],
       });
@@ -135,6 +140,11 @@ async function batchFetchEmailDetails(emailIds: string[]): Promise<Map<string, H
           direction: email.properties.hs_email_direction || null,
           timestamp: email.properties.hs_timestamp || null,
           fromEmail: email.properties.hs_email_from_email || null,
+          openCount: parseInt(email.properties.hs_email_open_count || '0', 10) || 0,
+          firstOpenDate: email.properties.hs_email_first_open_date || null,
+          lastOpenDate: email.properties.hs_email_last_open_date || null,
+          clickCount: parseInt(email.properties.hs_email_click_count || '0', 10) || 0,
+          status: email.properties.hs_email_status || null,
         });
       }
     } catch (error) {

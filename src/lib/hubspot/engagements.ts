@@ -57,6 +57,12 @@ export interface HubSpotEmail {
   direction: string | null;
   timestamp: string | null;
   fromEmail: string | null;
+  // Email tracking
+  openCount: number;
+  firstOpenDate: string | null;
+  lastOpenDate: string | null;
+  clickCount: number;
+  status: string | null;
 }
 
 export async function getEmailsByDealId(dealId: string): Promise<HubSpotEmail[]> {
@@ -105,7 +111,7 @@ export async function getEmailsByDealId(dealId: string): Promise<HubSpotEmail[]>
       try {
         const email = await client.crm.objects.emails.basicApi.getById(
           eId,
-          ['hs_email_subject', 'hs_email_text', 'hs_email_direction', 'hs_timestamp', 'hs_email_from_email']
+          ['hs_email_subject', 'hs_email_text', 'hs_email_direction', 'hs_timestamp', 'hs_email_from_email', 'hs_email_open_count', 'hs_email_first_open_date', 'hs_email_last_open_date', 'hs_email_click_count', 'hs_email_status']
         );
 
         emails.push({
@@ -115,6 +121,11 @@ export async function getEmailsByDealId(dealId: string): Promise<HubSpotEmail[]>
           direction: email.properties.hs_email_direction || null,
           timestamp: email.properties.hs_timestamp || null,
           fromEmail: email.properties.hs_email_from_email || null,
+          openCount: parseInt(email.properties.hs_email_open_count || '0', 10) || 0,
+          firstOpenDate: email.properties.hs_email_first_open_date || null,
+          lastOpenDate: email.properties.hs_email_last_open_date || null,
+          clickCount: parseInt(email.properties.hs_email_click_count || '0', 10) || 0,
+          status: email.properties.hs_email_status || null,
         });
       } catch {
         // Skip emails that can't be fetched

@@ -245,6 +245,78 @@ npx tsx src/scripts/inspect-ticket.ts <ticket_id> --engagements  # include raw H
 
 The inspect script outputs: ticket metadata, all three analysis results, action item completions, and shift reviews — everything needed to diagnose analysis quality issues.
 
+## Ticket Triage CLI (`npm run triage`)
+
+On-demand CLI tool that analyzes all open support tickets and produces a markdown report with the **single most critical next step** per ticket. Optimized for high signal, low noise.
+
+**How it works:** Fetches open tickets from Supabase, then for each ticket runs a 3-pass DeepSeek v3.2 pipeline:
+1. **Timeline Reconstruction** — merges conversations, engagements, and Linear comments into one chronological narrative
+2. **Status Determination** — classifies ticket as one of: `AGENT_ACTION_NEEDED`, `WAITING_ON_CUSTOMER`, `WAITING_ON_ENGINEERING`, `ENGINEERING_FOLLOWUP_NEEDED`, `CLARIFICATION_NEEDED_FROM_LINEAR`, `READY_TO_CLOSE`, `STALE`
+3. **Next Step Synthesis** — produces one concrete action with specific details and urgency level
+
+**Data freshness:** Ticket metadata comes from Supabase (depends on sync job). Conversation content and engagements are fetched live from HubSpot. Linear context is fetched live. Use `--sync` to force a fresh sync before analysis.
+
+**Usage:**
+```bash
+npm run triage                          # Triage all open tickets
+npm run triage -- --sync                # Sync from HubSpot first (requires dev server)
+npm run triage -- --ticket=43445591737  # Single ticket (for debugging)
+npm run triage -- --verbose             # Include full timeline per ticket
+npm run triage -- --concurrency=3       # Adjust parallelism (default: 5)
+npm run triage -- --output=my-report.md # Custom output file
+```
+
+**Output:** Grouped markdown report sorted by status then urgency. Written to `triage-report-YYYY-MM-DD.md` and printed to stdout.
+
+**Script:** `src/scripts/ticket-triage.ts` — reuses `gatherTicketContext()` from `src/lib/ai/passes/gather-context.ts` for all data gathering.
+
+## Deal Scrub CLI (`npm run deal-scrub`)
+
+On-demand CLI tool that analyzes an AE's open deals and produces a pipeline hygiene report. Fetches all engagement data (notes, emails, calls, meetings, tasks) live from HubSpot, then runs a 4-pass DeepSeek v3.2 pipeline per deal:
+1. **Activity Timeline** — merges all engagements chronologically, flags gaps, notes interaction quality
+2. **Health Assessment** — classifies: Activity Level, Customer Engagement, AE Effort, Deal Momentum
+3. **Recommendation** — one of: `KEEP_WORKING`, `CHANGE_APPROACH`, `ESCALATE`, `MOVE_TO_NURTURE`, `CLOSE_OUT`
+4. **Executive Summary** — 2-3 sentence CRO-scannable summary
+
+**Usage:**
+```bash
+npm run deal-scrub -- --owner=cgarraffa@opusbehavioral.com                     # All open deals
+npm run deal-scrub -- --owner=cgarraffa@opusbehavioral.com --stage=mql,discovery  # Filter by stage(s)
+npm run deal-scrub -- --deal=12345678901 --verbose                              # Single deal deep-dive
+npm run deal-scrub -- --owner=EMAIL --concurrency=3 --output=my-report.md       # Custom options
+```
+
+**Stage slugs:** `mql`, `discovery`, `demo-scheduled`, `demo-completed`, `proposal`, `closed-won` (comma-separated for multiple).
+
+**Output:** Grouped markdown report sorted by recommendation (most urgent first). Written to `deal-scrub-{name}-{date}.md` and printed to stdout.
+
+**Script:** `src/scripts/deal-scrub.ts`
+
+## PPL Cadence CLI (`npm run ppl-cadence`)
+
+Analyzes Paid Per Lead (PPL) deals for compliance with the CMO's **3-2-1 method**: 6 calls in 3 business days, 6-7 multi-channel touches in 5 business days, 1-2 touches/week nurture after week 1. Uses 4-pass DeepSeek v3.2 pipeline per deal:
+1. **Activity Timeline** — chronological outreach with channel tags, email open tracking, business-day gap flags
+2. **3-2-1 Compliance** — per-component rating (THREE/TWO/ONE) plus speed-to-lead, channel diversity, prospect email engagement signal
+3. **Verdict & Coaching** — EXEMPLARY/COMPLIANT/NEEDS_IMPROVEMENT/NON_COMPLIANT + one coaching point + risk flags
+4. **Executive Summary** — 1-2 sentence blunt summary
+
+Computes deterministic metrics first (speed to lead, call counts, email open rate, channel diversity), then passes them as "floor values" to the LLM for spirit-of-compliance assessment. Includes email engagement intelligence: prospect open/click behavior determines nurture window (3wk for low interest, 4wk for engaged-passive). Flags engagement risk when prospects open emails but rep stopped outreach.
+
+**Usage:**
+```bash
+npm run ppl-cadence                                                          # All target AEs
+npm run ppl-cadence -- --owner=cgarraffa@opusbehavioral.com                  # Single AE
+npm run ppl-cadence -- --owner=cgarraffa@opusbehavioral.com --max-age=14     # Last 2 weeks only
+npm run ppl-cadence -- --deal=12345678901 --verbose                          # Single deal deep-dive
+npm run ppl-cadence -- --min-age=7 --max-age=30                              # Deals 7-30 days old
+```
+
+**Options:** `--owner=EMAIL`, `--deal=ID`, `--concurrency=N` (default 3), `--verbose`, `--min-age=DAYS`, `--max-age=DAYS`, `--output=FILE`
+
+**Output:** Grouped markdown report sorted by verdict (worst first), per-deal cards with metrics + coaching, AE comparison table when multiple AEs. Written to `ppl-cadence-{date}.md`.
+
+**Script:** `src/scripts/ppl-cadence.ts` — uses `batchFetchDealEngagements()` for efficient bulk HubSpot fetching, `touch-counter.ts` for metric computation.
+
 ## Diagnostic Scripts
 
 Located in `src/scripts/`:

@@ -20,7 +20,10 @@
     "sop-audit": "tsx src/scripts/run-sop-audit.ts",
     "rcm-audit": "tsx src/scripts/run-rcm-audit.ts",
     "policy-gaps": "tsx src/scripts/run-policy-gaps.ts",
-    "inspect-ticket": "tsx src/scripts/inspect-ticket.ts"
+    "inspect-ticket": "tsx src/scripts/inspect-ticket.ts",
+    "triage": "tsx src/scripts/ticket-triage.ts",
+    "deal-scrub": "tsx src/scripts/deal-scrub.ts",
+    "ppl-cadence": "tsx src/scripts/ppl-cadence.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.2",
