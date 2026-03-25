@@ -114,6 +114,7 @@ export async function GET(request: Request) {
       last_customer_message_at: toTimestamp(ticket.properties.hs_last_message_received_at),
       last_agent_message_at: toTimestamp(ticket.properties.hs_last_message_sent_at),
       last_contacted_at: toTimestamp(ticket.properties.hs_lastcontacted),
+      hs_last_modified_at: toTimestamp(ticket.properties.hs_lastmodifieddate),
       synced_at: new Date().toISOString(),
     }));
 

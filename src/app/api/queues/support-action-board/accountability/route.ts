@@ -24,18 +24,12 @@ export async function GET(request: NextRequest) {
       .select('id, display_name, email, role')
       .in('role', ['support_agent', 'cs_manager']);
 
-    // Fetch shift completions in the date range
-    const { data: shiftCompletions } = await supabase
-      .from('shift_completions')
-      .select('user_id, tickets_reviewed, tickets_total, completed_at')
-      .gte('completed_at', startDate)
-      .order('completed_at', { ascending: false });
-
-    // Fetch shift reviews in the date range (for per-ticket detail)
-    const { data: shiftReviews } = await supabase
-      .from('shift_reviews')
-      .select('user_id, hubspot_ticket_id, acknowledgment_tag, reviewed_at')
-      .gte('reviewed_at', startDate);
+    // Fetch progress notes in the date range
+    const { data: progressNotes } = await supabase
+      .from('progress_notes')
+      .select('user_id, hubspot_ticket_id, note_text, created_at')
+      .gte('created_at', startDate)
+      .order('created_at', { ascending: false });
 
     // Fetch unverified action completions
     const { data: unverifiedActions } = await supabase
@@ -44,7 +38,7 @@ export async function GET(request: NextRequest) {
       .eq('verified', false)
       .gte('completed_at', startDate);
 
-    // Fetch tickets that had zero reviews today
+    // Fetch tickets that had zero notes today
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
 
@@ -53,46 +47,33 @@ export async function GET(request: NextRequest) {
       .select('hubspot_ticket_id, subject, hs_primary_company_name')
       .eq('is_closed', false);
 
-    const { data: todayReviews } = await supabase
-      .from('shift_reviews')
+    const { data: todayNotes } = await supabase
+      .from('progress_notes')
       .select('hubspot_ticket_id')
-      .gte('reviewed_at', todayStart.toISOString());
+      .gte('created_at', todayStart.toISOString());
 
-    const reviewedToday = new Set((todayReviews || []).map((r) => r.hubspot_ticket_id));
-    const unreviewedTickets = (openTickets || []).filter(
-      (t) => !reviewedToday.has(t.hubspot_ticket_id)
+    const notedToday = new Set((todayNotes || []).map((n) => n.hubspot_ticket_id));
+    const unnotedTickets = (openTickets || []).filter(
+      (t) => !notedToday.has(t.hubspot_ticket_id)
     );
 
     // Build agent summary
     const agentSummary = (agents || []).map((agent) => {
-      const completions = (shiftCompletions || []).filter((c) => c.user_id === agent.id);
-      const reviews = (shiftReviews || []).filter((r) => r.user_id === agent.id);
+      const notes = (progressNotes || []).filter((n) => n.user_id === agent.id);
 
-      // Group reviews by date
-      const reviewsByDate: Record<string, number> = {};
-      for (const r of reviews) {
-        const date = new Date(r.reviewed_at).toISOString().split('T')[0];
-        reviewsByDate[date] = (reviewsByDate[date] || 0) + 1;
-      }
-
-      // Group shift completions by date
-      const shiftsByDate: Record<string, { reviewed: number; total: number }> = {};
-      for (const c of completions) {
-        const date = new Date(c.completed_at).toISOString().split('T')[0];
-        shiftsByDate[date] = {
-          reviewed: c.tickets_reviewed,
-          total: c.tickets_total,
-        };
+      // Group notes by date
+      const notesByDate: Record<string, number> = {};
+      for (const n of notes) {
+        const date = new Date(n.created_at).toISOString().split('T')[0];
+        notesByDate[date] = (notesByDate[date] || 0) + 1;
       }
 
       return {
         id: agent.id,
         name: agent.display_name || agent.email || 'Unknown',
         role: agent.role,
-        totalShiftCompletions: completions.length,
-        totalReviews: reviews.length,
-        reviewsByDate,
-        shiftsByDate,
+        totalNotes: notes.length,
+        notesByDate,
       };
     });
 
@@ -108,7 +89,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       agents: agentSummary,
-      unreviewedTicketsToday: unreviewedTickets.map((t) => ({
+      unnotedTicketsToday: unnotedTickets.map((t) => ({
         ticketId: t.hubspot_ticket_id,
         subject: t.subject,
         companyName: t.hs_primary_company_name,

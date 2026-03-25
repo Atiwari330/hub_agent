@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerSupabaseClient } from '@/lib/supabase/client';
+import { createServerSupabaseClient, createServiceClient } from '@/lib/supabase/client';
 import { checkApiAuth } from '@/lib/auth/api';
 import { RESOURCES } from '@/lib/auth';
 import { getOwnerById } from '@/lib/hubspot/owners';
@@ -18,15 +18,12 @@ export interface ActionItemCompletion {
   verificationNote: string | null;
 }
 
-export interface ShiftReviewInfo {
+export interface ProgressNoteInfo {
   id: string;
   userId: string;
   userName: string;
-  acknowledgmentTag: string;
-  attentionTarget: string | null;
-  blockedReason: string | null;
-  shiftNote: string | null;
-  reviewedAt: string;
+  noteText: string;
+  createdAt: string;
 }
 
 export interface ActionBoardTicket {
@@ -44,8 +41,8 @@ export interface ActionBoardTicket {
   linearTask: string | null;
   analysis: TicketActionBoardAnalysis | null;
   completions: ActionItemCompletion[];
-  todayReviews: ShiftReviewInfo[];
-  currentUserReviewed: boolean;
+  progressNotes: ProgressNoteInfo[];
+  currentUserHasNote: boolean;
 }
 
 export interface ActionBoardResponse {
@@ -56,10 +53,11 @@ export interface ActionBoardResponse {
     unanalyzed: number;
     byStatus: Record<string, number>;
   };
-  shiftProgress: {
-    reviewed: number;
+  noteProgress: {
+    noted: number;
     total: number;
   };
+  changedTicketIds: string[];
   userRole: string;
   userId: string;
 }
@@ -72,6 +70,7 @@ export async function GET(request: NextRequest) {
   const currentUser = authResult;
 
   const supabase = await createServerSupabaseClient();
+  const serviceClient = createServiceClient();
   const mode = request.nextUrl.searchParams.get('mode');
 
   try {
@@ -104,11 +103,11 @@ export async function GET(request: NextRequest) {
 
     const ticketIds = allTickets.map((t) => t.hubspot_ticket_id);
 
-    // Fetch analyses, completions, and shift reviews in parallel
+    // Fetch analyses, completions, and progress notes in parallel
     const analyses: Record<string, TicketActionBoardAnalysis> = {};
     const completionsMap: Record<string, ActionItemCompletion[]> = {};
-    const reviewsMap: Record<string, ShiftReviewInfo[]> = {};
-    const userReviewedSet = new Set<string>();
+    const notesMap: Record<string, ProgressNoteInfo[]> = {};
+    const userNotedSet = new Set<string>();
 
     if (ticketIds.length > 0) {
       const batchSize = 500;
@@ -159,9 +158,8 @@ export async function GET(request: NextRequest) {
         .gte('completed_at', weekAgo);
 
       if (completionRows && completionRows.length > 0) {
-        // Resolve user names
         const completionUserIds = [...new Set(completionRows.map((c) => c.completed_by))];
-        const { data: users } = await supabase
+        const { data: users } = await serviceClient
           .from('user_profiles')
           .select('id, display_name, email')
           .in('id', completionUserIds);
@@ -187,43 +185,40 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      // Fetch today's shift reviews
+      // Fetch today's progress notes
       const todayStart = new Date();
       todayStart.setHours(0, 0, 0, 0);
-      const { data: reviewRows } = await supabase
-        .from('shift_reviews')
-        .select('id, user_id, hubspot_ticket_id, acknowledgment_tag, attention_target, blocked_reason, shift_note, reviewed_at')
+      const { data: noteRows } = await supabase
+        .from('progress_notes')
+        .select('id, user_id, hubspot_ticket_id, note_text, created_at')
         .in('hubspot_ticket_id', ticketIds)
-        .gte('reviewed_at', todayStart.toISOString());
+        .gte('created_at', todayStart.toISOString());
 
-      if (reviewRows && reviewRows.length > 0) {
-        const reviewUserIds = [...new Set(reviewRows.map((r) => r.user_id))];
-        const { data: reviewUsers } = await supabase
+      if (noteRows && noteRows.length > 0) {
+        const noteUserIds = [...new Set(noteRows.map((n) => n.user_id))];
+        const { data: noteUsers } = await serviceClient
           .from('user_profiles')
           .select('id, display_name, email')
-          .in('id', reviewUserIds);
+          .in('id', noteUserIds);
 
-        const reviewUserNameMap = new Map(
-          (reviewUsers || []).map((u) => [u.id, u.display_name || u.email || 'Unknown'])
+        const noteUserNameMap = new Map(
+          (noteUsers || []).map((u) => [u.id, u.display_name || u.email || 'Unknown'])
         );
 
-        for (const row of reviewRows) {
-          if (!reviewsMap[row.hubspot_ticket_id]) {
-            reviewsMap[row.hubspot_ticket_id] = [];
+        for (const row of noteRows) {
+          if (!notesMap[row.hubspot_ticket_id]) {
+            notesMap[row.hubspot_ticket_id] = [];
           }
-          reviewsMap[row.hubspot_ticket_id].push({
+          notesMap[row.hubspot_ticket_id].push({
             id: row.id,
             userId: row.user_id,
-            userName: reviewUserNameMap.get(row.user_id) || 'Unknown',
-            acknowledgmentTag: row.acknowledgment_tag,
-            attentionTarget: row.attention_target,
-            blockedReason: row.blocked_reason,
-            shiftNote: row.shift_note,
-            reviewedAt: row.reviewed_at,
+            userName: noteUserNameMap.get(row.user_id) || 'Unknown',
+            noteText: row.note_text,
+            createdAt: row.created_at,
           });
 
           if (row.user_id === currentUser.id) {
-            userReviewedSet.add(row.hubspot_ticket_id);
+            userNotedSet.add(row.hubspot_ticket_id);
           }
         }
       }
@@ -274,8 +269,8 @@ export async function GET(request: NextRequest) {
         linearTask: ticket.linear_task || null,
         analysis: analyses[ticket.hubspot_ticket_id] || null,
         completions: completionsMap[ticket.hubspot_ticket_id] || [],
-        todayReviews: reviewsMap[ticket.hubspot_ticket_id] || [],
-        currentUserReviewed: userReviewedSet.has(ticket.hubspot_ticket_id),
+        progressNotes: notesMap[ticket.hubspot_ticket_id] || [],
+        currentUserHasNote: userNotedSet.has(ticket.hubspot_ticket_id),
       };
     });
 
@@ -309,7 +304,26 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const reviewed = tickets.filter((t) => userReviewedSet.has(t.ticketId)).length;
+    // Compute changed ticket IDs (tickets where activity happened after last analysis)
+    const changedTicketIds: string[] = [];
+    for (const ticket of allTickets) {
+      const analysis = analyses[ticket.hubspot_ticket_id];
+      if (!analysis) continue; // unanalyzed tickets aren't "changed"
+
+      const analyzedAt = new Date(analysis.analyzed_at).getTime();
+      const timestamps = [
+        ticket.last_customer_message_at,
+        ticket.last_agent_message_at,
+        ticket.last_contacted_at,
+        ticket.hs_last_modified_at,
+      ].filter(Boolean).map((t: string) => new Date(t).getTime());
+
+      if (timestamps.some((t) => t > analyzedAt)) {
+        changedTicketIds.push(ticket.hubspot_ticket_id);
+      }
+    }
+
+    const noted = tickets.filter((t) => userNotedSet.has(t.ticketId)).length;
 
     const response: ActionBoardResponse = {
       tickets,
@@ -319,10 +333,11 @@ export async function GET(request: NextRequest) {
         unanalyzed: tickets.length - analyzed,
         byStatus,
       },
-      shiftProgress: {
-        reviewed,
+      noteProgress: {
+        noted,
         total: tickets.length,
       },
+      changedTicketIds,
       userRole: currentUser.role,
       userId: currentUser.id,
     };

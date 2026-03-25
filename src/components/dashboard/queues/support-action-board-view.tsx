@@ -2,12 +2,12 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { getHubSpotTicketUrl } from '@/lib/hubspot/urls';
-import type { ActionBoardResponse, ActionBoardTicket } from '@/app/api/queues/support-action-board/route';
+import type { ActionBoardResponse, ActionBoardTicket, ProgressNoteInfo } from '@/app/api/queues/support-action-board/route';
 import type { ActionItem } from '@/app/api/queues/support-action-board/analyze/analyze-core';
 
 // --- Types ---
 
-type StatusFilter = 'all' | 'reply_needed' | 'update_due' | 'engineering_ping' | 'internal_action' | 'waiting_on_customer' | 'unreviewed';
+type StatusFilter = 'all' | 'reply_needed' | 'update_due' | 'engineering_ping' | 'internal_action' | 'waiting_on_customer' | 'unnoted';
 type SortColumn = 'responseWait' | 'companyName' | 'ageDays' | 'temperature' | 'analyzedAt';
 type SortDirection = 'asc' | 'desc';
 
@@ -146,32 +146,6 @@ function LinearBadge({ state }: { state: string }) {
   );
 }
 
-// --- Start Here Score ---
-
-function computeStartHereScore(ticket: ActionBoardTicket): number {
-  if (!ticket.analysis) return 0;
-  const a = ticket.analysis;
-
-  // Response wait time (40%)
-  const waitScore = Math.min((a.hours_since_customer_waiting ?? 0) / 8, 1) * 40;
-
-  // Customer temperature (25%)
-  const tempScores: Record<string, number> = { angry: 25, escalating: 18, frustrated: 12, calm: 0 };
-  const tempScore = tempScores[a.customer_temperature] ?? 0;
-
-  // Action simplicity — agent-actionable items rank higher (20%)
-  const agentActions = a.action_items.filter((i) => i.who === 'any_support_agent');
-  const simplicityScore = agentActions.length > 0 ? 20 : 0;
-
-  // Review coverage — no reviews today = boost (15%)
-  const reviewScore = ticket.todayReviews.length === 0 ? 15 : 0;
-
-  // Co-Destiny (VIP) boost — always prioritize VIP tickets
-  const coDestinyBoost = ticket.isCoDestiny ? 30 : 0;
-
-  return waitScore + tempScore + simplicityScore + reviewScore + coDestinyBoost;
-}
-
 // --- Main Component ---
 
 export function SupportActionBoardView({ userRole, canAnalyzeTicket }: Props) {
@@ -179,20 +153,17 @@ export function SupportActionBoardView({ userRole, canAnalyzeTicket }: Props) {
   const [loading, setLoading] = useState(true);
   const [expandedTicket, setExpandedTicket] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [vipFilter, setVipFilter] = useState(false);
   const [sortColumn, setSortColumn] = useState<SortColumn>('responseWait');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [analyzing, setAnalyzing] = useState<string | null>(null);
   const [batchAnalyzing, setBatchAnalyzing] = useState(false);
   const [batchProgress, setBatchProgress] = useState<{ current: number; total: number; subject: string } | null>(null);
-  const [copiedDraft, setCopiedDraft] = useState<string | null>(null);
 
-  // Shift review state
-  const [reviewingTicket, setReviewingTicket] = useState<string | null>(null);
-  const [reviewTag, setReviewTag] = useState<string>('nothing_needed');
-  const [reviewNote, setReviewNote] = useState('');
-  const [reviewAttention, setReviewAttention] = useState('');
-  const [reviewBlockedReason, setReviewBlockedReason] = useState('');
-  const [submittingReview, setSubmittingReview] = useState(false);
+  // Progress note state
+  const [noteTicketId, setNoteTicketId] = useState<string | null>(null);
+  const [noteText, setNoteText] = useState('');
+  const [submittingNote, setSubmittingNote] = useState(false);
 
   const isVP = userRole === 'vp_revops';
 
@@ -295,54 +266,25 @@ export function SupportActionBoardView({ userRole, canAnalyzeTicket }: Props) {
     }
   };
 
-  const handleSubmitReview = async (ticketId: string) => {
-    setSubmittingReview(true);
+  const handleSubmitNote = async (ticketId: string) => {
+    if (noteText.trim().length < 10) return;
+    setSubmittingNote(true);
     try {
-      const res = await fetch('/api/queues/support-action-board/shift-review', {
+      const res = await fetch('/api/queues/support-action-board/progress-note', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ticketId,
-          acknowledgmentTag: reviewTag,
-          attentionTarget: reviewTag === 'needs_attention' ? reviewAttention : null,
-          blockedReason: reviewTag === 'blocked' ? reviewBlockedReason : null,
-          shiftNote: reviewNote || null,
-        }),
+        body: JSON.stringify({ ticketId, noteText: noteText.trim() }),
       });
       if (res.ok) {
-        setReviewingTicket(null);
-        setReviewTag('nothing_needed');
-        setReviewNote('');
-        setReviewAttention('');
-        setReviewBlockedReason('');
+        setNoteTicketId(null);
+        setNoteText('');
         await fetchData();
       }
     } catch (err) {
-      console.error('Submit review error:', err);
+      console.error('Submit note error:', err);
     } finally {
-      setSubmittingReview(false);
+      setSubmittingNote(false);
     }
-  };
-
-  const handleCompleteShift = async () => {
-    try {
-      const res = await fetch('/api/queues/support-action-board/complete-shift', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      });
-      if (res.ok) {
-        alert('Shift review completed! Great work.');
-        await fetchData();
-      }
-    } catch (err) {
-      console.error('Complete shift error:', err);
-    }
-  };
-
-  const handleCopyDraft = (ticketId: string, draft: string) => {
-    navigator.clipboard.writeText(draft);
-    setCopiedDraft(ticketId);
-    setTimeout(() => setCopiedDraft(null), 2000);
   };
 
   // --- Filtering and Sorting ---
@@ -351,8 +293,13 @@ export function SupportActionBoardView({ userRole, canAnalyzeTicket }: Props) {
     if (!data) return [];
     let tickets = data.tickets;
 
-    if (statusFilter === 'unreviewed') {
-      tickets = tickets.filter((t) => !t.currentUserReviewed);
+    // VIP filter
+    if (vipFilter) {
+      tickets = tickets.filter((t) => t.isCoDestiny);
+    }
+
+    if (statusFilter === 'unnoted') {
+      tickets = tickets.filter((t) => !t.currentUserHasNote);
     } else if (statusFilter !== 'all') {
       tickets = tickets.filter(
         (t) => t.analysis && t.analysis.status_tags.includes(statusFilter)
@@ -390,25 +337,7 @@ export function SupportActionBoardView({ userRole, canAnalyzeTicket }: Props) {
     });
 
     return tickets;
-  }, [data, statusFilter, sortColumn, sortDirection]);
-
-  // Start Here ticket
-  const startHereTicket = useMemo(() => {
-    if (!data) return null;
-    const analyzed = data.tickets.filter((t) => t.analysis && !t.currentUserReviewed);
-    if (analyzed.length === 0) return null;
-
-    let best = analyzed[0];
-    let bestScore = computeStartHereScore(best);
-    for (let i = 1; i < analyzed.length; i++) {
-      const score = computeStartHereScore(analyzed[i]);
-      if (score > bestScore) {
-        best = analyzed[i];
-        bestScore = score;
-      }
-    }
-    return bestScore > 0 ? best : null;
-  }, [data]);
+  }, [data, statusFilter, vipFilter, sortColumn, sortDirection]);
 
   const handleSort = (col: SortColumn) => {
     if (sortColumn === col) {
@@ -444,6 +373,9 @@ export function SupportActionBoardView({ userRole, canAnalyzeTicket }: Props) {
 
   const unanalyzedIds = data.tickets.filter((t) => !t.analysis).map((t) => t.ticketId);
   const analyzedIds = data.tickets.filter((t) => t.analysis).map((t) => t.ticketId);
+  const allTicketIds = data.tickets.map((t) => t.ticketId);
+  const changedIds = data.changedTicketIds || [];
+  const vipCount = data.tickets.filter((t) => t.isCoDestiny).length;
 
   return (
     <div className="h-full flex flex-col bg-slate-950 text-white">
@@ -456,14 +388,14 @@ export function SupportActionBoardView({ userRole, canAnalyzeTicket }: Props) {
               {data.counts.total} open tickets · {data.counts.analyzed} analyzed · {data.counts.unanalyzed} pending
             </p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             {canAnalyzeTicket && unanalyzedIds.length > 0 && (
               <button
                 onClick={() => handleBatchAnalyze(unanalyzedIds)}
                 disabled={batchAnalyzing}
                 className="px-3 py-1.5 text-xs bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50"
               >
-                Analyze All ({unanalyzedIds.length})
+                Analyze New ({unanalyzedIds.length})
               </button>
             )}
             {canAnalyzeTicket && analyzedIds.length > 0 && (
@@ -473,6 +405,24 @@ export function SupportActionBoardView({ userRole, canAnalyzeTicket }: Props) {
                 className="px-3 py-1.5 text-xs border border-slate-600 text-slate-300 rounded hover:bg-slate-800 disabled:opacity-50"
               >
                 Re-analyze All ({analyzedIds.length})
+              </button>
+            )}
+            {canAnalyzeTicket && allTicketIds.length > 0 && (
+              <button
+                onClick={() => handleBatchAnalyze(allTicketIds)}
+                disabled={batchAnalyzing}
+                className="px-3 py-1.5 text-xs border border-slate-600 text-slate-300 rounded hover:bg-slate-800 disabled:opacity-50"
+              >
+                Analyze Everything ({allTicketIds.length})
+              </button>
+            )}
+            {canAnalyzeTicket && changedIds.length > 0 && (
+              <button
+                onClick={() => handleBatchAnalyze(changedIds)}
+                disabled={batchAnalyzing}
+                className="px-3 py-1.5 text-xs border border-amber-600 text-amber-300 rounded hover:bg-amber-900/30 disabled:opacity-50"
+              >
+                Analyze Changed ({changedIds.length})
               </button>
             )}
             <button
@@ -504,64 +454,28 @@ export function SupportActionBoardView({ userRole, canAnalyzeTicket }: Props) {
         )}
       </div>
 
-      {/* Shift Review Banner */}
+      {/* Note Progress Banner */}
       <div className="border-b border-slate-800 px-6 py-3 bg-slate-900">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-gray-300">
-              Your Shift Review: <strong className="text-white">{data.shiftProgress.reviewed}</strong> of <strong className="text-white">{data.shiftProgress.total}</strong> tickets
-            </span>
-            <div className="w-48 bg-slate-800 rounded-full h-2">
-              <div
-                className={`h-2 rounded-full transition-all ${
-                  data.shiftProgress.reviewed === data.shiftProgress.total
-                    ? 'bg-emerald-500'
-                    : 'bg-indigo-500'
-                }`}
-                style={{ width: `${data.shiftProgress.total > 0 ? (data.shiftProgress.reviewed / data.shiftProgress.total) * 100 : 0}%` }}
-              />
-            </div>
+        <div className="flex items-center gap-4">
+          <span className="text-sm text-gray-300">
+            Progress Notes: <strong className="text-white">{data.noteProgress.noted}</strong> of <strong className="text-white">{data.noteProgress.total}</strong> tickets
+          </span>
+          <div className="w-48 bg-slate-800 rounded-full h-2">
+            <div
+              className={`h-2 rounded-full transition-all ${
+                data.noteProgress.noted === data.noteProgress.total
+                  ? 'bg-emerald-500'
+                  : 'bg-indigo-500'
+              }`}
+              style={{ width: `${data.noteProgress.total > 0 ? (data.noteProgress.noted / data.noteProgress.total) * 100 : 0}%` }}
+            />
           </div>
-          <button
-            onClick={handleCompleteShift}
-            disabled={data.shiftProgress.reviewed < data.shiftProgress.total}
-            className="px-3 py-1.5 text-xs bg-emerald-600 text-white rounded hover:bg-emerald-700 disabled:opacity-30 disabled:cursor-not-allowed"
-          >
-            Complete Shift Review
-          </button>
         </div>
       </div>
 
-      {/* Start Here Card */}
-      {startHereTicket && startHereTicket.analysis && (
-        <div
-          className="mx-6 mt-4 p-4 bg-gradient-to-r from-indigo-950 to-slate-900 border border-indigo-800 rounded-lg cursor-pointer hover:border-indigo-600 transition-colors"
-          onClick={() => setExpandedTicket(startHereTicket.ticketId)}
-        >
-          <div className="flex items-center gap-2 mb-2">
-            <span className="text-xs font-bold text-indigo-400 uppercase tracking-wider">Start Here</span>
-            <ResponseClock hours={startHereTicket.analysis.hours_since_customer_waiting} />
-          </div>
-          <div className="flex items-center gap-3">
-            {startHereTicket.isCoDestiny && (
-              <span className="inline-flex items-center px-1 py-0.5 rounded text-[9px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">VIP</span>
-            )}
-            <span className="text-sm font-medium text-white">{startHereTicket.companyName || 'Unknown'}</span>
-            <span className="text-xs text-gray-400">—</span>
-            <span className="text-sm text-gray-300 truncate">{startHereTicket.analysis.situation_summary}</span>
-          </div>
-          {startHereTicket.analysis.action_items.length > 0 && (
-            <div className="mt-2 text-xs text-indigo-300">
-              Top action: {startHereTicket.analysis.action_items[0].description.slice(0, 120)}
-              {startHereTicket.analysis.action_items[0].description.length > 120 ? '...' : ''}
-            </div>
-          )}
-        </div>
-      )}
-
       {/* Filter Bar */}
       <div className="px-6 py-3 flex items-center gap-2 flex-wrap">
-        {(['all', 'reply_needed', 'update_due', 'engineering_ping', 'internal_action', 'waiting_on_customer', 'unreviewed'] as StatusFilter[]).map((filter) => {
+        {(['all', 'reply_needed', 'update_due', 'engineering_ping', 'internal_action', 'waiting_on_customer', 'unnoted'] as StatusFilter[]).map((filter) => {
           const labels: Record<StatusFilter, string> = {
             all: `All (${data.counts.total})`,
             reply_needed: `Reply Needed (${data.counts.byStatus.reply_needed || 0})`,
@@ -569,7 +483,7 @@ export function SupportActionBoardView({ userRole, canAnalyzeTicket }: Props) {
             engineering_ping: `Eng Ping (${data.counts.byStatus.engineering_ping || 0})`,
             internal_action: `Internal (${data.counts.byStatus.internal_action || 0})`,
             waiting_on_customer: `Waiting (${data.counts.byStatus.waiting_on_customer || 0})`,
-            unreviewed: `Unreviewed (${data.shiftProgress.total - data.shiftProgress.reviewed})`,
+            unnoted: `Unnoted (${data.noteProgress.total - data.noteProgress.noted})`,
           };
           return (
             <button
@@ -585,6 +499,17 @@ export function SupportActionBoardView({ userRole, canAnalyzeTicket }: Props) {
             </button>
           );
         })}
+        {/* VIP Filter Toggle */}
+        <button
+          onClick={() => setVipFilter((v) => !v)}
+          className={`px-3 py-1 text-xs rounded-full transition-colors ${
+            vipFilter
+              ? 'bg-amber-600 text-white'
+              : 'bg-slate-800 text-amber-400 hover:bg-slate-700'
+          }`}
+        >
+          VIP ({vipCount})
+        </button>
       </div>
 
       {/* Ticket List */}
@@ -613,7 +538,7 @@ export function SupportActionBoardView({ userRole, canAnalyzeTicket }: Props) {
               Temp{sortArrow('temperature')}
             </button>
           </div>
-          <div className="w-20">Reviews</div>
+          <div className="w-20">Notes</div>
           <div className="w-6">You</div>
           <div className="w-16">
             <button onClick={() => handleSort('analyzedAt')} className="hover:text-gray-300">
@@ -635,28 +560,17 @@ export function SupportActionBoardView({ userRole, canAnalyzeTicket }: Props) {
             analyzing={analyzing === ticket.ticketId}
             canAnalyze={canAnalyzeTicket}
             isVP={isVP}
-            reviewingTicket={reviewingTicket}
-            onStartReview={() => {
-              setReviewingTicket(ticket.ticketId);
-              setReviewTag('nothing_needed');
-              setReviewNote('');
+            noteTicketId={noteTicketId}
+            noteText={noteText}
+            submittingNote={submittingNote}
+            onStartNote={(ticketId) => {
+              // Pre-fill with existing note if user already wrote one today
+              const existingNote = ticket.progressNotes.find((n) => n.userId === data?.userId);
+              setNoteTicketId(ticketId);
+              setNoteText(existingNote?.noteText || '');
             }}
-            reviewTag={reviewTag}
-            reviewNote={reviewNote}
-            reviewAttention={reviewAttention}
-            reviewBlockedReason={reviewBlockedReason}
-            onReviewTagChange={setReviewTag}
-            onReviewNoteChange={setReviewNote}
-            onReviewAttentionChange={setReviewAttention}
-            onReviewBlockedReasonChange={setReviewBlockedReason}
-            onSubmitReview={() => handleSubmitReview(ticket.ticketId)}
-            submittingReview={submittingReview}
-            onCopyDraft={() => {
-              if (ticket.analysis?.response_draft) {
-                handleCopyDraft(ticket.ticketId, ticket.analysis.response_draft);
-              }
-            }}
-            copiedDraft={copiedDraft === ticket.ticketId}
+            onNoteTextChange={setNoteText}
+            onSubmitNote={() => handleSubmitNote(ticket.ticketId)}
             userId={data?.userId || ''}
           />
         ))}
@@ -682,20 +596,12 @@ interface TicketRowProps {
   analyzing: boolean;
   canAnalyze: boolean;
   isVP: boolean;
-  reviewingTicket: string | null;
-  onStartReview: () => void;
-  reviewTag: string;
-  reviewNote: string;
-  reviewAttention: string;
-  reviewBlockedReason: string;
-  onReviewTagChange: (tag: string) => void;
-  onReviewNoteChange: (note: string) => void;
-  onReviewAttentionChange: (target: string) => void;
-  onReviewBlockedReasonChange: (reason: string) => void;
-  onSubmitReview: () => void;
-  submittingReview: boolean;
-  onCopyDraft: () => void;
-  copiedDraft: boolean;
+  noteTicketId: string | null;
+  noteText: string;
+  submittingNote: boolean;
+  onStartNote: (ticketId: string) => void;
+  onNoteTextChange: (text: string) => void;
+  onSubmitNote: () => void;
   userId: string;
 }
 
@@ -707,28 +613,20 @@ function TicketRow({
   onCompleteAction,
   analyzing,
   canAnalyze,
-  reviewingTicket,
-  onStartReview,
-  reviewTag,
-  reviewNote,
-  reviewAttention,
-  reviewBlockedReason,
-  onReviewTagChange,
-  onReviewNoteChange,
-  onReviewAttentionChange,
-  onReviewBlockedReasonChange,
-  onSubmitReview,
-  submittingReview,
-  onCopyDraft,
-  copiedDraft,
+  noteTicketId,
+  noteText,
+  submittingNote,
+  onStartNote,
+  onNoteTextChange,
+  onSubmitNote,
   userId,
 }: TicketRowProps) {
   const a = ticket.analysis;
   const completedActionIds = new Set(ticket.completions.map((c) => c.actionItemId));
-  const isReviewing = reviewingTicket === ticket.ticketId;
+  const isWritingNote = noteTicketId === ticket.ticketId;
 
   return (
-    <div className={`border-b border-slate-800 ${!ticket.currentUserReviewed ? 'border-l-2 border-l-indigo-500' : ''}`}>
+    <div className={`border-b border-slate-800 ${!ticket.currentUserHasNote ? 'border-l-2 border-l-indigo-500' : ''}`}>
       {/* Collapsed Row */}
       <div
         className="flex items-center gap-3 py-3 cursor-pointer hover:bg-slate-900 transition-colors"
@@ -777,18 +675,18 @@ function TicketRow({
           {a ? <TemperatureBadge temp={a.customer_temperature} /> : <span className="text-xs text-gray-500">--</span>}
         </div>
 
-        {/* Reviews */}
+        {/* Notes count */}
         <div className="w-20 text-xs text-gray-400">
-          {ticket.todayReviews.length > 0 ? (
-            <span>{ticket.todayReviews.length} reviewed</span>
+          {ticket.progressNotes.length > 0 ? (
+            <span>{ticket.progressNotes.length} note{ticket.progressNotes.length !== 1 ? 's' : ''}</span>
           ) : (
-            <span className="text-gray-600">0 reviewed</span>
+            <span className="text-gray-600">0 notes</span>
           )}
         </div>
 
-        {/* Your review status */}
+        {/* Your note status */}
         <div className="w-6 text-center">
-          {ticket.currentUserReviewed ? (
+          {ticket.currentUserHasNote ? (
             <svg className="w-4 h-4 text-emerald-500 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
@@ -937,36 +835,6 @@ function TicketRow({
                 </div>
               )}
 
-              {/* Response Guidance */}
-              {a.response_guidance && (
-                <div className="bg-blue-950/30 border border-blue-800 rounded-lg p-4">
-                  <h3 className="text-xs font-semibold text-blue-400 uppercase tracking-wider mb-2">Response Guidance</h3>
-                  <p className="text-sm text-blue-200 whitespace-pre-wrap">{a.response_guidance}</p>
-                </div>
-              )}
-
-              {/* Draft Reply */}
-              {a.response_draft && (
-                <div className="bg-indigo-950/30 border border-indigo-800 rounded-lg p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-xs font-semibold text-indigo-400 uppercase tracking-wider">Draft Reply</h3>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); onCopyDraft(); }}
-                      className={`px-3 py-1 text-xs rounded ${
-                        copiedDraft
-                          ? 'bg-emerald-600 text-white'
-                          : 'bg-indigo-600 text-white hover:bg-indigo-700'
-                      }`}
-                    >
-                      {copiedDraft ? '✓ Copied!' : 'Copy to Clipboard'}
-                    </button>
-                  </div>
-                  <div className="bg-slate-900 rounded p-3 text-sm text-gray-200 whitespace-pre-wrap font-mono leading-relaxed">
-                    {a.response_draft}
-                  </div>
-                </div>
-              )}
-
               {/* Knowledge Used */}
               {a.knowledge_used && a.knowledge_used !== 'none' && (
                 <div className="text-xs text-gray-500 italic">
@@ -975,7 +843,7 @@ function TicketRow({
               )}
             </div>
 
-            {/* Right: Metadata & Accountability */}
+            {/* Right: Metadata & Progress Notes */}
             <div className="space-y-4">
               {/* Ticket Metadata */}
               <div className="bg-slate-900 border border-slate-700 rounded-lg p-4">
@@ -1028,129 +896,80 @@ function TicketRow({
                 )}
               </div>
 
-              {/* Shift Review Panel */}
+              {/* Progress Note Panel */}
               <div className="bg-slate-900 border border-slate-700 rounded-lg p-4">
-                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Shift Review</h3>
+                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Progress Note</h3>
 
-                {ticket.currentUserReviewed ? (
-                  <div className="flex items-center gap-2 text-emerald-400 text-sm">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                    Reviewed this shift
-                  </div>
-                ) : isReviewing ? (
+                {isWritingNote ? (
                   <div className="space-y-3">
                     <div>
-                      <label className="text-xs text-gray-400 block mb-1">Tag</label>
-                      <select
-                        value={reviewTag}
-                        onChange={(e) => onReviewTagChange(e.target.value)}
-                        className="w-full bg-slate-800 text-sm text-white rounded px-3 py-1.5 border border-slate-600"
-                      >
-                        <option value="nothing_needed">Nothing needed from me</option>
-                        <option value="i_can_action">I can action this</option>
-                        <option value="needs_attention">Needs attention</option>
-                        <option value="blocked">Blocked</option>
-                      </select>
-                    </div>
-                    {reviewTag === 'needs_attention' && (
-                      <div>
-                        <label className="text-xs text-gray-400 block mb-1">Who needs to act?</label>
-                        <input
-                          type="text"
-                          value={reviewAttention}
-                          onChange={(e) => onReviewAttentionChange(e.target.value)}
-                          placeholder="Engineering, CS Manager..."
-                          className="w-full bg-slate-800 text-sm text-white rounded px-3 py-1.5 border border-slate-600"
-                        />
-                      </div>
-                    )}
-                    {reviewTag === 'blocked' && (
-                      <div>
-                        <label className="text-xs text-gray-400 block mb-1">What&apos;s blocking?</label>
-                        <input
-                          type="text"
-                          value={reviewBlockedReason}
-                          onChange={(e) => onReviewBlockedReasonChange(e.target.value)}
-                          placeholder="Waiting on vendor response..."
-                          className="w-full bg-slate-800 text-sm text-white rounded px-3 py-1.5 border border-slate-600"
-                        />
-                      </div>
-                    )}
-                    <div>
-                      <label className="text-xs text-gray-400 block mb-1">Shift Note (optional)</label>
-                      <input
-                        type="text"
-                        value={reviewNote}
-                        onChange={(e) => onReviewNoteChange(e.target.value)}
-                        placeholder="I pinged Marcus on Slack about this..."
-                        className="w-full bg-slate-800 text-sm text-white rounded px-3 py-1.5 border border-slate-600"
+                      <label className="text-xs text-gray-400 block mb-1.5">
+                        What&apos;s the current status of this ticket and what, if anything, did you do on it this shift?
+                      </label>
+                      <textarea
+                        value={noteText}
+                        onChange={(e) => onNoteTextChange(e.target.value)}
+                        placeholder="Describe what you did or the current status..."
+                        rows={4}
+                        className="w-full bg-slate-800 text-sm text-white rounded px-3 py-2 border border-slate-600 resize-none focus:border-indigo-500 focus:outline-none"
                       />
+                      {noteText.trim().length > 0 && noteText.trim().length < 10 && (
+                        <p className="text-xs text-red-400 mt-1">Minimum 10 characters</p>
+                      )}
                     </div>
                     <button
-                      onClick={(e) => { e.stopPropagation(); onSubmitReview(); }}
-                      disabled={submittingReview}
+                      onClick={(e) => { e.stopPropagation(); onSubmitNote(); }}
+                      disabled={submittingNote || noteText.trim().length < 10}
                       className="w-full px-3 py-1.5 text-xs bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50"
                     >
-                      {submittingReview ? 'Submitting...' : 'Submit Review'}
+                      {submittingNote ? 'Saving...' : 'Save Note'}
+                    </button>
+                  </div>
+                ) : ticket.currentUserHasNote ? (
+                  <div>
+                    <div className="flex items-center gap-2 text-emerald-400 text-sm mb-2">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      Note submitted
+                    </div>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onStartNote(ticket.ticketId); }}
+                      className="text-xs text-indigo-400 hover:text-indigo-300"
+                    >
+                      Edit note
                     </button>
                   </div>
                 ) : (
                   <button
-                    onClick={(e) => { e.stopPropagation(); onStartReview(); }}
+                    onClick={(e) => { e.stopPropagation(); onStartNote(ticket.ticketId); }}
                     className="w-full px-3 py-2 text-xs bg-indigo-600 text-white rounded hover:bg-indigo-700"
                   >
-                    Acknowledge & Tag
+                    Write Progress Note
                   </button>
                 )}
               </div>
 
-              {/* Today's Reviews */}
-              {ticket.todayReviews.length > 0 && (
+              {/* Today's Progress Notes */}
+              {ticket.progressNotes.length > 0 && (
                 <div className="bg-slate-900 border border-slate-700 rounded-lg p-4">
                   <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
-                    Today&apos;s Reviews ({ticket.todayReviews.length})
+                    Today&apos;s Notes ({ticket.progressNotes.length})
                   </h3>
-                  <div className="space-y-2">
-                    {ticket.todayReviews.map((review) => {
-                      const tagLabels: Record<string, string> = {
-                        nothing_needed: 'Nothing needed',
-                        i_can_action: 'Can action',
-                        needs_attention: 'Needs attention',
-                        blocked: 'Blocked',
-                      };
-                      const tagColors: Record<string, string> = {
-                        nothing_needed: 'text-gray-400',
-                        i_can_action: 'text-blue-400',
-                        needs_attention: 'text-orange-400',
-                        blocked: 'text-red-400',
-                      };
-                      return (
-                        <div key={review.id} className="text-xs">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium text-gray-300">
-                              {review.userId === userId ? 'You' : review.userName}
-                            </span>
-                            <span className={tagColors[review.acknowledgmentTag] || 'text-gray-400'}>
-                              {tagLabels[review.acknowledgmentTag] || review.acknowledgmentTag}
-                            </span>
-                            <span className="text-gray-600">
-                              {new Date(review.reviewedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            </span>
-                          </div>
-                          {review.shiftNote && (
-                            <p className="text-gray-500 mt-0.5 pl-2 border-l border-slate-700">{review.shiftNote}</p>
-                          )}
-                          {review.attentionTarget && (
-                            <p className="text-orange-500 mt-0.5 text-[10px]">→ {review.attentionTarget}</p>
-                          )}
-                          {review.blockedReason && (
-                            <p className="text-red-500 mt-0.5 text-[10px]">Blocked: {review.blockedReason}</p>
-                          )}
+                  <div className="space-y-3">
+                    {ticket.progressNotes.map((note: ProgressNoteInfo) => (
+                      <div key={note.id} className="text-xs">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="font-medium text-gray-300">
+                            {note.userId === userId ? 'You' : note.userName}
+                          </span>
+                          <span className="text-gray-600">
+                            {new Date(note.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
                         </div>
-                      );
-                    })}
+                        <p className="text-gray-400 pl-2 border-l border-slate-700 whitespace-pre-wrap">{note.noteText}</p>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}

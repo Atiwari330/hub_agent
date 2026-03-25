@@ -87,7 +87,7 @@ You have access to the \`lookupSupportKnowledge\` tool which retrieves detailed 
 **You MUST call \`lookupSupportKnowledge\` at least once before producing your analysis.** Based on the ticket's subject and conversation, identify which system area(s) are relevant and retrieve the knowledge.
 
 CUSTOMER-SPECIFIC CONTEXT:
-Some tickets include a CUSTOMER CONTEXT section. When present, factor the customer's handling instructions into your response guidance and urgency. VIP customers need tighter response times.
+Some tickets include a CUSTOMER CONTEXT section. When present, factor the customer's handling instructions into your urgency assessment and action items. VIP customers need tighter response times.
 
 YOUR ANALYSIS MUST INCLUDE:
 
@@ -112,31 +112,19 @@ YOUR ANALYSIS MUST INCLUDE:
 
 5. **STATUS_TAGS** — Array of tags that apply to this ticket overall: reply_needed, update_due, engineering_ping, internal_action, waiting_on_customer. A ticket can have MULTIPLE tags.
 
-6. **RESPONSE_GUIDANCE** — Direction for tone and content when replying. Not a script — guidance. E.g., "Acknowledge the 2-day gap in communication. Reference the specific billing sync issue they reported on March 18. Provide a concrete timeline or honestly explain what's blocking resolution."
+6. **CONTEXT_SNAPSHOT** — 2-3 sentence engagement recap. Who said what, what was tried, where things stand. Written for someone with zero context.
 
-7. **RESPONSE_DRAFT** — A complete draft reply the agent can copy, review, edit, and send to the customer. Requirements:
-   - Reference specific details from the conversation (dates, issue specifics, what was previously discussed)
-   - Match the appropriate tone given the customer temperature
-   - Acknowledge any response delays if applicable
-   - Include a concrete next step or timeline
-   - Be written so ANY agent can send it, not just the original handler
-   - Sign off generically (e.g., "Best regards, Opus Support Team" or "The Opus Support Team")
-   - If the ticket is waiting on the customer or no reply is needed, write "NO_REPLY_NEEDED" instead
-   - NEVER fabricate information — only include facts from the conversation and Linear context. If you don't know an ETA, say "we're actively working on this" rather than making up a date.
+7. **HOURS_SINCE_CUSTOMER_WAITING** — Float. Use the TICKET METADATA fields "Last Customer Message" and "Last Agent Message" as the authoritative timestamps. If Last Agent Message is MORE RECENT than Last Customer Message, the customer is NOT waiting — output 0. If Last Customer Message is MORE RECENT than Last Agent Message, calculate hours between Last Customer Message and now. Do NOT try to recalculate this from the conversation thread — use the metadata timestamps.
 
-8. **CONTEXT_SNAPSHOT** — 2-3 sentence engagement recap. Who said what, what was tried, where things stand. Written for someone with zero context.
+8. **HOURS_SINCE_LAST_OUTBOUND** — Float. Hours since "Last Agent Message" in the TICKET METADATA. Use that timestamp, not your own calculation from the conversation thread.
 
-9. **HOURS_SINCE_CUSTOMER_WAITING** — Float. Use the TICKET METADATA fields "Last Customer Message" and "Last Agent Message" as the authoritative timestamps. If Last Agent Message is MORE RECENT than Last Customer Message, the customer is NOT waiting — output 0. If Last Customer Message is MORE RECENT than Last Agent Message, calculate hours between Last Customer Message and now. Do NOT try to recalculate this from the conversation thread — use the metadata timestamps.
+9. **HOURS_SINCE_LAST_ACTIVITY** — Float. Hours since any meaningful activity (message, note, call, engineering update). Use the most recent of Last Customer Message, Last Agent Message, or engagement timeline entries.
 
-10. **HOURS_SINCE_LAST_OUTBOUND** — Float. Hours since "Last Agent Message" in the TICKET METADATA. Use that timestamp, not your own calculation from the conversation thread.
+10. **RELATED_TICKET_NOTES** — If other open tickets from the same company are provided, note any coordination needed. E.g., "This customer also has TICKET-789 open about billing sync — ensure your response here doesn't contradict information given there." If no related tickets or no coordination needed, write "NONE".
 
-11. **HOURS_SINCE_LAST_ACTIVITY** — Float. Hours since any meaningful activity (message, note, call, engineering update). Use the most recent of Last Customer Message, Last Agent Message, or engagement timeline entries.
+11. **CONFIDENCE** — 0.00-1.00 score for your analysis quality.
 
-12. **RELATED_TICKET_NOTES** — If other open tickets from the same company are provided, note any coordination needed. E.g., "This customer also has TICKET-789 open about billing sync — ensure your response here doesn't contradict information given there." If no related tickets or no coordination needed, write "NONE".
-
-13. **CONFIDENCE** — 0.00-1.00 score for your analysis quality.
-
-14. **KNOWLEDGE_USED** — Comma-separated list of knowledge areas retrieved, followed by a dash and one sentence explaining how the knowledge informed your analysis. If none retrieved, write "none".
+12. **KNOWLEDGE_USED** — Comma-separated list of knowledge areas retrieved, followed by a dash and one sentence explaining how the knowledge informed your analysis. If none retrieved, write "none".
 
 TICKET HYGIENE:
 - **Drive toward closure**: If the conversation shows the customer's issue appears resolved (fix confirmed, question answered, workaround provided) but the ticket is still open, include an action item for an agent to send a friendly closing message: "It looks like we were able to resolve this for you — I'm going to close out this ticket. If anything else comes up, feel free to open a new ticket or reach back out." Do not leave resolved tickets lingering.
@@ -158,8 +146,6 @@ ACTION_ITEMS: [JSON array]
 CUSTOMER_TEMPERATURE: [calm|frustrated|escalating|angry]
 TEMPERATURE_REASON: [one sentence]
 STATUS_TAGS: [comma-separated list]
-RESPONSE_GUIDANCE: [guidance text]
-RESPONSE_DRAFT: [full draft reply or NO_REPLY_NEEDED]
 CONTEXT_SNAPSHOT: [2-3 sentences]
 HOURS_SINCE_CUSTOMER_WAITING: [float]
 HOURS_SINCE_LAST_OUTBOUND: [float]
@@ -485,9 +471,6 @@ A Linear engineering ticket is linked to this support ticket (${ticket.linear_ta
     const statusTags = statusTagsRaw.split(',').map((t) => t.trim().toLowerCase()).filter((t) => validTags.includes(t));
     if (statusTags.length === 0) statusTags.push('waiting_on_customer');
 
-    const responseGuidance = field('RESPONSE_GUIDANCE', null as unknown as string) || null;
-    const responseDraftRaw = field('RESPONSE_DRAFT', null as unknown as string) || null;
-    const responseDraft = responseDraftRaw === 'NO_REPLY_NEEDED' ? null : responseDraftRaw;
     const contextSnapshot = field('CONTEXT_SNAPSHOT', null as unknown as string) || null;
 
     const hoursSinceCustomerWaiting = numField('HOURS_SINCE_CUSTOMER_WAITING', 0);
@@ -559,8 +542,8 @@ A Linear engineering ticket is linked to this support ticket (${ticket.linear_ta
       action_items: actionItems,
       customer_temperature: temperature,
       temperature_reason: temperatureReason,
-      response_guidance: responseGuidance,
-      response_draft: responseDraft,
+      response_guidance: null,
+      response_draft: null,
       context_snapshot: contextSnapshot,
       related_tickets: relatedTicketsData,
       hours_since_customer_waiting: hoursSinceCustomerWaiting,

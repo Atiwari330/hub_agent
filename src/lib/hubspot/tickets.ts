@@ -26,6 +26,7 @@ const TICKET_PROPERTIES = [
   'hs_last_message_received_at',
   'hs_last_message_sent_at',
   'hs_lastcontacted',
+  'hs_lastmodifieddate',
 ];
 
 export interface HubSpotTicket {
@@ -54,6 +55,7 @@ export interface HubSpotTicket {
     hs_last_message_received_at: string | null;
     hs_last_message_sent_at: string | null;
     hs_lastcontacted: string | null;
+    hs_lastmodifieddate: string | null;
   };
 }
 
@@ -84,6 +86,7 @@ function mapTicketProperties(
     hs_last_message_received_at: rawProps.hs_last_message_received_at || null,
     hs_last_message_sent_at: rawProps.hs_last_message_sent_at || null,
     hs_lastcontacted: rawProps.hs_lastcontacted || null,
+    hs_lastmodifieddate: rawProps.hs_lastmodifieddate || null,
   };
 }
 
