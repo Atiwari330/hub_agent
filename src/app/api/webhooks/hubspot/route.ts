@@ -32,7 +32,7 @@ function verifyHubSpotSignature(
   signature: string | null,
   timestamp: string | null,
   method: string,
-  url: string
+  requestUrl: string
 ): boolean {
   // Skip verification in development
   if (process.env.NODE_ENV === 'development') return true;
@@ -46,7 +46,10 @@ function verifyHubSpotSignature(
   if (!signature || !timestamp) return false;
 
   // HubSpot v3 signature: HMAC-SHA256(client_secret, method + url + body + timestamp)
-  const sourceString = `${method}${url}${requestBody}${timestamp}`;
+  // The URL must match what HubSpot used to compute the signature — the public target URL,
+  // not Vercel's internal request URL (which may include deployment-specific subdomains).
+  const publicUrl = `https://hub-agent-oe65.vercel.app/api/webhooks/hubspot`;
+  const sourceString = `${method}${publicUrl}${requestBody}${timestamp}`;
   const hash = crypto
     .createHmac('sha256', secret)
     .update(sourceString)
