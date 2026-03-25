@@ -1,12 +1,21 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { getHubSpotTicketUrl } from '@/lib/hubspot/urls';
-import type { ActionBoardResponse, ActionBoardTicket, ProgressNoteInfo, LiveActionItem } from '@/app/api/queues/support-action-board/route';
-import type { AlertRecord, PatternRecord } from '@/lib/ai/intelligence/alert-utils';
-import type { NarrativeEntry } from '@/lib/ai/memory/narrative-generator';
-import type { ActionItem, RelatedTicketInfo } from '@/app/api/queues/support-action-board/analyze/analyze-core';
-import { useRealtimeSubscription, type ConnectionStatus } from '@/hooks/use-realtime-subscription';
+import { useRouter, useSearchParams } from 'next/navigation';
+import type { ActionBoardResponse, ActionBoardTicket, LiveActionItem } from '@/app/api/queues/support-action-board/route';
+import type { ActionItem } from '@/app/api/queues/support-action-board/analyze/analyze-core';
+import { useRealtimeSubscription } from '@/hooks/use-realtime-subscription';
+import type { AlertRecord } from '@/lib/ai/intelligence/alert-utils';
+import type { ProgressNoteInfo } from '@/app/api/queues/support-action-board/route';
+import {
+  ResponseClock,
+  ConnectionIndicator,
+  TemperatureBadge,
+  EscalationRiskBadge,
+  AnalyzedTimestamp,
+  computeLiveHours,
+} from './action-board/badges';
+import { PatternSummaryBar } from './action-board/pattern-summary-bar';
 
 // --- Types ---
 
@@ -19,205 +28,42 @@ interface Props {
   canAnalyzeTicket: boolean;
 }
 
-// --- Helper Components ---
-
-function computeLiveHours(lastCustomerMessageAt: string | null, lastAgentMessageAt: string | null): number | null {
-  if (!lastCustomerMessageAt) return null;
-  const customerTime = new Date(lastCustomerMessageAt).getTime();
-  const agentTime = lastAgentMessageAt ? new Date(lastAgentMessageAt).getTime() : 0;
-  // Only show wait time if customer message is more recent than agent response
-  if (agentTime >= customerTime) return null;
-  const hours = (Date.now() - customerTime) / (1000 * 60 * 60);
-  return hours > 0 ? hours : null;
-}
-
-function formatHours(hours: number): string {
-  if (hours >= 24) return `${Math.floor(hours / 24)}d ${Math.round(hours % 24)}h`;
-  if (hours >= 1) return `${Math.floor(hours)}h ${Math.round((hours % 1) * 60)}m`;
-  return `${Math.round(hours * 60)}m`;
-}
-
-function ResponseClock({ hours }: { hours: number | null }) {
-  if (hours === null || hours === 0) {
-    return <span className="text-xs text-gray-400 font-mono">--</span>;
-  }
-
-  let color = 'text-gray-500';
-  let bg = 'bg-gray-50';
-  if (hours >= 4) {
-    color = 'text-red-700';
-    bg = 'bg-red-50 border border-red-200';
-  } else if (hours >= 2) {
-    color = 'text-orange-700';
-    bg = 'bg-orange-50 border border-orange-200';
-  } else if (hours >= 1) {
-    color = 'text-yellow-700';
-    bg = 'bg-yellow-50 border border-yellow-200';
-  }
-
-  return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-bold ${color} ${bg}`}>
-      {formatHours(hours)}
-    </span>
-  );
-}
-
-function ConnectionIndicator({ status }: { status: ConnectionStatus }) {
-  const config: Record<ConnectionStatus, { color: string; label: string }> = {
-    connected: { color: 'bg-emerald-500', label: 'Live' },
-    connecting: { color: 'bg-yellow-500 animate-pulse', label: 'Connecting...' },
-    disconnected: { color: 'bg-red-500', label: 'Offline' },
-  };
-  const { color, label } = config[status];
-  return (
-    <div className="flex items-center gap-1.5" title={`Realtime: ${label}`}>
-      <div className={`w-2 h-2 rounded-full ${color}`} />
-      <span className="text-[10px] text-gray-400">{label}</span>
-    </div>
-  );
-}
-
-function StatusTag({ tag }: { tag: string }) {
-  const config: Record<string, { label: string; color: string }> = {
-    reply_needed: { label: 'Reply Needed', color: 'bg-red-100 text-red-700' },
-    update_due: { label: 'Update Due', color: 'bg-yellow-100 text-yellow-700' },
-    engineering_ping: { label: 'Eng Ping', color: 'bg-purple-100 text-purple-700' },
-    internal_action: { label: 'Internal Action', color: 'bg-blue-100 text-blue-700' },
-    waiting_on_customer: { label: 'Waiting', color: 'bg-gray-100 text-gray-500' },
-  };
-  const { label, color } = config[tag] || { label: tag, color: 'bg-gray-100 text-gray-500' };
-  return (
-    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${color}`}>
-      {label}
-    </span>
-  );
-}
-
-function TemperatureBadge({ temp }: { temp: string }) {
-  const config: Record<string, { label: string; color: string }> = {
-    angry: { label: 'Angry', color: 'bg-red-100 text-red-700' },
-    escalating: { label: 'Escalating', color: 'bg-orange-100 text-orange-700' },
-    frustrated: { label: 'Frustrated', color: 'bg-yellow-100 text-yellow-700' },
-    calm: { label: 'Calm', color: 'bg-green-100 text-green-700' },
-  };
-  const { label, color } = config[temp] || { label: temp, color: 'bg-gray-100 text-gray-500' };
-  return (
-    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${color}`}>
-      {label}
-    </span>
-  );
-}
-
-function EscalationRiskBadge({ score }: { score: number | null }) {
-  if (score === null || score < 0.6) return null;
-  const label = score >= 0.9 ? 'Critical' : score >= 0.75 ? 'High' : 'Elevated';
-  const color = score >= 0.9 ? 'bg-red-600 text-white' : score >= 0.75 ? 'bg-orange-500 text-white' : 'bg-yellow-500 text-black';
-  return (
-    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold ${color}`} title={`Escalation risk: ${Math.round(score * 100)}%`}>
-      {label}
-    </span>
-  );
-}
-
-function AlertSeverityBadge({ severity, label }: { severity: string; label: string }) {
-  const colors: Record<string, string> = {
-    critical: 'bg-red-900/50 text-red-300 border border-red-800',
-    warning: 'bg-orange-900/50 text-orange-300 border border-orange-800',
-    info: 'bg-blue-900/50 text-blue-300 border border-blue-800',
-  };
-  return (
-    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium ${colors[severity] || colors.info}`}>
-      {label}
-    </span>
-  );
-}
-
-function PriorityBadge({ priority }: { priority: string }) {
-  const config: Record<string, { label: string; color: string }> = {
-    now: { label: 'NOW', color: 'bg-red-600 text-white' },
-    today: { label: 'TODAY', color: 'bg-orange-500 text-white' },
-    this_week: { label: 'THIS WEEK', color: 'bg-blue-500 text-white' },
-  };
-  const { label, color } = config[priority] || { label: priority, color: 'bg-gray-500 text-white' };
-  return (
-    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold ${color}`}>
-      {label}
-    </span>
-  );
-}
-
-function WhoBadge({ who }: { who: string }) {
-  const config: Record<string, { label: string; color: string }> = {
-    any_support_agent: { label: 'Support', color: 'bg-blue-50 text-blue-600' },
-    engineering: { label: 'Engineering', color: 'bg-purple-50 text-purple-600' },
-    cs_manager: { label: 'CS Manager', color: 'bg-orange-50 text-orange-600' },
-  };
-  const { label, color } = config[who] || { label: who, color: 'bg-gray-50 text-gray-600' };
-  return (
-    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${color}`}>
-      {label}
-    </span>
-  );
-}
-
-function AnalyzedTimestamp({ dateStr }: { dateStr: string }) {
-  const date = new Date(dateStr);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-  let label: string;
-  if (diffDays === 0) {
-    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-    if (diffHours === 0) {
-      const diffMin = Math.floor(diffMs / (1000 * 60));
-      label = `${diffMin}m ago`;
-    } else {
-      label = `${diffHours}h ago`;
-    }
-  } else if (diffDays === 1) {
-    label = 'Yesterday';
-  } else {
-    label = `${diffDays}d ago`;
-  }
-
-  return <span className="text-xs text-gray-400">{label}</span>;
-}
-
-function LinearBadge({ state }: { state: string }) {
-  const stateColors: Record<string, string> = {
-    'In Progress': 'bg-blue-100 text-blue-700',
-    'Done': 'bg-emerald-100 text-emerald-700',
-    'Todo': 'bg-yellow-100 text-yellow-700',
-    'Backlog': 'bg-gray-100 text-gray-600',
-  };
-  return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${stateColors[state] || 'bg-gray-100 text-gray-600'}`}>
-      {state}
-    </span>
-  );
-}
-
 // --- Main Component ---
 
-export function SupportActionBoardView({ userRole, canAnalyzeTicket }: Props) {
+export function SupportActionBoardView({ canAnalyzeTicket }: Props) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // Initialize from URL params
   const [data, setData] = useState<ActionBoardResponse | null>(null);
   const [loading, setLoading] = useState(true);
-  const [expandedTicket, setExpandedTicket] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
-  const [vipFilter, setVipFilter] = useState(false);
-  const [sortColumn, setSortColumn] = useState<SortColumn>('responseWait');
-  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>(
+    (searchParams.get('filter') as StatusFilter) || 'all'
+  );
+  const [vipFilter, setVipFilter] = useState(searchParams.get('vip') === '1');
+  const [sortColumn, setSortColumn] = useState<SortColumn>(
+    (searchParams.get('sort') as SortColumn) || 'responseWait'
+  );
+  const [sortDirection, setSortDirection] = useState<SortDirection>(
+    (searchParams.get('dir') as SortDirection) || 'desc'
+  );
   const [analyzing, setAnalyzing] = useState<string | null>(null);
   const [batchAnalyzing, setBatchAnalyzing] = useState(false);
   const [batchProgress, setBatchProgress] = useState<{ current: number; total: number; subject: string } | null>(null);
 
-  // Progress note state
-  const [noteTicketId, setNoteTicketId] = useState<string | null>(null);
-  const [noteText, setNoteText] = useState('');
-  const [submittingNote, setSubmittingNote] = useState(false);
+  // --- Sync filter/sort to URL ---
 
-  const isVP = userRole === 'vp_revops';
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (statusFilter !== 'all') params.set('filter', statusFilter);
+    if (vipFilter) params.set('vip', '1');
+    if (sortColumn !== 'responseWait') params.set('sort', sortColumn);
+    if (sortDirection !== 'desc') params.set('dir', sortDirection);
+    const qs = params.toString();
+    router.replace(qs ? `?${qs}` : '?', { scroll: false });
+  }, [statusFilter, vipFilter, sortColumn, sortDirection, router]);
+
+  // --- Data Fetching ---
 
   const fetchData = useCallback(async () => {
     try {
@@ -259,7 +105,7 @@ export function SupportActionBoardView({ userRole, canAnalyzeTicket }: Props) {
             response_guidance: row.response_guidance as string,
             response_draft: row.response_draft as string,
             context_snapshot: row.context_snapshot as string,
-            related_tickets: (row.related_tickets || []) as RelatedTicketInfo[],
+            related_tickets: (row.related_tickets || []) as import('@/app/api/queues/support-action-board/analyze/analyze-core').RelatedTicketInfo[],
             hours_since_customer_waiting: row.hours_since_customer_waiting as number,
             hours_since_last_outbound: row.hours_since_last_outbound as number,
             hours_since_last_activity: row.hours_since_last_activity as number,
@@ -290,7 +136,6 @@ export function SupportActionBoardView({ userRole, canAnalyzeTicket }: Props) {
       if (!prev) return prev;
       const updatedTickets = prev.tickets.map((t) => {
         if (t.ticketId !== ticketId) return t;
-        // Skip if we already have this completion (from optimistic update)
         if (t.completions.some((c) => c.id === row.id)) return t;
         return {
           ...t,
@@ -322,7 +167,6 @@ export function SupportActionBoardView({ userRole, canAnalyzeTicket }: Props) {
       if (!prev) return prev;
       const updatedTickets = prev.tickets.map((t) => {
         if (t.ticketId !== ticketId) return t;
-        // Skip if we already have this note (from optimistic update)
         if (t.progressNotes.some((n) => n.id === row.id)) return t;
         const newNote: ProgressNoteInfo = {
           id: row.id as string,
@@ -362,7 +206,7 @@ export function SupportActionBoardView({ userRole, canAnalyzeTicket }: Props) {
           createdByPass: row.created_by_pass as string | null,
           completedAt: row.completed_at as string | null,
           completedBy: row.completed_by as string | null,
-          completedByName: null, // Will be resolved on next full fetch
+          completedByName: null,
           completedMethod: row.completed_method as string | null,
           supersededAt: row.superseded_at as string | null,
           supersededBy: row.superseded_by as string | null,
@@ -372,7 +216,6 @@ export function SupportActionBoardView({ userRole, canAnalyzeTicket }: Props) {
           verificationNote: row.verification_note as string | null,
           sortOrder: row.sort_order as number,
         };
-        // Replace existing or add new
         const existingIdx = t.actionItems.findIndex((ai) => ai.id === updatedItem.id);
         const newItems = [...t.actionItems];
         if (existingIdx >= 0) {
@@ -418,16 +261,12 @@ export function SupportActionBoardView({ userRole, canAnalyzeTicket }: Props) {
     if (!row || !row.hubspot_ticket_id) return;
     const ticketId = row.hubspot_ticket_id as string;
 
-    // If the alert was resolved, remove it from the ticket
     if (row.resolved_at) {
       setData((prev) => {
         if (!prev) return prev;
         const updatedTickets = prev.tickets.map((t) => {
           if (t.ticketId !== ticketId) return t;
-          return {
-            ...t,
-            alerts: t.alerts.filter((a) => a.id !== row.id),
-          };
+          return { ...t, alerts: t.alerts.filter((a) => a.id !== row.id) };
         });
         return { ...prev, tickets: updatedTickets };
       });
@@ -452,7 +291,6 @@ export function SupportActionBoardView({ userRole, canAnalyzeTicket }: Props) {
       if (!prev) return prev;
       const updatedTickets = prev.tickets.map((t) => {
         if (t.ticketId !== ticketId) return t;
-        // Replace existing or add new
         const existingIdx = t.alerts.findIndex((a) => a.id === newAlert.id);
         const newAlerts = [...t.alerts];
         if (existingIdx >= 0) {
@@ -467,36 +305,12 @@ export function SupportActionBoardView({ userRole, canAnalyzeTicket }: Props) {
   }, []);
 
   const realtimeSubscriptions = useMemo(() => [
-    {
-      table: 'ticket_action_board_analyses',
-      event: '*' as const,
-      onPayload: handleAnalysisChange,
-    },
-    {
-      table: 'action_item_completions',
-      event: 'INSERT' as const,
-      onPayload: handleCompletionInsert,
-    },
-    {
-      table: 'progress_notes',
-      event: '*' as const,
-      onPayload: handleNoteChange,
-    },
-    {
-      table: 'action_items',
-      event: '*' as const,
-      onPayload: handleActionItemChange,
-    },
-    {
-      table: 'support_tickets',
-      event: 'UPDATE' as const,
-      onPayload: handleTicketUpdate,
-    },
-    {
-      table: 'ticket_alerts',
-      event: '*' as const,
-      onPayload: handleAlertChange,
-    },
+    { table: 'ticket_action_board_analyses', event: '*' as const, onPayload: handleAnalysisChange },
+    { table: 'action_item_completions', event: 'INSERT' as const, onPayload: handleCompletionInsert },
+    { table: 'progress_notes', event: '*' as const, onPayload: handleNoteChange },
+    { table: 'action_items', event: '*' as const, onPayload: handleActionItemChange },
+    { table: 'support_tickets', event: 'UPDATE' as const, onPayload: handleTicketUpdate },
+    { table: 'ticket_alerts', event: '*' as const, onPayload: handleAlertChange },
   ], [handleAnalysisChange, handleCompletionInsert, handleNoteChange, handleActionItemChange, handleTicketUpdate, handleAlertChange]);
 
   const { status: realtimeStatus } = useRealtimeSubscription({
@@ -511,7 +325,6 @@ export function SupportActionBoardView({ userRole, canAnalyzeTicket }: Props) {
     const interval = setInterval(() => {
       setData((prev) => {
         if (!prev) return prev;
-        // Trigger a shallow copy to force re-render with updated times
         return { ...prev, tickets: [...prev.tickets] };
       });
     }, 60_000);
@@ -529,7 +342,6 @@ export function SupportActionBoardView({ userRole, canAnalyzeTicket }: Props) {
         body: JSON.stringify({ ticketId }),
       });
       if (res.ok && realtimeStatus !== 'connected') {
-        // Fallback: refetch if realtime isn't connected
         await fetchData();
       }
     } catch (err) {
@@ -581,152 +393,12 @@ export function SupportActionBoardView({ userRole, canAnalyzeTicket }: Props) {
     }
   };
 
-  const handleCompleteAction = async (ticketId: string, actionItem: LiveActionItem | ActionItem) => {
-    // Optimistic update: mark the action item as completed in local state
-    const prevData = data;
-    setData((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        tickets: prev.tickets.map((t) => {
-          if (t.ticketId !== ticketId) return t;
-          return {
-            ...t,
-            actionItems: t.actionItems.map((ai) =>
-              ai.id === actionItem.id
-                ? { ...ai, status: 'completed' as const, completedAt: new Date().toISOString(), completedMethod: 'manual', completedByName: 'You' }
-                : ai
-            ),
-            completions: [...t.completions, {
-              id: `optimistic-${Date.now()}`,
-              actionItemId: actionItem.id,
-              actionDescription: actionItem.description,
-              completedBy: data?.userId || '',
-              completedByName: 'You',
-              completedAt: new Date().toISOString(),
-              verified: null,
-              verificationNote: null,
-            }],
-          };
-        }),
-      };
-    });
-
-    try {
-      const res = await fetch('/api/queues/support-action-board/complete-action', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ticketId,
-          actionItemId: actionItem.id,
-          actionDescription: actionItem.description,
-        }),
-      });
-      if (!res.ok) {
-        setData(prevData);
-      }
-      // On success, realtime subscription will update with the real row
-    } catch (err) {
-      console.error('Complete action error:', err);
-      setData(prevData);
-    }
-  };
-
-  const handleSubmitNote = async (ticketId: string) => {
-    if (noteText.trim().length < 10) return;
-    setSubmittingNote(true);
-
-    // Optimistic update
-    const optimisticNote: ProgressNoteInfo = {
-      id: `optimistic-${Date.now()}`,
-      userId: data?.userId || '',
-      userName: 'You',
-      noteText: noteText.trim(),
-      createdAt: new Date().toISOString(),
-    };
-
-    const prevData = data;
-    const savedNoteText = noteText.trim();
-    setNoteTicketId(null);
-    setNoteText('');
-
-    setData((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        tickets: prev.tickets.map((t) =>
-          t.ticketId === ticketId
-            ? {
-                ...t,
-                progressNotes: [...t.progressNotes, optimisticNote],
-                currentUserHasNote: true,
-              }
-            : t
-        ),
-        noteProgress: {
-          ...prev.noteProgress,
-          noted: prev.tickets.find((t) => t.ticketId === ticketId)?.currentUserHasNote
-            ? prev.noteProgress.noted
-            : prev.noteProgress.noted + 1,
-        },
-      };
-    });
-
-    try {
-      const res = await fetch('/api/queues/support-action-board/progress-note', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ticketId, noteText: savedNoteText }),
-      });
-      if (!res.ok) {
-        // Revert on failure
-        setData(prevData);
-        setNoteTicketId(ticketId);
-        setNoteText(savedNoteText);
-      }
-    } catch (err) {
-      console.error('Submit note error:', err);
-      setData(prevData);
-      setNoteTicketId(ticketId);
-      setNoteText(savedNoteText);
-    } finally {
-      setSubmittingNote(false);
-    }
-  };
-
-  const handleAcknowledgeAlert = async (alertId: string) => {
-    // Optimistic update: mark as acknowledged
-    setData((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        tickets: prev.tickets.map((t) => ({
-          ...t,
-          alerts: t.alerts.map((a) =>
-            a.id === alertId ? { ...a, acknowledgedBy: prev.userId, acknowledgedAt: new Date().toISOString() } : a
-          ),
-        })),
-      };
-    });
-
-    try {
-      await fetch('/api/queues/support-action-board/acknowledge-alert', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ alertId }),
-      });
-    } catch (err) {
-      console.error('Acknowledge alert error:', err);
-    }
-  };
-
   // --- Filtering and Sorting ---
 
   const filteredTickets = useMemo(() => {
     if (!data) return [];
     let tickets = data.tickets;
 
-    // VIP filter
     if (vipFilter) {
       tickets = tickets.filter((t) => t.isCoDestiny);
     }
@@ -784,6 +456,12 @@ export function SupportActionBoardView({ userRole, canAnalyzeTicket }: Props) {
   const sortArrow = (col: SortColumn) => {
     if (sortColumn !== col) return '';
     return sortDirection === 'asc' ? ' ↑' : ' ↓';
+  };
+
+  // --- Row Click Navigation ---
+
+  const handleRowClick = (ticketId: string) => {
+    router.push(`/dashboard/queues/support-action-board/${ticketId}`);
   };
 
   // --- Render ---
@@ -948,39 +626,10 @@ export function SupportActionBoardView({ userRole, canAnalyzeTicket }: Props) {
         </button>
       </div>
 
-      {/* Proactive Intelligence: Pattern Alerts Banner */}
-      {data.patterns && data.patterns.length > 0 && (
-        <div className="px-6 py-3 space-y-2">
-          {data.patterns.map((pattern) => (
-            <div key={pattern.id} className="bg-amber-950/30 border border-amber-800 rounded-lg px-4 py-3">
-              <div className="flex items-start justify-between">
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-600 text-white">
-                      PATTERN
-                    </span>
-                    <span className="text-xs text-amber-300 font-medium">
-                      {pattern.affectedTicketIds.length} tickets affected
-                    </span>
-                    {pattern.confidence >= 0.8 && (
-                      <span className="text-[10px] text-amber-500">High confidence</span>
-                    )}
-                  </div>
-                  <p className="text-sm text-gray-200">{pattern.description}</p>
-                  {pattern.recommendedAction && (
-                    <p className="text-xs text-amber-400 mt-1">{pattern.recommendedAction}</p>
-                  )}
-                </div>
-                <span className="text-[10px] text-gray-500 whitespace-nowrap ml-4">
-                  {new Date(pattern.createdAt).toLocaleDateString()}
-                </span>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+      {/* Pattern Summary Bar (collapsed by default) */}
+      <PatternSummaryBar patterns={data.patterns || []} />
 
-      {/* Proactive Intelligence: Global Alert Summary */}
+      {/* Global Alert Summary */}
       {(() => {
         const allAlerts = data.tickets.flatMap((t) => t.alerts || []);
         const criticalCount = allAlerts.filter((a) => a.severity === 'critical').length;
@@ -1047,26 +696,10 @@ export function SupportActionBoardView({ userRole, canAnalyzeTicket }: Props) {
           <TicketRow
             key={ticket.ticketId}
             ticket={ticket}
-            isExpanded={expandedTicket === ticket.ticketId}
-            onToggle={() => setExpandedTicket(expandedTicket === ticket.ticketId ? null : ticket.ticketId)}
+            onRowClick={() => handleRowClick(ticket.ticketId)}
             onAnalyze={() => handleAnalyze(ticket.ticketId)}
-            onCompleteAction={(item: LiveActionItem) => handleCompleteAction(ticket.ticketId, item)}
-            onAcknowledgeAlert={handleAcknowledgeAlert}
             analyzing={analyzing === ticket.ticketId}
             canAnalyze={canAnalyzeTicket}
-            isVP={isVP}
-            noteTicketId={noteTicketId}
-            noteText={noteText}
-            submittingNote={submittingNote}
-            onStartNote={(ticketId) => {
-              // Pre-fill with existing note if user already wrote one today
-              const existingNote = ticket.progressNotes.find((n) => n.userId === data?.userId);
-              setNoteTicketId(ticketId);
-              setNoteText(existingNote?.noteText || '');
-            }}
-            onNoteTextChange={setNoteText}
-            onSubmitNote={() => handleSubmitNote(ticket.ticketId)}
-            userId={data?.userId || ''}
           />
         ))}
 
@@ -1080,284 +713,31 @@ export function SupportActionBoardView({ userRole, canAnalyzeTicket }: Props) {
   );
 }
 
-// --- Action Item Card (lifecycle-aware) ---
-
-function ActionItemCard({ item, onComplete }: { item: LiveActionItem; onComplete?: () => void }) {
-  const isActive = item.status === 'active';
-  const isCompleted = item.status === 'completed';
-  const isSuperseded = item.status === 'superseded';
-  const isExpired = item.status === 'expired';
-  const isAutoCompleted = isCompleted && item.completedMethod === 'auto_detected';
-  const isUnverified = isCompleted && item.verified === false;
-
-  const bgClass = isCompleted
-    ? isUnverified
-      ? 'bg-red-950/30 border border-red-900'
-      : 'bg-emerald-950/30 border border-emerald-900'
-    : isSuperseded
-      ? 'bg-slate-800/50 border border-slate-700 opacity-60'
-      : isExpired
-        ? 'bg-slate-800/30 border border-slate-700 opacity-40'
-        : 'bg-slate-800';
-
-  return (
-    <div className={`flex items-start gap-3 p-3 rounded-lg ${bgClass}`}>
-      {/* Checkbox (only for active items) */}
-      {isActive && onComplete ? (
-        <button
-          onClick={(e) => { e.stopPropagation(); onComplete(); }}
-          className="mt-0.5 flex-shrink-0 w-5 h-5 rounded border border-gray-500 hover:border-indigo-400 flex items-center justify-center"
-        />
-      ) : (
-        <div className={`mt-0.5 flex-shrink-0 w-5 h-5 rounded border flex items-center justify-center ${
-          isCompleted ? 'bg-emerald-600 border-emerald-600' : 'border-gray-600'
-        }`}>
-          {isCompleted && (
-            <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-            </svg>
-          )}
-          {isSuperseded && (
-            <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-            </svg>
-          )}
-        </div>
-      )}
-
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-1">
-          <PriorityBadge priority={item.priority} />
-          <WhoBadge who={item.who} />
-          {item.statusTags.map((tag) => (
-            <StatusTag key={tag} tag={tag} />
-          ))}
-          {isAutoCompleted && (
-            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium bg-emerald-900/50 text-emerald-400">
-              Auto-detected
-            </span>
-          )}
-          {/* Item age */}
-          <span className="text-[10px] text-gray-500 ml-auto">
-            <AnalyzedTimestamp dateStr={item.createdAt} />
-          </span>
-        </div>
-
-        <p className={`text-sm ${
-          isCompleted || isSuperseded ? 'line-through text-gray-500' :
-          isExpired ? 'text-gray-600' : 'text-gray-200'
-        }`}>
-          {item.description}
-        </p>
-
-        {/* Status detail line */}
-        {isCompleted && (
-          <p className="text-xs text-gray-500 mt-1">
-            {isAutoCompleted ? 'Auto-completed' : `Completed by ${item.completedByName || 'agent'}`}
-            {item.completedAt && <> · <AnalyzedTimestamp dateStr={item.completedAt} /></>}
-            {isUnverified && (
-              <span className="text-red-400 font-medium ml-2">
-                Unverified — {item.verificationNote || 'No matching activity found'}
-              </span>
-            )}
-            {item.verified === true && (
-              <span className="text-emerald-400 ml-2">Verified</span>
-            )}
-          </p>
-        )}
-        {isSuperseded && item.expiredReason && (
-          <p className="text-xs text-gray-500 mt-1">Replaced: {item.expiredReason}</p>
-        )}
-        {isExpired && item.expiredReason && (
-          <p className="text-xs text-gray-500 mt-1">Expired: {item.expiredReason}</p>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// --- Ticket Timeline Component ---
-
-function TicketTimeline({ ticketId }: { ticketId: string }) {
-  const [timeline, setTimeline] = useState<NarrativeEntry[] | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [expanded, setExpanded] = useState(false);
-
-  const fetchTimeline = useCallback(async () => {
-    if (timeline) return; // Already loaded
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/queues/support-action-board/timeline/${ticketId}`);
-      if (res.ok) {
-        const data = await res.json();
-        setTimeline(data.timeline || []);
-      }
-    } catch (err) {
-      console.error('Failed to fetch timeline:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, [ticketId, timeline]);
-
-  const handleToggle = () => {
-    if (!expanded) {
-      fetchTimeline();
-    }
-    setExpanded(!expanded);
-  };
-
-  return (
-    <div className="bg-slate-900 border border-slate-700 rounded-lg p-4">
-      <button
-        onClick={handleToggle}
-        className="w-full flex items-center justify-between text-xs font-semibold text-gray-400 uppercase tracking-wider"
-      >
-        <span>Ticket Timeline</span>
-        <svg
-          className={`w-4 h-4 transition-transform ${expanded ? 'rotate-180' : ''}`}
-          fill="none" stroke="currentColor" viewBox="0 0 24 24"
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        </svg>
-      </button>
-
-      {expanded && (
-        <div className="mt-3">
-          {loading && <p className="text-xs text-gray-500">Loading timeline...</p>}
-          {timeline && timeline.length === 0 && (
-            <p className="text-xs text-gray-500">No timeline data yet. Run an analysis to start building history.</p>
-          )}
-          {timeline && timeline.length > 0 && (
-            <div className="relative">
-              {/* Vertical line */}
-              <div className="absolute left-2 top-2 bottom-2 w-px bg-slate-700" />
-
-              <div className="space-y-4">
-                {timeline.map((entry, idx) => {
-                  const isImprovement = entry.temperatureChange &&
-                    temperatureRank(entry.temperatureChange.to) < temperatureRank(entry.temperatureChange.from);
-                  const isDegradation = entry.temperatureChange &&
-                    temperatureRank(entry.temperatureChange.to) > temperatureRank(entry.temperatureChange.from);
-
-                  return (
-                    <div key={idx} className="relative pl-6">
-                      {/* Dot */}
-                      <div className={`absolute left-0.5 top-1.5 w-3 h-3 rounded-full border-2 ${
-                        isDegradation ? 'border-red-500 bg-red-900' :
-                        isImprovement ? 'border-emerald-500 bg-emerald-900' :
-                        'border-slate-500 bg-slate-800'
-                      }`} />
-
-                      <div>
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-[10px] text-gray-500">
-                            {new Date(entry.timestamp).toLocaleString([], {
-                              month: 'short', day: 'numeric',
-                              hour: '2-digit', minute: '2-digit',
-                            })}
-                          </span>
-                          {entry.triggerEvent && (
-                            <span className="text-[10px] text-gray-600">
-                              {entry.triggerEvent}
-                            </span>
-                          )}
-                        </div>
-
-                        {entry.temperatureChange && (
-                          <div className={`text-xs mb-1 ${isDegradation ? 'text-red-400' : 'text-emerald-400'}`}>
-                            Temperature: {entry.temperatureChange.from} → {entry.temperatureChange.to}
-                          </div>
-                        )}
-
-                        {entry.changes.map((change, ci) => (
-                          <p key={ci} className="text-xs text-gray-400">{change}</p>
-                        ))}
-
-                        {entry.situationDelta && (
-                          <p className="text-xs text-gray-300 mt-1 italic border-l-2 border-slate-600 pl-2">
-                            {entry.situationDelta.slice(0, 200)}
-                            {entry.situationDelta.length > 200 ? '...' : ''}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function temperatureRank(temp: string): number {
-  const ranks: Record<string, number> = { calm: 0, frustrated: 1, escalating: 2, angry: 3 };
-  return ranks[temp] ?? 0;
-}
-
-// --- Ticket Row Component ---
+// --- Ticket Row Component (list-only, no expansion) ---
 
 interface TicketRowProps {
   ticket: ActionBoardTicket;
-  isExpanded: boolean;
-  onToggle: () => void;
+  onRowClick: () => void;
   onAnalyze: () => void;
-  onCompleteAction: (item: LiveActionItem) => void;
-  onAcknowledgeAlert: (alertId: string) => void;
   analyzing: boolean;
   canAnalyze: boolean;
-  isVP: boolean;
-  noteTicketId: string | null;
-  noteText: string;
-  submittingNote: boolean;
-  onStartNote: (ticketId: string) => void;
-  onNoteTextChange: (text: string) => void;
-  onSubmitNote: () => void;
-  userId: string;
 }
 
 function TicketRow({
   ticket,
-  isExpanded,
-  onToggle,
+  onRowClick,
   onAnalyze,
-  onCompleteAction,
-  onAcknowledgeAlert,
   analyzing,
   canAnalyze,
-  noteTicketId,
-  noteText,
-  submittingNote,
-  onStartNote,
-  onNoteTextChange,
-  onSubmitNote,
-  userId,
 }: TicketRowProps) {
   const a = ticket.analysis;
-  const [showExpired, setShowExpired] = useState(false);
-  const isWritingNote = noteTicketId === ticket.ticketId;
-
-  // Separate action items by status
-  const activeItems = ticket.actionItems.filter((ai) => ai.status === 'active');
-  const completedItems = ticket.actionItems.filter((ai) => ai.status === 'completed');
-  const supersededItems = ticket.actionItems.filter((ai) => ai.status === 'superseded');
-  const expiredItems = ticket.actionItems.filter((ai) => ai.status === 'expired');
-  // Fall back to analysis.action_items if no living items exist yet (pre-migration)
-  const hasLivingItems = ticket.actionItems.length > 0;
-  const legacyCompletedIds = new Set(ticket.completions.map((c) => c.actionItemId));
-
-  // Use live-computed wait time if raw timestamps available, else fall back to analysis snapshot
-  const liveCustomerWait = computeLiveHours(ticket.lastCustomerMessageAt, ticket.lastAgentMessageAt);
-  const customerWaitHours = liveCustomerWait ?? a?.hours_since_customer_waiting ?? null;
+  const customerWaitHours = computeLiveHours(ticket.lastCustomerMessageAt, ticket.lastAgentMessageAt) ?? a?.hours_since_customer_waiting ?? null;
 
   return (
     <div className={`border-b border-slate-800 ${!ticket.currentUserHasNote ? 'border-l-2 border-l-indigo-500' : ''}`}>
-      {/* Collapsed Row */}
       <div
         className="flex items-center gap-3 py-3 cursor-pointer hover:bg-slate-900 transition-colors"
-        onClick={onToggle}
+        onClick={onRowClick}
       >
         {/* Response Clock */}
         <div className="w-20">
@@ -1379,7 +759,6 @@ function TicketRow({
               title={tag}
             />
           ))}
-          {/* Alert indicators */}
           {(ticket.alerts || []).some((al) => al.alertType === 'sla_warning' && al.severity === 'critical') && (
             <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" title="SLA Critical" />
           )}
@@ -1446,375 +825,15 @@ function TicketRow({
               {analyzing ? '...' : a ? '↻' : 'Analyze'}
             </button>
           )}
-          {/* Expand chevron */}
+          {/* Navigate arrow */}
           <svg
-            className={`w-4 h-4 text-gray-500 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+            className="w-4 h-4 text-gray-500"
             fill="none" stroke="currentColor" viewBox="0 0 24 24"
           >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
           </svg>
         </div>
       </div>
-
-      {/* Expanded Detail */}
-      {isExpanded && a && (
-        <div className="pb-6 px-4">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Left: Analysis (2 cols) */}
-            <div className="lg:col-span-2 space-y-4">
-              {/* Situation Summary */}
-              <div className="bg-slate-900 border border-slate-700 rounded-lg p-4">
-                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Situation</h3>
-                <p className="text-sm text-gray-200 whitespace-pre-wrap">{a.situation_summary}</p>
-              </div>
-
-              {/* Action Items */}
-              <div className="bg-slate-900 border border-slate-700 rounded-lg p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                    Action Items
-                    {hasLivingItems && (
-                      <span className="ml-2 text-gray-500 font-normal normal-case">
-                        {activeItems.length} active
-                        {completedItems.length > 0 && `, ${completedItems.length} done`}
-                        {supersededItems.length > 0 && `, ${supersededItems.length} replaced`}
-                      </span>
-                    )}
-                  </h3>
-                  {expiredItems.length > 0 && (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); setShowExpired(!showExpired); }}
-                      className="text-[10px] text-gray-500 hover:text-gray-300"
-                    >
-                      {showExpired ? 'Hide expired' : `Show ${expiredItems.length} expired`}
-                    </button>
-                  )}
-                </div>
-                <div className="space-y-3">
-                  {hasLivingItems ? (
-                    <>
-                      {/* Active items */}
-                      {activeItems.map((item) => (
-                        <ActionItemCard
-                          key={item.id}
-                          item={item}
-                          onComplete={() => onCompleteAction(item)}
-                        />
-                      ))}
-
-                      {/* Completed items */}
-                      {completedItems.map((item) => (
-                        <ActionItemCard key={item.id} item={item} />
-                      ))}
-
-                      {/* Superseded items (collapsed) */}
-                      {supersededItems.map((item) => (
-                        <ActionItemCard key={item.id} item={item} />
-                      ))}
-
-                      {/* Expired items (hidden by default) */}
-                      {showExpired && expiredItems.map((item) => (
-                        <ActionItemCard key={item.id} item={item} />
-                      ))}
-
-                      {activeItems.length === 0 && completedItems.length === 0 && (
-                        <p className="text-sm text-gray-500">No active action items.</p>
-                      )}
-                    </>
-                  ) : (
-                    <>
-                      {/* Fallback: render from analysis JSONB (pre-migration) */}
-                      {a.action_items.map((item) => {
-                        const isCompleted = legacyCompletedIds.has(item.id);
-                        const completion = ticket.completions.find((c) => c.actionItemId === item.id);
-                        return (
-                          <div
-                            key={item.id}
-                            className={`flex items-start gap-3 p-3 rounded-lg ${isCompleted ? 'bg-emerald-950/30 border border-emerald-900' : 'bg-slate-800'}`}
-                          >
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 mb-1">
-                                <PriorityBadge priority={item.priority} />
-                                <WhoBadge who={item.who} />
-                              </div>
-                              <p className={`text-sm ${isCompleted ? 'line-through text-gray-500' : 'text-gray-200'}`}>{item.description}</p>
-                              {isCompleted && completion && (
-                                <p className="text-xs text-gray-500 mt-1">Completed by {completion.completedByName}</p>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
-                      {a.action_items.length === 0 && (
-                        <p className="text-sm text-gray-500">No action items extracted.</p>
-                      )}
-                    </>
-                  )}
-                </div>
-              </div>
-
-              {/* Customer Temperature */}
-              <div className="bg-slate-900 border border-slate-700 rounded-lg p-4">
-                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Customer Temperature</h3>
-                <div className="flex items-center gap-3">
-                  <TemperatureBadge temp={a.customer_temperature} />
-                  <EscalationRiskBadge score={ticket.escalationRiskScore} />
-                  {a.temperature_reason && (
-                    <span className="text-sm text-gray-300">{a.temperature_reason}</span>
-                  )}
-                </div>
-              </div>
-
-              {/* Active Alerts */}
-              {ticket.alerts && ticket.alerts.length > 0 && (
-                <div className="bg-slate-900 border border-slate-700 rounded-lg p-4">
-                  <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
-                    Alerts ({ticket.alerts.length})
-                  </h3>
-                  <div className="space-y-2">
-                    {ticket.alerts.map((alert) => (
-                      <div
-                        key={alert.id}
-                        className={`flex items-start justify-between p-3 rounded-lg ${
-                          alert.severity === 'critical' ? 'bg-red-950/30 border border-red-900' :
-                          alert.severity === 'warning' ? 'bg-orange-950/30 border border-orange-900' :
-                          'bg-blue-950/30 border border-blue-900'
-                        }`}
-                      >
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <AlertSeverityBadge severity={alert.severity} label={alert.title} />
-                            <span className="text-[10px] text-gray-500">
-                              <AnalyzedTimestamp dateStr={alert.createdAt} />
-                            </span>
-                          </div>
-                          <p className="text-sm text-gray-300">{alert.description}</p>
-                        </div>
-                        {!alert.acknowledgedBy && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onAcknowledgeAlert(alert.id);
-                            }}
-                            className="ml-2 text-[10px] text-gray-500 hover:text-gray-300 whitespace-nowrap"
-                            title="Dismiss this alert for yourself"
-                          >
-                            Dismiss
-                          </button>
-                        )}
-                        {alert.acknowledgedBy && (
-                          <span className="ml-2 text-[10px] text-gray-600 whitespace-nowrap">Dismissed</span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Context Snapshot */}
-              {a.context_snapshot && (
-                <div className="bg-slate-900 border border-slate-700 rounded-lg p-4">
-                  <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Context</h3>
-                  <p className="text-sm text-gray-300 whitespace-pre-wrap">{a.context_snapshot}</p>
-                </div>
-              )}
-
-              {/* Related Tickets */}
-              {a.related_tickets.length > 0 && (
-                <div className="bg-amber-950/30 border border-amber-800 rounded-lg p-4">
-                  <h3 className="text-xs font-semibold text-amber-400 uppercase tracking-wider mb-2">Related Tickets (Same Company)</h3>
-                  <div className="space-y-1">
-                    {a.related_tickets.map((rt) => (
-                      <div key={rt.ticketId} className="text-sm text-gray-300">
-                        <span className="font-mono text-amber-400">#{rt.ticketId}</span> — {rt.subject}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Ticket Timeline (Phase 7) */}
-              <TicketTimeline ticketId={ticket.ticketId} />
-
-              {/* Knowledge Used */}
-              {a.knowledge_used && a.knowledge_used !== 'none' && (
-                <div className="text-xs text-gray-500 italic">
-                  Knowledge: {a.knowledge_used}
-                </div>
-              )}
-            </div>
-
-            {/* Right: Metadata & Progress Notes */}
-            <div className="space-y-4">
-              {/* Ticket Metadata */}
-              <div className="bg-slate-900 border border-slate-700 rounded-lg p-4">
-                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Ticket Details</h3>
-                <div className="grid grid-cols-2 gap-y-2 gap-x-4 text-sm">
-                  <span className="text-gray-500">Subject</span>
-                  <span className="text-gray-200 truncate">{ticket.subject || 'N/A'}</span>
-                  <span className="text-gray-500">Rep</span>
-                  <span className="text-gray-200">{ticket.assignedRep || 'Unassigned'}</span>
-                  <span className="text-gray-500">Source</span>
-                  <span className="text-gray-200">{ticket.sourceType || 'N/A'}</span>
-                  <span className="text-gray-500">Priority</span>
-                  <span className="text-gray-200">{ticket.priority || 'N/A'}</span>
-                  <span className="text-gray-500">Software</span>
-                  <span className="text-gray-200">{ticket.software || 'N/A'}</span>
-                  <span className="text-gray-500">Ball In Court</span>
-                  <span className="text-gray-200">{ticket.ballInCourt || 'N/A'}</span>
-                  <span className="text-gray-500">Age</span>
-                  <span className="text-gray-200 font-mono">{ticket.ageDays}d</span>
-                  <span className="text-gray-500">Confidence</span>
-                  <span className="text-gray-200">{Math.round(a.confidence * 100)}%</span>
-                  {ticket.isCoDestiny && (
-                    <>
-                      <span className="text-gray-500">Status</span>
-                      <span className="text-amber-400 font-semibold">Co-Destiny (VIP)</span>
-                    </>
-                  )}
-                </div>
-              </div>
-
-              {/* External Links */}
-              <div className="flex gap-2">
-                <a
-                  href={getHubSpotTicketUrl(ticket.ticketId)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex-1 text-center px-3 py-2 text-xs bg-orange-600 text-white rounded hover:bg-orange-700"
-                >
-                  HubSpot
-                </a>
-                {ticket.linearTask && (
-                  <a
-                    href={ticket.linearTask.startsWith('http') ? ticket.linearTask : `https://linear.app/issue/${ticket.linearTask}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex-1 text-center px-3 py-2 text-xs bg-purple-600 text-white rounded hover:bg-purple-700"
-                  >
-                    Linear {a.linear_state && <LinearBadge state={a.linear_state} />}
-                  </a>
-                )}
-              </div>
-
-              {/* Progress Note Panel */}
-              <div className="bg-slate-900 border border-slate-700 rounded-lg p-4">
-                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Progress Note</h3>
-
-                {isWritingNote ? (
-                  <div className="space-y-3">
-                    <div>
-                      <label className="text-xs text-gray-400 block mb-1.5">
-                        What&apos;s the current status of this ticket and what, if anything, did you do on it this shift?
-                      </label>
-                      <textarea
-                        value={noteText}
-                        onChange={(e) => onNoteTextChange(e.target.value)}
-                        placeholder="Describe what you did or the current status..."
-                        rows={4}
-                        className="w-full bg-slate-800 text-sm text-white rounded px-3 py-2 border border-slate-600 resize-none focus:border-indigo-500 focus:outline-none"
-                      />
-                      {noteText.trim().length > 0 && noteText.trim().length < 10 && (
-                        <p className="text-xs text-red-400 mt-1">Minimum 10 characters</p>
-                      )}
-                    </div>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); onSubmitNote(); }}
-                      disabled={submittingNote || noteText.trim().length < 10}
-                      className="w-full px-3 py-1.5 text-xs bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50"
-                    >
-                      {submittingNote ? 'Saving...' : 'Save Note'}
-                    </button>
-                  </div>
-                ) : ticket.currentUserHasNote ? (
-                  <div>
-                    <div className="flex items-center gap-2 text-emerald-400 text-sm mb-2">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
-                      Note submitted
-                    </div>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); onStartNote(ticket.ticketId); }}
-                      className="text-xs text-indigo-400 hover:text-indigo-300"
-                    >
-                      Edit note
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); onStartNote(ticket.ticketId); }}
-                    className="w-full px-3 py-2 text-xs bg-indigo-600 text-white rounded hover:bg-indigo-700"
-                  >
-                    Write Progress Note
-                  </button>
-                )}
-              </div>
-
-              {/* Today's Progress Notes */}
-              {ticket.progressNotes.length > 0 && (
-                <div className="bg-slate-900 border border-slate-700 rounded-lg p-4">
-                  <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
-                    Today&apos;s Notes ({ticket.progressNotes.length})
-                  </h3>
-                  <div className="space-y-3">
-                    {ticket.progressNotes.map((note: ProgressNoteInfo) => (
-                      <div key={note.id} className="text-xs">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="font-medium text-gray-300">
-                            {note.userId === userId ? 'You' : note.userName}
-                          </span>
-                          <span className="text-gray-600">
-                            {new Date(note.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                        </div>
-                        <p className="text-gray-400 pl-2 border-l border-slate-700 whitespace-pre-wrap">{note.noteText}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Response Clocks Summary */}
-              <div className="bg-slate-900 border border-slate-700 rounded-lg p-4">
-                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Response Clocks</h3>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">Customer waiting</span>
-                    <ResponseClock hours={customerWaitHours} />
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">Last outbound</span>
-                    <ResponseClock hours={a.hours_since_last_outbound} />
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">Last activity</span>
-                    <ResponseClock hours={a.hours_since_last_activity} />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Expanded but not analyzed */}
-      {isExpanded && !a && (
-        <div className="pb-6 px-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-lg p-6 text-center text-gray-400">
-            <p>This ticket has not been analyzed yet.</p>
-            {canAnalyze && (
-              <button
-                onClick={(e) => { e.stopPropagation(); onAnalyze(); }}
-                disabled={analyzing}
-                className="mt-3 px-4 py-2 text-sm bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50"
-              >
-                {analyzing ? 'Analyzing...' : 'Analyze Now'}
-              </button>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
