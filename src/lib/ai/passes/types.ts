@@ -105,6 +105,39 @@ export interface AllPassResults {
   responseDraft: ResponseDraftPassResult | null;
 }
 
+// --- Quality review types ---
+
+export interface QualityIssue {
+  dimension: string;
+  severity: 'critical' | 'warning' | 'suggestion';
+  description: string;
+  affected_field: string;
+  suggested_fix: string;
+}
+
+export interface QualityReviewResult {
+  overall_score: number;
+  dimension_scores: {
+    specificity: number;
+    accuracy: number;
+    completeness: number;
+    temperature_calibration: number;
+    priority_correctness: number;
+    actionability: number;
+  };
+  issues: QualityIssue[];
+  pass_approved: boolean;
+}
+
+export interface RefinementResult {
+  situation_summary?: string;
+  action_items?: ActionItem[];
+  customer_temperature?: string;
+  temperature_reason?: string;
+  response_draft?: string;
+  response_guidance?: string;
+}
+
 // --- Pass type enum ---
 
 export type PassType =
@@ -114,7 +147,9 @@ export type PassType =
   | 'timing'
   | 'verification'
   | 'cross_ticket'
-  | 'response_draft';
+  | 'response_draft'
+  | 'quality_review'
+  | 'refinement';
 
 export const ALL_PASSES: PassType[] = [
   'situation',

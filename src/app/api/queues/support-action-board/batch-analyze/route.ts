@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/client';
 import { checkApiAuth } from '@/lib/auth/api';
 import { RESOURCES, hasPermission } from '@/lib/auth';
-import { analyzeActionBoardTicket } from '../analyze/analyze-core';
+import { runAnalysisPipeline } from '@/lib/ai/passes/orchestrator';
 
 const MAX_BATCH_SIZE = 100;
 const DELAY_BETWEEN_CALLS_MS = 200;
@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
           const ticketSubject = subjectMap.get(ticketId) || 'Unknown';
 
           try {
-            const result = await analyzeActionBoardTicket(ticketId);
+            const result = await runAnalysisPipeline(ticketId, { skipQualityReview: true });
 
             const event = {
               type: 'progress',
@@ -62,14 +62,12 @@ export async function POST(request: NextRequest) {
               ticketSubject,
               index: i + 1,
               total: ticketIds.length,
-              status: result.success ? 'success' : 'error',
-              analysis: result.success ? result.analysis : undefined,
-              error: result.success ? undefined : result.error,
+              status: 'success' as const,
+              analysis: result.analysis,
+              error: undefined,
             };
             controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
-
-            if (result.success) successful++;
-            else failed++;
+            successful++;
           } catch (error) {
             const event = {
               type: 'progress',

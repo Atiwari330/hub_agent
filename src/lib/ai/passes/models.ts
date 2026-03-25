@@ -19,6 +19,8 @@ const PASS_MODEL_ENV_MAP: Record<PassType, string> = {
   verification: 'PASS_MODEL_VERIFICATION',
   cross_ticket: 'PASS_MODEL_CROSS_TICKET',
   response_draft: 'PASS_MODEL_RESPONSE_DRAFT',
+  quality_review: 'PASS_MODEL_QUALITY_REVIEW',
+  refinement: 'PASS_MODEL_REFINEMENT',
 };
 
 function getDeepSeekModel() {
@@ -37,9 +39,10 @@ export function getModelForPass(passType: PassType) {
   const envKey = PASS_MODEL_ENV_MAP[passType];
   const perPassOverride = envKey ? process.env[envKey] : undefined;
 
-  // Action items and response draft default to Sonnet (need stronger reasoning + tool use).
-  // Everything else defaults to DeepSeek (cheaper, fast enough for simpler tasks).
-  const needsStrongModel = passType === 'action_items' || passType === 'response_draft';
+  // Action items, response draft, quality review, and refinement default to Sonnet
+  // (need stronger reasoning + tool use). Everything else defaults to DeepSeek.
+  const needsStrongModel = passType === 'action_items' || passType === 'response_draft'
+    || passType === 'quality_review' || passType === 'refinement';
   const defaultModel = needsStrongModel ? 'sonnet' : 'deepseek';
   const modelChoice = perPassOverride || process.env.PASS_MODEL_DEFAULT || defaultModel;
 

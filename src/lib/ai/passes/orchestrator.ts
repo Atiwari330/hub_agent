@@ -7,11 +7,15 @@ import { runTimingPass } from './timing-pass';
 import { runVerificationPass } from './verification-pass';
 import { runCrossTicketPass } from './cross-ticket-pass';
 import { runResponseDraftPass } from './response-draft-pass';
+import { runQualityReviewPass } from './quality-review-pass';
+import { runRefinementPass } from './refinement-pass';
 import type {
   PassType,
   ALL_PASSES as ALL_PASSES_TYPE,
   AllPassResults,
   TicketContext,
+  QualityReviewResult,
+  RefinementResult,
 } from './types';
 import type { TicketActionBoardAnalysis } from '@/app/api/queues/support-action-board/analyze/analyze-core';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -24,12 +28,14 @@ const ALL_PASSES: PassType[] = [
 export interface AnalysisOptions {
   passes?: PassType[];
   readerClient?: SupabaseClient;
+  /** Skip quality review (e.g., during batch re-analysis) */
+  skipQualityReview?: boolean;
 }
 
 export async function runAnalysisPipeline(
   ticketId: string,
   options?: AnalysisOptions
-): Promise<{ analysis: TicketActionBoardAnalysis; usage?: { inputTokens: number; outputTokens: number; totalTokens: number } }> {
+): Promise<{ analysis: TicketActionBoardAnalysis; usage?: { inputTokens: number; outputTokens: number; totalTokens: number }; qualityReview?: QualityReviewResult }> {
   const serviceClient = createServiceClient();
 
   // 1. Gather context (shared across all passes)
@@ -64,8 +70,8 @@ export async function runAnalysisPipeline(
       })
     : null;
 
-  // 4. Compose final analysis
-  const allResults: AllPassResults = {
+  // 4. Compose pass results
+  let allResults: AllPassResults = {
     situation: situationResult,
     actionItems: actionResult,
     temperature: temperatureResult,
@@ -75,9 +81,67 @@ export async function runAnalysisPipeline(
     responseDraft: responseResult,
   };
 
+  // 5. Quality review (if enabled and running full pipeline)
+  const qualityEnabled = process.env.QUALITY_REVIEW_ENABLED !== 'false';
+  const isFullPipeline = !options?.passes; // selective passes skip quality review
+  const skipReview = options?.skipQualityReview === true;
+  let qualityResult: QualityReviewResult | null = null;
+
+  if (qualityEnabled && isFullPipeline && !skipReview) {
+    try {
+      qualityResult = await runQualityReviewPass(context, allResults);
+      console.log(`[quality-review] ticket=${ticketId} score=${qualityResult.overall_score.toFixed(2)} approved=${qualityResult.pass_approved} issues=${qualityResult.issues.length}`);
+
+      // If quality fails, attempt refinement
+      if (!qualityResult.pass_approved) {
+        const criticalAndWarningIssues = qualityResult.issues.filter(
+          i => i.severity === 'critical' || i.severity === 'warning'
+        );
+        if (criticalAndWarningIssues.length > 0) {
+          const maxAttempts = parseInt(process.env.QUALITY_MAX_REFINEMENT_ATTEMPTS || '1', 10);
+          for (let attempt = 0; attempt < maxAttempts; attempt++) {
+            console.log(`[refinement] ticket=${ticketId} attempt=${attempt + 1}/${maxAttempts}`);
+            const refinedResults = await runRefinementPass(context, allResults, criticalAndWarningIssues);
+            allResults = applyRefinements(allResults, refinedResults);
+
+            // Re-run quality review on the refined output (only if more attempts remain)
+            if (attempt < maxAttempts - 1) {
+              const reReview = await runQualityReviewPass(context, allResults);
+              console.log(`[quality-review] ticket=${ticketId} re-review score=${reReview.overall_score.toFixed(2)} approved=${reReview.pass_approved}`);
+              if (reReview.pass_approved) {
+                qualityResult = reReview;
+                break;
+              }
+              qualityResult = reReview;
+            }
+          }
+        }
+      }
+
+      // Store quality review in DB
+      await serviceClient.from('quality_reviews').insert({
+        hubspot_ticket_id: ticketId,
+        overall_score: qualityResult.overall_score,
+        dimension_scores: qualityResult.dimension_scores,
+        issues: qualityResult.issues,
+        pass_approved: qualityResult.pass_approved,
+        refinement_triggered: !qualityResult.pass_approved,
+        model_used: process.env.PASS_MODEL_QUALITY_REVIEW || process.env.PASS_MODEL_DEFAULT || 'sonnet',
+      });
+    } catch (err) {
+      console.error('[quality-review] Error running quality review, publishing without review:', err);
+    }
+  }
+
+  // 6. Compose final analysis
   const analysis = composeFinalAnalysis(ticketId, context, allResults);
 
-  // 5. Upsert to DB
+  // Use reviewer's score as confidence if available
+  if (qualityResult) {
+    analysis.confidence = qualityResult.overall_score;
+  }
+
+  // 7. Upsert to DB
   const { error: upsertError } = await serviceClient
     .from('ticket_action_board_analyses')
     .upsert(analysis, { onConflict: 'hubspot_ticket_id' });
@@ -86,7 +150,7 @@ export async function runAnalysisPipeline(
     console.error('Error upserting action board analysis:', upsertError);
   }
 
-  // 6. Apply verification updates
+  // 8. Apply verification updates
   if (verificationResult && verificationResult.verifications.length > 0) {
     for (const v of verificationResult.verifications) {
       if (!v.completionId) continue;
@@ -97,18 +161,51 @@ export async function runAnalysisPipeline(
     }
   }
 
-  // 7. Update pass_versions
+  // 9. Update pass_versions
   const passVersions: Record<string, string> = {};
   const now = new Date().toISOString();
   for (const pass of passesToRun) {
     passVersions[pass] = now;
+  }
+  if (qualityResult) {
+    passVersions['quality_review'] = now;
   }
   await serviceClient
     .from('ticket_action_board_analyses')
     .update({ pass_versions: passVersions })
     .eq('hubspot_ticket_id', ticketId);
 
-  return { analysis };
+  return { analysis, qualityReview: qualityResult ?? undefined };
+}
+
+function applyRefinements(original: AllPassResults, refined: RefinementResult): AllPassResults {
+  const merged = { ...original };
+
+  if (refined.situation_summary && merged.situation) {
+    merged.situation = { ...merged.situation, situation_summary: refined.situation_summary };
+  }
+
+  if (refined.action_items && merged.actionItems) {
+    merged.actionItems = { ...merged.actionItems, action_items: refined.action_items };
+  }
+
+  if (refined.customer_temperature && merged.temperature) {
+    merged.temperature = {
+      ...merged.temperature,
+      customer_temperature: refined.customer_temperature,
+      ...(refined.temperature_reason ? { temperature_reason: refined.temperature_reason } : {}),
+    };
+  }
+
+  if ((refined.response_draft || refined.response_guidance) && merged.responseDraft) {
+    merged.responseDraft = {
+      ...merged.responseDraft,
+      ...(refined.response_draft ? { response_draft: refined.response_draft } : {}),
+      ...(refined.response_guidance ? { response_guidance: refined.response_guidance } : {}),
+    };
+  }
+
+  return merged;
 }
 
 function composeFinalAnalysis(
@@ -149,6 +246,9 @@ export async function runSelectivePasses(
   passes: PassType[],
   readerClient?: SupabaseClient
 ): Promise<TicketActionBoardAnalysis> {
-  const result = await runAnalysisPipeline(ticketId, { passes, readerClient });
+  const result = await runAnalysisPipeline(ticketId, { passes, readerClient, skipQualityReview: true });
   return result.analysis;
 }
+
+// Re-export for test scripts
+export type { QualityReviewResult };
