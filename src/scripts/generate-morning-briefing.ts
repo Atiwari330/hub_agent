@@ -171,7 +171,7 @@ async function main() {
       sectionType: 'deal_scrub' as SectionType,
       ownerEmail: email,
       run: async () => {
-        const result = await runDealScrub(email, { concurrency: 2 });
+        const result = await runDealScrub(email, { concurrency: 3 });
         return {
           results: result.results,
           markdown: result.markdown,

@@ -20,7 +20,7 @@ env:
 jobs:
   generate-briefing:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 90
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -36,6 +36,6 @@ jobs:
 
       - name: Generate morning briefing
         run: npx tsx src/scripts/generate-morning-briefing.ts
-        timeout-minutes: 40
+        timeout-minutes: 85
         env:
           GITHUB_RUN_ID: ${{ github.run_id }}
