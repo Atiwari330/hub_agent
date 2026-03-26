@@ -104,7 +104,7 @@ function getBusinessDayEnd(createDate: string, numBusinessDays: number): Date {
 
 type ProspectEngagement = 'ENGAGED_PASSIVE' | 'SOME_INTEREST' | 'LOW_INTEREST' | 'NO_DATA';
 
-interface EmailEngagementMetrics {
+export interface EmailEngagementMetrics {
   totalOutboundEmails: number;
   emailsOpened: number; // unique outbound emails with openCount > 0
   totalOpenCount: number; // sum of all openCount
@@ -116,7 +116,7 @@ interface EmailEngagementMetrics {
   nurtureWindowWeeks: number; // 3, 3.5, or 4
 }
 
-interface CadenceMetrics {
+export interface CadenceMetrics {
   // Speed to lead
   firstCallTimestamp: string | null;
   speedToLeadMinutes: number | null;
@@ -153,7 +153,7 @@ interface CadenceMetrics {
   emailEngagement: EmailEngagementMetrics;
 }
 
-interface CadenceContext {
+export interface CadenceContext {
   deal: HubSpotDeal;
   dealId: string;
   dealName: string;
@@ -172,7 +172,7 @@ interface CadenceContext {
   metrics: CadenceMetrics;
 }
 
-interface CadenceResult {
+export interface CadenceResult {
   dealId: string;
   dealName: string;
   amount: number | null;
@@ -326,7 +326,7 @@ function detectChannels(
   return Array.from(channels);
 }
 
-function computeCadenceMetrics(
+export function computeCadenceMetrics(
   createDate: string,
   calls: HubSpotCall[],
   emails: HubSpotEmail[],
@@ -788,7 +788,7 @@ function parseVerdictResult(text: string) {
 // Per-deal analysis
 // ---------------------------------------------------------------------------
 
-async function analyzeCadence(
+export async function analyzeCadence(
   ctx: CadenceContext
 ): Promise<CadenceResult> {
   const model = getCadenceModel();
@@ -848,7 +848,7 @@ async function analyzeCadence(
 // Concurrency helper
 // ---------------------------------------------------------------------------
 
-async function processWithConcurrency<T, R>(
+export async function processWithConcurrency<T, R>(
   items: T[],
   concurrency: number,
   fn: (item: T, index: number) => Promise<R>
@@ -873,7 +873,7 @@ async function processWithConcurrency<T, R>(
 // Report formatting
 // ---------------------------------------------------------------------------
 
-const VERDICT_DISPLAY: Record<string, string> = {
+export const VERDICT_DISPLAY: Record<string, string> = {
   NON_COMPLIANT: 'Non-Compliant',
   NEEDS_IMPROVEMENT: 'Needs Improvement',
   COMPLIANT: 'Compliant',
@@ -881,9 +881,9 @@ const VERDICT_DISPLAY: Record<string, string> = {
   UNKNOWN: 'Unknown',
 };
 
-const VERDICT_ORDER = ['NON_COMPLIANT', 'NEEDS_IMPROVEMENT', 'COMPLIANT', 'EXEMPLARY', 'UNKNOWN'];
+export const VERDICT_ORDER = ['NON_COMPLIANT', 'NEEDS_IMPROVEMENT', 'COMPLIANT', 'EXEMPLARY', 'UNKNOWN'];
 
-function formatReport(
+export function formatReport(
   results: CadenceResult[],
   filters: string,
   verbose: boolean

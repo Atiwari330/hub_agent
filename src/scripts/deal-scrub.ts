@@ -73,7 +73,7 @@ interface DealContext {
   tasks: HubSpotTask[];
 }
 
-interface ScrubResult {
+export interface ScrubResult {
   dealId: string;
   dealName: string;
   amount: number | null;
@@ -455,7 +455,7 @@ function parseRecommendationResult(text: string) {
 // Per-deal scrub
 // ---------------------------------------------------------------------------
 
-async function scrubDeal(
+export async function scrubDeal(
   deal: HubSpotDeal,
   stageNameMap: Map<string, string>,
   ownerMap: Map<string, string>,
@@ -523,7 +523,7 @@ async function scrubDeal(
 // Concurrency helper
 // ---------------------------------------------------------------------------
 
-async function processWithConcurrency<T, R>(
+export async function processWithConcurrency<T, R>(
   items: T[],
   concurrency: number,
   fn: (item: T, index: number) => Promise<R>
@@ -548,7 +548,7 @@ async function processWithConcurrency<T, R>(
 // Report formatting
 // ---------------------------------------------------------------------------
 
-const RECOMMENDATION_DISPLAY: Record<string, string> = {
+export const RECOMMENDATION_DISPLAY: Record<string, string> = {
   CLOSE_OUT: 'Close Out',
   MOVE_TO_NURTURE: 'Move to Nurture',
   CHANGE_APPROACH: 'Change Approach',
@@ -557,7 +557,7 @@ const RECOMMENDATION_DISPLAY: Record<string, string> = {
   UNKNOWN: 'Unknown',
 };
 
-const RECOMMENDATION_ORDER = [
+export const RECOMMENDATION_ORDER = [
   'CLOSE_OUT',
   'MOVE_TO_NURTURE',
   'CHANGE_APPROACH',
@@ -566,7 +566,7 @@ const RECOMMENDATION_ORDER = [
   'UNKNOWN',
 ];
 
-function formatReport(
+export function formatReport(
   results: ScrubResult[],
   ownerName: string,
   filters: string,

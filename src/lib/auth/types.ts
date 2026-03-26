@@ -45,6 +45,7 @@ export const RESOURCES = {
   QUEUE_ENRICHMENT_VIEW: 'queue:enrichment-view',
   ANALYZE_TICKET: 'analyze:ticket',
   STRATEGIC_DIRECTIVES: 'strategic:directives',
+  MORNING_BRIEFING: 'morning_briefing',
 } as const;
 
 export type Resource = (typeof RESOURCES)[keyof typeof RESOURCES];
@@ -131,6 +132,9 @@ export function getResourceFromPath(pathname: string): Resource | null {
   if (pathname.includes('/dashboard/my-enrichment')) return RESOURCES.QUEUE_ENRICHMENT_VIEW;
   if (pathname.includes('/dashboard/my-compliance')) return RESOURCES.QUEUE_ENRICHMENT_VIEW;
 
+  // Morning Briefing
+  if (pathname.includes('/dashboard/briefing')) return RESOURCES.MORNING_BRIEFING;
+
   // Hot Tracker
   if (pathname.includes('/dashboard/hot-tracker')) return RESOURCES.HOT_TRACKER;
 
@@ -202,6 +206,7 @@ export function getResourceFromPath(pathname: string): Resource | null {
     return RESOURCES.QUEUE_CS_HYGIENE;
   if (pathname.includes('/api/strategic-directives'))
     return RESOURCES.STRATEGIC_DIRECTIVES;
+  if (pathname.includes('/api/briefing')) return RESOURCES.MORNING_BRIEFING;
   if (pathname.includes('/api/hot-tracker')) return RESOURCES.HOT_TRACKER;
   if (pathname.includes('/api/demo-tracker')) return RESOURCES.DEMO_TRACKER;
   if (pathname.match(/\/api\/ae\/[^/]+/)) return RESOURCES.AE_DETAIL;

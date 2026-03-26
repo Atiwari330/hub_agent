@@ -182,7 +182,7 @@ function parseNextStepResult(text: string) {
 // Per-ticket triage
 // ---------------------------------------------------------------------------
 
-interface TriageResult {
+export interface TriageResult {
   ticketId: string;
   subject: string;
   company: string;
@@ -200,7 +200,7 @@ interface TriageResult {
   error?: string;
 }
 
-async function triageTicket(ticketId: string): Promise<TriageResult> {
+export async function triageTicket(ticketId: string): Promise<TriageResult> {
   const model = getTriageModel();
   const ctx = await gatherTicketContext(ticketId);
 
@@ -250,7 +250,7 @@ async function triageTicket(ticketId: string): Promise<TriageResult> {
 // Concurrency helper
 // ---------------------------------------------------------------------------
 
-async function processWithConcurrency<T, R>(
+export async function processWithConcurrency<T, R>(
   items: T[],
   concurrency: number,
   fn: (item: T, index: number) => Promise<R>
@@ -275,7 +275,7 @@ async function processWithConcurrency<T, R>(
 // Report formatting
 // ---------------------------------------------------------------------------
 
-const STATUS_DISPLAY: Record<string, string> = {
+export const STATUS_DISPLAY: Record<string, string> = {
   AGENT_ACTION_NEEDED: 'Agent Action Needed',
   WAITING_ON_CUSTOMER: 'Waiting on Customer',
   WAITING_ON_ENGINEERING: 'Waiting on Engineering',
@@ -286,7 +286,7 @@ const STATUS_DISPLAY: Record<string, string> = {
   UNKNOWN: 'Unknown',
 };
 
-const STATUS_ORDER = [
+export const STATUS_ORDER = [
   'AGENT_ACTION_NEEDED',
   'ENGINEERING_FOLLOWUP_NEEDED',
   'CLARIFICATION_NEEDED_FROM_LINEAR',
@@ -297,9 +297,9 @@ const STATUS_ORDER = [
   'UNKNOWN',
 ];
 
-const URGENCY_ORDER = ['IMMEDIATE', 'TODAY', 'THIS_WEEK', 'LOW'];
+export const URGENCY_ORDER = ['IMMEDIATE', 'TODAY', 'THIS_WEEK', 'LOW'];
 
-function formatReport(results: TriageResult[], verbose: boolean): string {
+export function formatReport(results: TriageResult[], verbose: boolean): string {
   const today = new Date().toISOString().split('T')[0];
   const successes = results.filter((r) => !r.error);
   const failures = results.filter((r) => r.error);
