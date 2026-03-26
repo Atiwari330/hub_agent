@@ -218,18 +218,16 @@ async function main() {
     sectionIds.push(section.id);
   }
 
-  // Step 5: Run sections with controlled concurrency
-  // Run ticket triage and both deal scrubs in parallel (3 concurrent),
-  // then PPL cadence after (it also hits HubSpot deal engagements heavily)
-  console.log('\n--- Phase 1: Ticket Triage + Deal Scrubs ---\n');
-
-  const phase1 = sectionConfigs.slice(0, 3).map((cfg, i) =>
-    runSection(supabase, sectionIds[i], cfg)
-  );
-  await Promise.all(phase1);
-
-  console.log('\n--- Phase 2: PPL Cadence ---\n');
-  await runSection(supabase, sectionIds[3], sectionConfigs[3]);
+  // Step 5: Run sections sequentially to avoid HubSpot 429 rate limiting
+  // Each section fetches engagements for many deals — running in parallel
+  // overwhelms HubSpot's 100 req/10s limit
+  for (let i = 0; i < sectionConfigs.length; i++) {
+    const label = sectionConfigs[i].ownerEmail
+      ? `${sectionConfigs[i].sectionType} (${sectionConfigs[i].ownerEmail})`
+      : sectionConfigs[i].sectionType;
+    console.log(`\n--- Section ${i + 1}/${sectionConfigs.length}: ${label} ---\n`);
+    await runSection(supabase, sectionIds[i], sectionConfigs[i]);
+  }
 
   // Step 6: Determine final status
   const { data: sections } = await supabase

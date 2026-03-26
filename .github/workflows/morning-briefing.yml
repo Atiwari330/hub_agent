@@ -15,11 +15,12 @@ env:
   AI_GATEWAY_API_KEY: ${{ secrets.AI_GATEWAY_API_KEY }}
   CRON_SECRET: ${{ secrets.CRON_SECRET }}
   NEXT_PUBLIC_APP_URL: ${{ secrets.APP_URL }}
+  LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
 
 jobs:
   generate-briefing:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -35,6 +36,6 @@ jobs:
 
       - name: Generate morning briefing
         run: npx tsx src/scripts/generate-morning-briefing.ts
-        timeout-minutes: 25
+        timeout-minutes: 40
         env:
           GITHUB_RUN_ID: ${{ github.run_id }}
