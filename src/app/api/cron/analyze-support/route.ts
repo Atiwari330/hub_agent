@@ -69,19 +69,46 @@ export async function GET(request: Request) {
     let trainerTicketIds: string[] = [];
     let managerTicketIds: string[] = [];
     let actionBoardTicketIds: string[] = [];
+    let skippedUnchanged = 0;
 
     if (isChanged) {
       // Changed mode: safety net for webhooks — only re-analyze action board tickets
-      // whose analysis is stale (analyzed_at older than 1 hour, or missing pass_versions)
-      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+      // whose analysis is stale AND whose underlying ticket data has changed since last analysis.
+      // This avoids wasting LLM calls on tickets with no new activity.
+      const fourHoursAgo = new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString();
 
+      // Fetch analyses with their ticket's updated_at to compare timestamps
       const { data: staleAnalyses } = await supabase
         .from('ticket_action_board_analyses')
         .select('hubspot_ticket_id, analyzed_at')
         .in('hubspot_ticket_id', allTicketIds)
-        .lt('analyzed_at', oneHourAgo);
+        .lt('analyzed_at', fourHoursAgo);
 
-      const staleIds = new Set((staleAnalyses || []).map((a) => a.hubspot_ticket_id));
+      // Build a map of ticket_id → last analyzed_at
+      const analysisMap = new Map(
+        (staleAnalyses || []).map((a) => [a.hubspot_ticket_id, a.analyzed_at])
+      );
+
+      // Fetch updated_at for stale tickets to check if anything actually changed
+      const staleTicketIds = (staleAnalyses || []).map((a) => a.hubspot_ticket_id);
+      let changedStaleIds: string[] = [];
+
+      if (staleTicketIds.length > 0) {
+        const { data: ticketTimestamps } = await supabase
+          .from('support_tickets')
+          .select('hubspot_ticket_id, updated_at')
+          .in('hubspot_ticket_id', staleTicketIds);
+
+        // Only keep tickets where the ticket was updated after its last analysis
+        for (const ticket of ticketTimestamps || []) {
+          const analyzedAt = analysisMap.get(ticket.hubspot_ticket_id);
+          if (analyzedAt && ticket.updated_at && ticket.updated_at > analyzedAt) {
+            changedStaleIds.push(ticket.hubspot_ticket_id);
+          } else {
+            skippedUnchanged++;
+          }
+        }
+      }
 
       // Also include tickets with no analysis at all
       const { data: allAnalyses } = await supabase
@@ -92,7 +119,8 @@ export async function GET(request: Request) {
       const analyzedSet = new Set((allAnalyses || []).map((a) => a.hubspot_ticket_id));
       const unanalyzed = allTicketIds.filter((id) => !analyzedSet.has(id));
 
-      actionBoardTicketIds = [...unanalyzed, ...allTicketIds.filter((id) => staleIds.has(id))];
+      actionBoardTicketIds = [...unanalyzed, ...changedStaleIds];
+      console.log(`[analyze-support] changed mode: ${unanalyzed.length} unanalyzed, ${changedStaleIds.length} changed-stale, ${skippedUnchanged} skipped-unchanged`);
       // Trainer and manager queues not affected by webhook changes — skip them in changed mode
       trainerTicketIds = [];
       managerTicketIds = [];
@@ -189,13 +217,21 @@ export async function GET(request: Request) {
     await supabase.from('workflow_runs').update({
       status: 'completed',
       completed_at: new Date().toISOString(),
-      result: { mode, duration_seconds: duration, results },
+      result: {
+        mode,
+        duration_seconds: duration,
+        open_tickets: allTicketIds.length,
+        skipped_unchanged: skippedUnchanged,
+        results,
+      },
     }).eq('id', workflowId);
 
     return NextResponse.json({
       success: true,
       mode,
       duration_seconds: duration,
+      open_tickets: allTicketIds.length,
+      skipped_unchanged: skippedUnchanged,
       results,
     });
   } catch (error) {
