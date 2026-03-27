@@ -424,6 +424,15 @@ function HowItWorks({ onClose }: { onClose: () => void }) {
         by AI to assess both the numbers and the quality of outreach.
       </p>
 
+      <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+        <h3 className="text-sm font-semibold text-gray-800 mb-1.5">Which deals appear here?</h3>
+        <p className="text-sm text-gray-600">
+          Deals that match <strong>all</strong> of the following: pipeline is <strong>Sales Pipeline</strong>,
+          lead source is <strong>Paid Lead</strong>, deal stage is <strong>open</strong> (not closed-won or closed-lost),
+          and created within the <strong>last {MAX_AGE_DAYS} days</strong>.
+        </p>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
         <div>
           <h3 className="font-semibold text-gray-800 mb-2">The 5 Compliance Bars</h3>
