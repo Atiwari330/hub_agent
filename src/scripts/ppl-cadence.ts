@@ -151,6 +151,9 @@ export interface CadenceMetrics {
 
   // Email engagement
   emailEngagement: EmailEngagementMetrics;
+
+  // Touch timestamps for sparkline visualization
+  touchTimestamps: Array<{ date: string; type: 'call' | 'email' }>;
 }
 
 export interface CadenceContext {
@@ -420,6 +423,19 @@ export function computeCadenceMetrics(
   // Email engagement
   const emailEngagement = computeEmailEngagement(emails);
 
+  // Collect touch timestamps for sparkline visualization
+  const touchTimestamps: Array<{ date: string; type: 'call' | 'email' }> = [];
+  for (const c of calls) {
+    const ts = c.properties.hs_timestamp;
+    if (ts) touchTimestamps.push({ date: ts, type: 'call' });
+  }
+  for (const e of emails) {
+    if (e.timestamp && isOutboundEmail(e)) {
+      touchTimestamps.push({ date: e.timestamp, type: 'email' });
+    }
+  }
+  touchTimestamps.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
   return {
     firstCallTimestamp,
     speedToLeadMinutes,
@@ -440,6 +456,7 @@ export function computeCadenceMetrics(
     createdAfter5pmEST: isAfter5pmEST(createDate),
     createdDayOfWeek: getESTDayName(createDate),
     emailEngagement,
+    touchTimestamps,
   };
 }
 
@@ -1198,7 +1215,7 @@ async function main() {
         if (props.pipeline !== SALES_PIPELINE_ID) return false;
         if (!ALL_OPEN_STAGE_IDS.includes(props.dealstage || '')) return false;
         // PPL filter: lead_source contains 'Paid Lead'
-        const leadSource = props.lead_source || props['lead_source__sync_'] || '';
+        const leadSource = props.lead_source || (props as Record<string, string | undefined>)['lead_source__sync_'] || '';
         if (leadSource !== 'Paid Lead') return false;
         return true;
       });
@@ -1297,7 +1314,7 @@ async function main() {
           closeDate: props.closedate || null,
           createDate,
           dealAgeDays,
-          leadSource: props.lead_source || props['lead_source__sync_'] || 'Paid Lead',
+          leadSource: props.lead_source || (props as Record<string, string | undefined>)['lead_source__sync_'] || 'Paid Lead',
           calls,
           emails,
           meetings,
@@ -1374,8 +1391,74 @@ async function main() {
   fs.writeFileSync(outputFile, report, 'utf-8');
   console.log(`Report written to ${outputFile}\n`);
 
+  // Persist to Supabase for dashboard
+  await persistResultsToSupabase(results, allDeals);
+
   // Print to stdout
   console.log(report);
+}
+
+async function persistResultsToSupabase(
+  results: CadenceResult[],
+  allDeals: { deal: HubSpotDeal; ownerName: string }[]
+): Promise<void> {
+  const successes = results.filter((r) => !r.error);
+  if (successes.length === 0) return;
+
+  try {
+    const { createServiceClient } = await import('../lib/supabase/client');
+    const supabase = createServiceClient();
+    const now = new Date().toISOString();
+
+    // Build dealId → ownerId map
+    const ownerIdMap = new Map<string, string>();
+    for (const { deal } of allDeals) {
+      if (deal.properties.hubspot_owner_id) {
+        ownerIdMap.set(deal.id, deal.properties.hubspot_owner_id);
+      }
+    }
+
+    const rows = successes.map((r) => ({
+      deal_id: r.dealId,
+      deal_name: r.dealName,
+      amount: r.amount,
+      stage_name: r.stageName,
+      owner_id: ownerIdMap.get(r.dealId) || null,
+      owner_name: r.ownerName,
+      close_date: r.closeDate,
+      create_date: r.createDate,
+      deal_age_days: r.dealAgeDays,
+      metrics: r.metrics,
+      three_compliance: r.threeCompliance,
+      three_rationale: r.threeRationale,
+      two_compliance: r.twoCompliance,
+      two_rationale: r.twoRationale,
+      one_compliance: r.oneCompliance,
+      one_rationale: r.oneRationale,
+      speed_rating: r.speedRating,
+      speed_rationale: r.speedRationale,
+      channel_diversity_rating: r.channelDiversityRating,
+      prospect_engagement: r.prospectEngagement,
+      nurture_window: r.nurtureWindow,
+      engagement_insight: r.engagementInsight,
+      verdict: r.verdict,
+      coaching: r.coaching,
+      risk_flag: r.riskFlag,
+      engagement_risk: r.engagementRisk,
+      executive_summary: r.executiveSummary,
+      timeline: r.timeline,
+      analyzed_at: now,
+    }));
+
+    const { error } = await supabase.from('ppl_cadence_results').insert(rows);
+    if (error) {
+      console.warn(`Failed to persist to Supabase: ${error.message}`);
+    } else {
+      console.log(`Persisted ${rows.length} results to ppl_cadence_results`);
+    }
+  } catch (err) {
+    console.warn(`Error persisting to Supabase: ${err instanceof Error ? err.message : err}`);
+  }
 }
 
 // Only run CLI when executed directly (not when imported)

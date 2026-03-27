@@ -91,7 +91,7 @@ export async function GET(request: Request) {
 
       // Fetch updated_at for stale tickets to check if anything actually changed
       const staleTicketIds = (staleAnalyses || []).map((a) => a.hubspot_ticket_id);
-      let changedStaleIds: string[] = [];
+      const changedStaleIds: string[] = [];
 
       if (staleTicketIds.length > 0) {
         const { data: ticketTimestamps } = await supabase

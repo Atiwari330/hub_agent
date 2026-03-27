@@ -6,6 +6,7 @@ import { ALL_OPEN_STAGE_IDS } from '../hubspot/stage-config';
 import { SYNC_CONFIG } from '../hubspot/sync-config';
 import { batchFetchDealEngagements } from '../hubspot/batch-engagements';
 import { getNotesByDealIdWithAuthor, getTasksByDealId } from '../hubspot/engagements';
+import { createServiceClient } from '../supabase/client';
 import {
   analyzeCadence,
   computeCadenceMetrics,
@@ -38,8 +39,10 @@ export interface PplCadenceRunResult {
 export async function runPplCadence(options?: {
   ownerEmails?: string[];
   concurrency?: number;
+  maxAgeDays?: number;
 }): Promise<PplCadenceRunResult> {
   const concurrency = options?.concurrency ?? 3;
+  const maxAgeDays = options?.maxAgeDays;
   const targetEmails = options?.ownerEmails ??
     SYNC_CONFIG.TARGET_AE_EMAILS.filter((e) => e !== 'atiwari@opusbehavioral.com');
 
@@ -63,6 +66,7 @@ export async function runPplCadence(options?: {
 
   // Collect PPL deals
   let allDeals: { deal: HubSpotDeal; ownerName: string }[] = [];
+  const ownerIdMap = new Map<string, string>(); // dealId → hubspot owner id
 
   for (const email of targetEmails) {
     const owner = await getOwnerByEmail(email);
@@ -86,11 +90,19 @@ export async function runPplCadence(options?: {
     console.log(`[ppl-cadence]   ${pplDeals.length} PPL deals in open stages`);
     for (const deal of pplDeals) {
       allDeals.push({ deal, ownerName });
+      if (owner.id) ownerIdMap.set(deal.id, owner.id);
     }
   }
 
   // Filter out deals with no creation date
   allDeals = allDeals.filter((d) => d.deal.properties.createdate);
+
+  // Apply max-age filter
+  if (maxAgeDays !== undefined) {
+    const cutoff = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000;
+    allDeals = allDeals.filter((d) => new Date(d.deal.properties.createdate!).getTime() >= cutoff);
+    console.log(`[ppl-cadence] After max-age filter (${maxAgeDays}d): ${allDeals.length} deals`);
+  }
 
   if (allDeals.length === 0) {
     return {
@@ -230,6 +242,9 @@ export async function runPplCadence(options?: {
   const filters = 'All Target AEs, Paid Lead, Open Stages';
   const markdown = formatReport(results, filters, false);
 
+  // Persist results to Supabase for dashboard consumption
+  await persistPplResults(successes, ownerIdMap);
+
   return {
     results,
     markdown,
@@ -244,4 +259,57 @@ export async function runPplCadence(options?: {
     },
     durationMs,
   };
+}
+
+async function persistPplResults(
+  results: CadenceResult[],
+  ownerIdMap: Map<string, string>
+): Promise<void> {
+  if (results.length === 0) return;
+
+  try {
+    const supabase = createServiceClient();
+    const now = new Date().toISOString();
+
+    const rows = results.map((r) => ({
+      deal_id: r.dealId,
+      deal_name: r.dealName,
+      amount: r.amount,
+      stage_name: r.stageName,
+      owner_id: ownerIdMap.get(r.dealId) || null,
+      owner_name: r.ownerName,
+      close_date: r.closeDate,
+      create_date: r.createDate,
+      deal_age_days: r.dealAgeDays,
+      metrics: r.metrics,
+      three_compliance: r.threeCompliance,
+      three_rationale: r.threeRationale,
+      two_compliance: r.twoCompliance,
+      two_rationale: r.twoRationale,
+      one_compliance: r.oneCompliance,
+      one_rationale: r.oneRationale,
+      speed_rating: r.speedRating,
+      speed_rationale: r.speedRationale,
+      channel_diversity_rating: r.channelDiversityRating,
+      prospect_engagement: r.prospectEngagement,
+      nurture_window: r.nurtureWindow,
+      engagement_insight: r.engagementInsight,
+      verdict: r.verdict,
+      coaching: r.coaching,
+      risk_flag: r.riskFlag,
+      engagement_risk: r.engagementRisk,
+      executive_summary: r.executiveSummary,
+      timeline: r.timeline,
+      analyzed_at: now,
+    }));
+
+    const { error } = await supabase.from('ppl_cadence_results').insert(rows);
+    if (error) {
+      console.warn(`[ppl-cadence] Failed to persist results: ${error.message}`);
+    } else {
+      console.log(`[ppl-cadence] Persisted ${rows.length} results to ppl_cadence_results`);
+    }
+  } catch (err) {
+    console.warn(`[ppl-cadence] Error persisting results: ${err instanceof Error ? err.message : err}`);
+  }
 }
