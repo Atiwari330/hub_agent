@@ -450,6 +450,7 @@ function HowItWorks({ onClose }: { onClose: () => void }) {
             <li><strong className="text-orange-700">Engagement Risk</strong> — Prospect is opening emails but the rep stopped reaching out. Highest-priority coaching moment.</li>
             <li><strong className="text-gray-800">Meeting Booked</strong> — If a meeting is booked in week 1, the deal is automatically Compliant or better regardless of raw numbers.</li>
             <li><strong className="text-gray-800">Activity Sparkline</strong> — Green dots are calls, blue dots are emails, plotted over the deal&apos;s lifetime. Dashed lines mark the day 3 and day 5 windows.</li>
+            <li><strong className="text-gray-800">Late-Day Deals</strong> — Deals created after 5pm EST start their business day count the next business day. Friday after 5pm or weekends start on Monday. Reps are not penalized for after-hours lead creation.</li>
           </ul>
         </div>
       </div>
