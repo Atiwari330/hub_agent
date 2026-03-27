@@ -178,16 +178,25 @@ export function PplDashboard() {
   const recentSummary = useMemo(() => {
     if (recentResults.length === 0) return null;
     const byVerdict: Record<string, number> = {};
+    let inProgressCount = 0;
     for (const r of recentResults) {
+      const ageDays = r.deal_age_days || 0;
+      if (ageDays < 3) {
+        inProgressCount++;
+      }
       byVerdict[r.verdict] = (byVerdict[r.verdict] || 0) + 1;
     }
-    const compliantPlus = (byVerdict['COMPLIANT'] || 0) + (byVerdict['EXEMPLARY'] || 0);
-    const complianceRate = recentResults.length > 0 ? compliantPlus / recentResults.length : 0;
+    // Exclude In Progress deals from compliance rate
+    const scoredDeals = recentResults.filter((r) => (r.deal_age_days || 0) >= 3);
+    const compliantPlus = scoredDeals.filter((r) => r.verdict === 'COMPLIANT' || r.verdict === 'EXEMPLARY').length;
+    const complianceRate = scoredDeals.length > 0 ? compliantPlus / scoredDeals.length : 0;
     return {
       totalDeals: recentResults.length,
       byVerdict,
       complianceRate,
       compliantPlus,
+      scoredDeals: scoredDeals.length,
+      inProgressCount,
       riskCount: recentResults.filter((r) => r.risk_flag).length,
       engagementRiskCount: recentResults.filter((r) => r.engagement_risk).length,
       lastAnalyzedAt: summary?.lastAnalyzedAt || null,
@@ -327,12 +336,13 @@ export function PplDashboard() {
           <div className="flex items-center gap-3">
             <div className="flex items-baseline gap-1.5">
               <span className="text-2xl font-bold text-gray-900">
-                {Math.round(recentSummary.complianceRate * 100)}%
+                {recentSummary.scoredDeals > 0 ? Math.round(recentSummary.complianceRate * 100) : '—'}%
               </span>
               <span className="text-sm text-gray-500">Team Compliance</span>
             </div>
             <span className="text-xs text-gray-400">
-              ({recentSummary.compliantPlus}/{recentSummary.totalDeals} deals compliant or better)
+              ({recentSummary.compliantPlus}/{recentSummary.scoredDeals} scored deals
+              {recentSummary.inProgressCount > 0 ? ` · ${recentSummary.inProgressCount} in progress` : ''})
             </span>
           </div>
         )}
@@ -346,6 +356,9 @@ export function PplDashboard() {
           <StatPill label="Compliant" value={recentSummary.byVerdict['COMPLIANT'] || 0} color="emerald" />
           <StatPill label="Needs Improvement" value={recentSummary.byVerdict['NEEDS_IMPROVEMENT'] || 0} color="orange" />
           <StatPill label="Non-Compliant" value={recentSummary.byVerdict['NON_COMPLIANT'] || 0} color="red" />
+          {recentSummary.inProgressCount > 0 && (
+            <StatPill label="In Progress" value={recentSummary.inProgressCount} color="blue" />
+          )}
           {recentSummary.engagementRiskCount > 0 && (
             <StatPill label="Engagement Risk" value={recentSummary.engagementRiskCount} color="red" />
           )}
@@ -545,6 +558,8 @@ function HowItWorks({ onClose }: { onClose: () => void }) {
             <li><strong className="text-gray-800">Meeting Booked</strong> — If a meeting is booked in week 1, the deal is automatically Compliant or better regardless of raw numbers.</li>
             <li><strong className="text-gray-800">Activity Sparkline</strong> — Green dots are calls, blue dots are emails, plotted over the deal&apos;s lifetime. Dashed lines mark the day 3 and day 5 windows.</li>
             <li><strong className="text-gray-800">Late-Day Deals</strong> — Deals created after 5pm EST start their business day count the next business day. Friday after 5pm or weekends start on Monday. Reps are not penalized for after-hours lead creation.</li>
+            <li><strong className="text-blue-700">In Progress</strong> — Deals less than 3 days old show &ldquo;In Progress&rdquo; with prorated targets instead of a final verdict. They are excluded from the Team Compliance score until enough time has passed for a fair assessment.</li>
+            <li><strong className="text-gray-800">Nurture Period</strong> — After week 1, reps should maintain 2-3 touches per week through week 3. After 21 days, the nurture period is considered complete.</li>
           </ul>
         </div>
       </div>
@@ -559,6 +574,7 @@ function StatPill({ label, value, color }: { label: string; value: number; color
     emerald: 'bg-emerald-100 text-emerald-700',
     orange: 'bg-orange-100 text-orange-700',
     red: 'bg-red-100 text-red-700',
+    blue: 'bg-blue-100 text-blue-700',
   };
 
   return (

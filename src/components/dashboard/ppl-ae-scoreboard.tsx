@@ -31,10 +31,12 @@ export function PplAeScoreboard({ results, owners, onSelectOwner }: PplAeScorebo
         if (aeResults.length === 0) return null;
 
         const total = aeResults.length;
-        const compliantPlus = aeResults.filter(
+        // Exclude In Progress deals (< 3 days old) from compliance rate
+        const scoredResults = aeResults.filter((r) => (r.deal_age_days || 0) >= 3);
+        const compliantPlus = scoredResults.filter(
           (r) => r.verdict === 'COMPLIANT' || r.verdict === 'EXEMPLARY'
         ).length;
-        const complianceRate = total > 0 ? compliantPlus / total : 0;
+        const complianceRate = scoredResults.length > 0 ? compliantPlus / scoredResults.length : 0;
 
         const speedMinutes = aeResults
           .map((r) => (r.metrics as { speedToLeadMinutes?: number | null }).speedToLeadMinutes)
@@ -77,7 +79,7 @@ export function PplAeScoreboard({ results, owners, onSelectOwner }: PplAeScorebo
               <div className="flex items-center justify-between mb-1.5">
                 <span className="text-xs text-gray-500 font-medium">Compliance Rate</span>
                 <span className="text-sm font-bold text-gray-800">
-                  {compliantPlus}/{total} ({Math.round(complianceRate * 100)}%)
+                  {compliantPlus}/{scoredResults.length} ({scoredResults.length > 0 ? Math.round(complianceRate * 100) : '—'}%)
                 </span>
               </div>
               <div className="h-3 bg-gray-100 rounded-full overflow-hidden">

@@ -183,7 +183,7 @@ export function PplDealPanel({ result, onClose, onReanalyze }: PplDealPanelProps
           )}
 
           {/* Executive Summary */}
-          {result.executive_summary && (
+          {result.executive_summary && !isInProgress && (
             <div>
               <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Executive Summary</h3>
               <p className="text-sm text-gray-700 leading-relaxed">{result.executive_summary}</p>
@@ -240,6 +240,11 @@ export function PplDealPanel({ result, onClose, onReanalyze }: PplDealPanelProps
           {/* 3-2-1 Compliance Breakdown */}
           <div>
             <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">3-2-1 Compliance</h3>
+            {isInProgress && (
+              <p className="text-xs text-blue-600 bg-blue-50 rounded-lg px-3 py-2 mb-3">
+                Preliminary assessment — these ratings will update as activity accumulates over the next few business days.
+              </p>
+            )}
             <div className="space-y-3">
               <ComplianceSection
                 label="Speed to Lead"
@@ -270,7 +275,7 @@ export function PplDealPanel({ result, onClose, onReanalyze }: PplDealPanelProps
           </div>
 
           {/* Coaching */}
-          {result.coaching && (
+          {result.coaching && !isInProgress && (
             <div>
               <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Coaching Point</h3>
               <p className="text-sm text-gray-700 leading-relaxed bg-gray-50 p-3 rounded-lg">{result.coaching}</p>

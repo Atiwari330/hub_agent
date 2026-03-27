@@ -310,11 +310,15 @@ export function PplDealCard({ result, onClick }: PplDealCardProps) {
       )}
 
       {/* Coaching */}
-      {result.coaching && (
+      {isInProgress ? (
+        <p className="text-sm text-blue-500 italic leading-relaxed">
+          Deal is being actively monitored — full assessment after 3 business days.
+        </p>
+      ) : result.coaching ? (
         <p className="text-sm text-gray-500 italic leading-relaxed">
           &ldquo;{result.coaching}&rdquo;
         </p>
-      )}
+      ) : null}
     </div>
   );
 }
