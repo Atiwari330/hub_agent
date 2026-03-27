@@ -67,6 +67,10 @@ export interface DealIntelligenceItem {
   max_touchpoint_gap_days: number | null;
   days_in_pre_demo: number | null;
   tactics_detected: string[] | null;
+  // Pre-demo coaching narratives (from pre_demo_coach_analyses)
+  coaching_situation: string | null;
+  coaching_next_action: string | null;
+  coaching_follow_up: string | null;
 }
 
 export interface DealIntelligenceResponse {
@@ -122,6 +126,22 @@ export async function GET() {
       openDealIds = new Set(
         (salesOpen || []).map(d => d.hubspot_deal_id)
       );
+    }
+
+    // Fetch pre-demo coaching narratives
+    const preDemoDealIds = (intelligence || [])
+      .filter(d => openDealIds.has(d.hubspot_deal_id) && d.grade_type === 'pre_demo_effort')
+      .map(d => d.hubspot_deal_id);
+
+    const coachingMap = new Map<string, { situation: string; next_action: string; follow_up: string | null }>();
+    if (preDemoDealIds.length > 0) {
+      const { data: coaching } = await supabase
+        .from('pre_demo_coach_analyses')
+        .select('hubspot_deal_id, situation, next_action, follow_up')
+        .in('hubspot_deal_id', preDemoDealIds);
+      for (const c of coaching || []) {
+        coachingMap.set(c.hubspot_deal_id, c);
+      }
     }
 
     const deals: DealIntelligenceItem[] = (intelligence || [])
@@ -185,6 +205,9 @@ export async function GET() {
         max_touchpoint_gap_days: d.max_touchpoint_gap_days ? Number(d.max_touchpoint_gap_days) : null,
         days_in_pre_demo: d.days_in_pre_demo ?? null,
         tactics_detected: d.tactics_detected ?? null,
+        coaching_situation: coachingMap.get(d.hubspot_deal_id)?.situation ?? null,
+        coaching_next_action: coachingMap.get(d.hubspot_deal_id)?.next_action ?? null,
+        coaching_follow_up: coachingMap.get(d.hubspot_deal_id)?.follow_up ?? null,
       }));
 
     const response: DealIntelligenceResponse = {

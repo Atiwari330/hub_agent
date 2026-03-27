@@ -1,12 +1,5 @@
-import { requirePermission, RESOURCES } from '@/lib/auth';
-import { NextStepQueueView } from '@/components/dashboard/queues/next-step-queue-view';
+import { redirect } from 'next/navigation';
 
-export default async function NextStepQueuePage() {
-  await requirePermission(RESOURCES.QUEUE_NEXT_STEP);
-
-  return (
-    <div className="p-6">
-      <NextStepQueueView />
-    </div>
-  );
+export default function NextStepQueuePage() {
+  redirect('/dashboard/queues/deal-health');
 }

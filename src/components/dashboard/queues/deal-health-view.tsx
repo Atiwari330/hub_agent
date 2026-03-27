@@ -505,7 +505,7 @@ export function DealHealthView() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Deal Intelligence</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Deal Coach</h1>
           <p className="text-sm text-gray-500 mt-1">
             {viewTab === 'pre_demo_effort'
               ? 'How hard are your AEs working pre-demo deals?'
@@ -1256,6 +1256,28 @@ function ExpandedDealDetail({
             </button>
           </div>
         </div>
+
+        {/* Pre-demo coaching narratives */}
+        {deal.grade_type === 'pre_demo_effort' && deal.coaching_situation && (
+          <div className="space-y-2.5">
+            <div>
+              <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Situation </span>
+              <span className="text-sm text-gray-600 leading-relaxed">{deal.coaching_situation}</span>
+            </div>
+            {deal.coaching_next_action && (
+              <div>
+                <span className="text-[11px] font-semibold text-indigo-500 uppercase tracking-wide">Next </span>
+                <span className="text-sm font-medium text-gray-800 leading-relaxed">{deal.coaching_next_action}</span>
+              </div>
+            )}
+            {deal.coaching_follow_up && (
+              <div>
+                <span className="text-[11px] font-semibold text-amber-600 uppercase tracking-wide">Follow-up </span>
+                <span className="text-sm text-gray-700 leading-relaxed">{deal.coaching_follow_up}</span>
+              </div>
+            )}
+          </div>
+        )}
 
         {deal.llm_analyzed_at ? (
           <>

@@ -1,8 +1,5 @@
-import { requirePermission, RESOURCES } from '@/lib/auth';
-import { DealCoachView } from '@/components/dashboard/queues/deal-coach-view';
+import { redirect } from 'next/navigation';
 
-export default async function DealCoachPage() {
-  await requirePermission(RESOURCES.QUEUE_DEAL_COACH);
-
-  return <DealCoachView />;
+export default function DealCoachPage() {
+  redirect('/dashboard/queues/deal-health');
 }

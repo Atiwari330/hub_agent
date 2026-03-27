@@ -173,15 +173,8 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
   const currentOwnerId = pathname?.match(/\/dashboard\/ae\/([^/]+)/)?.[1];
   const isOnMissionControl = pathname === '/dashboard';
   // Sales Pipeline queues
-  const isOnHygieneQueue = pathname === '/dashboard/queues/hygiene';
-  const isOnNextStepQueue = pathname === '/dashboard/queues/next-step';
-  const isOnOverdueTasksQueue = pathname === '/dashboard/queues/overdue-tasks';
-  const isOnStalledDealsQueue = pathname === '/dashboard/queues/stalled-deals';
-  const isOnPreDemoPipelineQueue = pathname === '/dashboard/queues/pre-demo-pipeline';
-  const isOnPreDemoCoachQueue = pathname === '/dashboard/queues/pre-demo-coach';
+  const isOnDealCoachQueue = pathname === '/dashboard/queues/deal-health';
   const isOnPplSequenceQueue = pathname === '/dashboard/queues/ppl-sequence';
-  const isOnDealHealthQueue = pathname === '/dashboard/queues/deal-health';
-  const isOnDealCoachQueue = pathname === '/dashboard/queues/deal-coach';
   const isOnDomainEnrichmentQueue = pathname === '/dashboard/queues/domain-enrichment';
   const isOnComplianceResearchQueue = pathname === '/dashboard/queues/compliance-research';
   // Upsell Pipeline queues
@@ -476,13 +469,10 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
         )}
 
         {/* Queues Section - only show if user has permission for at least one queue */}
-        {(hasPermission(user, RESOURCES.QUEUE_HYGIENE) ||
-          hasPermission(user, RESOURCES.QUEUE_NEXT_STEP) ||
-          hasPermission(user, RESOURCES.QUEUE_OVERDUE_TASKS) ||
-          hasPermission(user, RESOURCES.QUEUE_STALLED_DEALS) ||
-          hasPermission(user, RESOURCES.QUEUE_PRE_DEMO_PIPELINE) ||
-          hasPermission(user, RESOURCES.QUEUE_PRE_DEMO_COACH) ||
+        {(hasPermission(user, RESOURCES.QUEUE_DEAL_HEALTH) ||
           hasPermission(user, RESOURCES.QUEUE_PPL_SEQUENCE) ||
+          hasPermission(user, RESOURCES.QUEUE_DOMAIN_ENRICHMENT) ||
+          hasPermission(user, RESOURCES.QUEUE_COMPLIANCE_RESEARCH) ||
           hasPermission(user, RESOURCES.QUEUE_UPSELL_HYGIENE) ||
           hasPermission(user, RESOURCES.QUEUE_STALLED_UPSELLS) ||
           hasPermission(user, RESOURCES.QUEUE_AT_RISK) ||
@@ -491,10 +481,6 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
           hasPermission(user, RESOURCES.QUEUE_FOLLOW_UP) ||
           hasPermission(user, RESOURCES.QUEUE_PITCH_QUEUE) ||
           hasPermission(user, RESOURCES.QUEUE_SUPPORT_INTEL) ||
-          hasPermission(user, RESOURCES.QUEUE_DEAL_COACH) ||
-          hasPermission(user, RESOURCES.QUEUE_DOMAIN_ENRICHMENT) ||
-          hasPermission(user, RESOURCES.QUEUE_COMPLIANCE_RESEARCH) ||
-          hasPermission(user, RESOURCES.QUEUE_DEAL_HEALTH) ||
           hasPermission(user, RESOURCES.QUEUE_SUPPORT_MANAGER) ||
           hasPermission(user, RESOURCES.QUEUE_SUPPORT_TRAINER)) && (
         <div className="mt-4">
@@ -514,15 +500,8 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
           {(isCollapsed || queuesOpen) && (
             <div className={`${!isCollapsed ? 'mt-1' : ''}`}>
               {/* Sales Pipeline Section - only show if user has permission for any sales queue */}
-              {(hasPermission(user, RESOURCES.QUEUE_HYGIENE) ||
-                hasPermission(user, RESOURCES.QUEUE_NEXT_STEP) ||
-                hasPermission(user, RESOURCES.QUEUE_OVERDUE_TASKS) ||
-                hasPermission(user, RESOURCES.QUEUE_STALLED_DEALS) ||
-                hasPermission(user, RESOURCES.QUEUE_PRE_DEMO_PIPELINE) ||
-                hasPermission(user, RESOURCES.QUEUE_PRE_DEMO_COACH) ||
+              {(hasPermission(user, RESOURCES.QUEUE_DEAL_HEALTH) ||
                 hasPermission(user, RESOURCES.QUEUE_PPL_SEQUENCE) ||
-                hasPermission(user, RESOURCES.QUEUE_DEAL_COACH) ||
-                hasPermission(user, RESOURCES.QUEUE_DEAL_HEALTH) ||
                 hasPermission(user, RESOURCES.QUEUE_DOMAIN_ENRICHMENT) ||
                 hasPermission(user, RESOURCES.QUEUE_COMPLIANCE_RESEARCH)) && (
               <>
@@ -532,150 +511,27 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
                   </div>
                 )}
                 <ul className="space-y-0.5">
-                  {hasPermission(user, RESOURCES.QUEUE_HYGIENE) && (
+                  {hasPermission(user, RESOURCES.QUEUE_DEAL_HEALTH) && (
                   <li>
                     <Link
-                      href="/dashboard/queues/hygiene"
+                      href="/dashboard/queues/deal-health"
                       className={`flex items-center py-2 text-sm transition-colors ${
                         isCollapsed
                           ? 'px-0 justify-center'
                           : 'px-4 pl-14'
                       } ${
-                        isOnHygieneQueue
+                        isOnDealCoachQueue
                           ? 'bg-indigo-600 text-white'
                           : 'text-slate-300 hover:bg-slate-800'
                       }`}
-                      title={isCollapsed ? 'Deal Hygiene (Sales)' : undefined}
-                    >
-                      {isCollapsed ? (
-                        <QueueIcon />
-                      ) : (
-                        <span>Deal Hygiene</span>
-                      )}
-                    </Link>
-                  </li>
-                  )}
-                  {hasPermission(user, RESOURCES.QUEUE_NEXT_STEP) && (
-                  <li>
-                    <Link
-                      href="/dashboard/queues/next-step"
-                      className={`flex items-center py-2 text-sm transition-colors ${
-                        isCollapsed
-                          ? 'px-0 justify-center'
-                          : 'px-4 pl-14'
-                      } ${
-                        isOnNextStepQueue
-                          ? 'bg-indigo-600 text-white'
-                          : 'text-slate-300 hover:bg-slate-800'
-                      }`}
-                      title={isCollapsed ? 'Next Steps' : undefined}
-                    >
-                      {isCollapsed ? (
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                        </svg>
-                      ) : (
-                        <span>Next Steps</span>
-                      )}
-                    </Link>
-                  </li>
-                  )}
-                  {hasPermission(user, RESOURCES.QUEUE_OVERDUE_TASKS) && (
-                  <li>
-                    <Link
-                      href="/dashboard/queues/overdue-tasks"
-                      className={`flex items-center py-2 text-sm transition-colors ${
-                        isCollapsed
-                          ? 'px-0 justify-center'
-                          : 'px-4 pl-14'
-                      } ${
-                        isOnOverdueTasksQueue
-                          ? 'bg-indigo-600 text-white'
-                          : 'text-slate-300 hover:bg-slate-800'
-                      }`}
-                      title={isCollapsed ? 'Overdue Tasks' : undefined}
-                    >
-                      {isCollapsed ? (
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                      ) : (
-                        <span>Overdue Tasks</span>
-                      )}
-                    </Link>
-                  </li>
-                  )}
-                  {hasPermission(user, RESOURCES.QUEUE_STALLED_DEALS) && (
-                  <li>
-                    <Link
-                      href="/dashboard/queues/stalled-deals"
-                      className={`flex items-center py-2 text-sm transition-colors ${
-                        isCollapsed
-                          ? 'px-0 justify-center'
-                          : 'px-4 pl-14'
-                      } ${
-                        isOnStalledDealsQueue
-                          ? 'bg-indigo-600 text-white'
-                          : 'text-slate-300 hover:bg-slate-800'
-                      }`}
-                      title={isCollapsed ? 'Stalled Deals' : undefined}
-                    >
-                      {isCollapsed ? (
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                      ) : (
-                        <span>Stalled Deals</span>
-                      )}
-                    </Link>
-                  </li>
-                  )}
-                  {hasPermission(user, RESOURCES.QUEUE_PRE_DEMO_PIPELINE) && (
-                  <li>
-                    <Link
-                      href="/dashboard/queues/pre-demo-pipeline"
-                      className={`flex items-center py-2 text-sm transition-colors ${
-                        isCollapsed
-                          ? 'px-0 justify-center'
-                          : 'px-4 pl-14'
-                      } ${
-                        isOnPreDemoPipelineQueue
-                          ? 'bg-indigo-600 text-white'
-                          : 'text-slate-300 hover:bg-slate-800'
-                      }`}
-                      title={isCollapsed ? 'Pre-Demo Pipeline' : undefined}
-                    >
-                      {isCollapsed ? (
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
-                        </svg>
-                      ) : (
-                        <span>Pre-Demo Pipeline</span>
-                      )}
-                    </Link>
-                  </li>
-                  )}
-                  {hasPermission(user, RESOURCES.QUEUE_PRE_DEMO_COACH) && (
-                  <li>
-                    <Link
-                      href="/dashboard/queues/pre-demo-coach"
-                      className={`flex items-center py-2 text-sm transition-colors ${
-                        isCollapsed
-                          ? 'px-0 justify-center'
-                          : 'px-4 pl-14'
-                      } ${
-                        isOnPreDemoCoachQueue
-                          ? 'bg-indigo-600 text-white'
-                          : 'text-slate-300 hover:bg-slate-800'
-                      }`}
-                      title={isCollapsed ? 'Pre-Demo Coach' : undefined}
+                      title={isCollapsed ? 'Deal Coach' : undefined}
                     >
                       {isCollapsed ? (
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                         </svg>
                       ) : (
-                        <span>Pre-Demo Coach</span>
+                        <span>Deal Coach</span>
                       )}
                     </Link>
                   </li>
@@ -701,56 +557,6 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
                         </svg>
                       ) : (
                         <span>PPL Sequence</span>
-                      )}
-                    </Link>
-                  </li>
-                  )}
-                  {hasPermission(user, RESOURCES.QUEUE_DEAL_HEALTH) && (
-                  <li>
-                    <Link
-                      href="/dashboard/queues/deal-health"
-                      className={`flex items-center py-2 text-sm transition-colors ${
-                        isCollapsed
-                          ? 'px-0 justify-center'
-                          : 'px-4 pl-14'
-                      } ${
-                        isOnDealHealthQueue
-                          ? 'bg-indigo-600 text-white'
-                          : 'text-slate-300 hover:bg-slate-800'
-                      }`}
-                      title={isCollapsed ? 'Deal Health' : undefined}
-                    >
-                      {isCollapsed ? (
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                      ) : (
-                        <span>Deal Health</span>
-                      )}
-                    </Link>
-                  </li>
-                  )}
-                  {hasPermission(user, RESOURCES.QUEUE_DEAL_COACH) && (
-                  <li>
-                    <Link
-                      href="/dashboard/queues/deal-coach"
-                      className={`flex items-center py-2 text-sm transition-colors ${
-                        isCollapsed
-                          ? 'px-0 justify-center'
-                          : 'px-4 pl-14'
-                      } ${
-                        isOnDealCoachQueue
-                          ? 'bg-indigo-600 text-white'
-                          : 'text-slate-300 hover:bg-slate-800'
-                      }`}
-                      title={isCollapsed ? 'Deal Coach' : undefined}
-                    >
-                      {isCollapsed ? (
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                        </svg>
-                      ) : (
-                        <span>Deal Coach</span>
                       )}
                     </Link>
                   </li>

@@ -1,8 +1,5 @@
-import { requirePermission, RESOURCES } from '@/lib/auth';
-import { PreDemoCoachView } from '@/components/dashboard/queues/pre-demo-coach-view';
+import { redirect } from 'next/navigation';
 
-export default async function PreDemoCoachPage() {
-  await requirePermission(RESOURCES.QUEUE_PRE_DEMO_COACH);
-
-  return <PreDemoCoachView />;
+export default function PreDemoCoachPage() {
+  redirect('/dashboard/queues/deal-health');
 }

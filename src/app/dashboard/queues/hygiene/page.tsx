@@ -1,8 +1,5 @@
-import { requirePermission, RESOURCES } from '@/lib/auth';
-import { HygieneQueueView } from '@/components/dashboard/queues/hygiene-queue-view';
+import { redirect } from 'next/navigation';
 
-export default async function HygieneQueuePage() {
-  await requirePermission(RESOURCES.QUEUE_HYGIENE);
-
-  return <HygieneQueueView />;
+export default function HygieneQueuePage() {
+  redirect('/dashboard/queues/deal-health');
 }
