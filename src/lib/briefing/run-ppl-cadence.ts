@@ -40,9 +40,11 @@ export async function runPplCadence(options?: {
   ownerEmails?: string[];
   concurrency?: number;
   maxAgeDays?: number;
+  skipFreshHours?: number; // skip deals analyzed within this many hours
 }): Promise<PplCadenceRunResult> {
   const concurrency = options?.concurrency ?? 3;
   const maxAgeDays = options?.maxAgeDays;
+  const skipFreshHours = options?.skipFreshHours;
   const targetEmails = options?.ownerEmails ??
     SYNC_CONFIG.TARGET_AE_EMAILS.filter((e) => e !== 'atiwari@opusbehavioral.com');
 
@@ -102,6 +104,36 @@ export async function runPplCadence(options?: {
     const cutoff = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000;
     allDeals = allDeals.filter((d) => new Date(d.deal.properties.createdate!).getTime() >= cutoff);
     console.log(`[ppl-cadence] After max-age filter (${maxAgeDays}d): ${allDeals.length} deals`);
+  }
+
+  // Skip deals that were recently analyzed (for incremental cron runs)
+  if (skipFreshHours !== undefined && allDeals.length > 0) {
+    const supabase = createServiceClient();
+    const dealIds = allDeals.map((d) => d.deal.id);
+    const { data: recentAnalyses } = await supabase
+      .from('ppl_cadence_results')
+      .select('deal_id, analyzed_at')
+      .in('deal_id', dealIds)
+      .order('analyzed_at', { ascending: false });
+
+    // Build map of deal_id → latest analyzed_at
+    const freshCutoff = Date.now() - skipFreshHours * 60 * 60 * 1000;
+    const freshDealIds = new Set<string>();
+    if (recentAnalyses) {
+      const seen = new Set<string>();
+      for (const row of recentAnalyses) {
+        if (!seen.has(row.deal_id)) {
+          seen.add(row.deal_id);
+          if (new Date(row.analyzed_at).getTime() > freshCutoff) {
+            freshDealIds.add(row.deal_id);
+          }
+        }
+      }
+    }
+
+    const before = allDeals.length;
+    allDeals = allDeals.filter((d) => !freshDealIds.has(d.deal.id));
+    console.log(`[ppl-cadence] Skipped ${before - allDeals.length} recently analyzed deals (< ${skipFreshHours}h), ${allDeals.length} remaining`);
   }
 
   if (allDeals.length === 0) {

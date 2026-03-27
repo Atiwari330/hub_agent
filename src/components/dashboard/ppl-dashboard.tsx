@@ -53,6 +53,8 @@ interface PplSummary {
 
 type SortKey = 'verdict' | 'age' | 'amount' | 'speed';
 
+const MAX_AGE_DAYS = 14;
+
 const VERDICT_ORDER: Record<string, number> = {
   NON_COMPLIANT: 0,
   NEEDS_IMPROVEMENT: 1,
@@ -92,8 +94,6 @@ export function PplDashboard() {
   const [sortKey, setSortKey] = useState<SortKey>('verdict');
   const [selectedDeal, setSelectedDeal] = useState<PplResult | null>(null);
   const [showHowItWorks, setShowHowItWorks] = useState(false);
-
-  const MAX_AGE_DAYS = 14;
 
   const fetchResults = useCallback(async () => {
     try {
@@ -429,7 +429,9 @@ function HowItWorks({ onClose }: { onClose: () => void }) {
         <p className="text-sm text-gray-600">
           Deals that match <strong>all</strong> of the following: pipeline is <strong>Sales Pipeline</strong>,
           lead source is <strong>Paid Lead</strong>, deal stage is <strong>open</strong> (not closed-won or closed-lost),
-          and created within the <strong>last {MAX_AGE_DAYS} days</strong>.
+          and created within the <strong>last {MAX_AGE_DAYS} days</strong>. New deals are automatically
+          analyzed within an hour of creation. All deals are re-analyzed daily on weekdays
+          as engagement data changes.
         </p>
       </div>
 
