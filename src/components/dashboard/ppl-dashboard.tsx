@@ -91,6 +91,9 @@ export function PplDashboard() {
   const [riskOnly, setRiskOnly] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>('verdict');
   const [selectedDeal, setSelectedDeal] = useState<PplResult | null>(null);
+  const [showHowItWorks, setShowHowItWorks] = useState(false);
+
+  const MAX_AGE_DAYS = 14;
 
   const fetchResults = useCallback(async () => {
     try {
@@ -129,9 +132,42 @@ export function PplDashboard() {
     }
   };
 
+  // Age-filtered results (last 14 days only)
+  const recentResults = useMemo(() => {
+    const cutoff = Date.now() - MAX_AGE_DAYS * 24 * 60 * 60 * 1000;
+    return results.filter((r) => r.create_date && new Date(r.create_date).getTime() >= cutoff);
+  }, [results]);
+
+  // Recompute summary from recent results
+  const recentSummary = useMemo(() => {
+    if (recentResults.length === 0) return null;
+    const byVerdict: Record<string, number> = {};
+    for (const r of recentResults) {
+      byVerdict[r.verdict] = (byVerdict[r.verdict] || 0) + 1;
+    }
+    return {
+      totalDeals: recentResults.length,
+      byVerdict,
+      riskCount: recentResults.filter((r) => r.risk_flag).length,
+      engagementRiskCount: recentResults.filter((r) => r.engagement_risk).length,
+      lastAnalyzedAt: summary?.lastAnalyzedAt || null,
+    };
+  }, [recentResults, summary]);
+
+  // Owners from recent results
+  const recentOwners = useMemo(() => {
+    return Array.from(
+      new Map(
+        recentResults
+          .filter((r) => r.owner_id && r.owner_name)
+          .map((r) => [r.owner_id, { id: r.owner_id!, name: r.owner_name }])
+      ).values()
+    );
+  }, [recentResults]);
+
   // Filter and sort
   const filteredResults = useMemo(() => {
-    let filtered = results;
+    let filtered = recentResults;
 
     if (selectedOwnerId) {
       filtered = filtered.filter((r) => r.owner_id === selectedOwnerId);
@@ -166,7 +202,7 @@ export function PplDashboard() {
     }
 
     return sorted;
-  }, [results, selectedOwnerId, riskOnly, selectedVerdict, sortKey]);
+  }, [recentResults, selectedOwnerId, riskOnly, selectedVerdict, sortKey]);
 
   if (loading) {
     return (
@@ -190,15 +226,23 @@ export function PplDashboard() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">PPL Lead Effectiveness</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            3-2-1 cadence compliance for Paid Per Lead deals
-          </p>
+          <div className="flex items-center gap-2 mt-1">
+            <p className="text-sm text-gray-500">
+              3-2-1 cadence compliance for Paid Per Lead deals (last {MAX_AGE_DAYS} days)
+            </p>
+            <button
+              onClick={() => setShowHowItWorks(!showHowItWorks)}
+              className="text-xs text-indigo-600 hover:text-indigo-800 font-medium transition-colors"
+            >
+              {showHowItWorks ? 'Hide' : 'How it works'}
+            </button>
+          </div>
         </div>
 
         <div className="flex items-center gap-3">
-          {summary?.lastAnalyzedAt && (
+          {recentSummary?.lastAnalyzedAt && (
             <span className="text-xs text-gray-400">
-              Analyzed {formatRelativeTime(summary.lastAnalyzedAt)}
+              Analyzed {formatRelativeTime(recentSummary.lastAnalyzedAt)}
             </span>
           )}
           <button
@@ -212,23 +256,26 @@ export function PplDashboard() {
         </div>
       </div>
 
+      {/* How It Works */}
+      {showHowItWorks && <HowItWorks onClose={() => setShowHowItWorks(false)} />}
+
       {/* Summary Stats */}
-      {summary && (
+      {recentSummary && (
         <div className="flex flex-wrap gap-2 mb-6">
-          <StatPill label="Deals" value={summary.totalDeals} color="gray" />
-          <StatPill label="Exemplary" value={summary.byVerdict['EXEMPLARY'] || 0} color="green" />
-          <StatPill label="Compliant" value={summary.byVerdict['COMPLIANT'] || 0} color="emerald" />
-          <StatPill label="Needs Improvement" value={summary.byVerdict['NEEDS_IMPROVEMENT'] || 0} color="orange" />
-          <StatPill label="Non-Compliant" value={summary.byVerdict['NON_COMPLIANT'] || 0} color="red" />
-          {summary.engagementRiskCount > 0 && (
-            <StatPill label="Engagement Risk" value={summary.engagementRiskCount} color="red" />
+          <StatPill label="Deals" value={recentSummary.totalDeals} color="gray" />
+          <StatPill label="Exemplary" value={recentSummary.byVerdict['EXEMPLARY'] || 0} color="green" />
+          <StatPill label="Compliant" value={recentSummary.byVerdict['COMPLIANT'] || 0} color="emerald" />
+          <StatPill label="Needs Improvement" value={recentSummary.byVerdict['NEEDS_IMPROVEMENT'] || 0} color="orange" />
+          <StatPill label="Non-Compliant" value={recentSummary.byVerdict['NON_COMPLIANT'] || 0} color="red" />
+          {recentSummary.engagementRiskCount > 0 && (
+            <StatPill label="Engagement Risk" value={recentSummary.engagementRiskCount} color="red" />
           )}
         </div>
       )}
 
 
       {/* AE Filter Pills */}
-      {owners.length > 1 && (
+      {recentOwners.length > 1 && (
         <div className="flex gap-2 mb-4">
           <button
             onClick={() => setSelectedOwnerId(null)}
@@ -240,7 +287,7 @@ export function PplDashboard() {
           >
             All
           </button>
-          {owners.map((owner) => (
+          {recentOwners.map((owner) => (
             <button
               key={owner.id}
               onClick={() => setSelectedOwnerId(selectedOwnerId === owner.id ? null : owner.id)}
@@ -257,10 +304,10 @@ export function PplDashboard() {
       )}
 
       {/* AE Scoreboard (when All selected) */}
-      {!selectedOwnerId && owners.length > 1 && (
+      {!selectedOwnerId && recentOwners.length > 1 && (
         <PplAeScoreboard
-          results={results}
-          owners={owners}
+          results={recentResults}
+          owners={recentOwners}
           onSelectOwner={(id) => setSelectedOwnerId(id)}
         />
       )}
@@ -355,6 +402,57 @@ export function PplDashboard() {
           onReanalyze={handleRefresh}
         />
       )}
+    </div>
+  );
+}
+
+function HowItWorks({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="mb-6 bg-white border border-gray-200 rounded-xl p-6">
+      <div className="flex items-start justify-between mb-4">
+        <h2 className="text-base font-bold text-gray-900">How This Dashboard Works</h2>
+        <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      <p className="text-sm text-gray-600 mb-4">
+        Each Paid Per Lead deal is evaluated against the <strong>3-2-1 Method</strong> — the standard cadence
+        for working PPL leads. Data is pulled live from HubSpot (calls, emails, meetings) and analyzed
+        by AI to assess both the numbers and the quality of outreach.
+      </p>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+        <div>
+          <h3 className="font-semibold text-gray-800 mb-2">The 5 Compliance Bars</h3>
+          <ul className="space-y-2 text-gray-600">
+            <li><strong className="text-gray-800">Speed to Lead</strong> — Time from deal creation to first call. Target: under 5 minutes.</li>
+            <li><strong className="text-gray-800">3-Day Calls</strong> — Number of calls made in the first 3 business days. Target: 6 calls.</li>
+            <li><strong className="text-gray-800">5-Day Touches</strong> — Total outreach attempts (calls + emails) in first 5 business days. Target: 6-7 touches.</li>
+            <li><strong className="text-gray-800">Nurture</strong> — After week 1, are they maintaining 1-2 touches per week? Shows &ldquo;Too Early&rdquo; if the deal is less than 7 days old.</li>
+            <li><strong className="text-gray-800">Channels</strong> — Number of distinct outreach channels used (Phone, Email, LinkedIn, Text, Meeting). Target: 3+.</li>
+          </ul>
+        </div>
+
+        <div>
+          <h3 className="font-semibold text-gray-800 mb-2">Verdicts</h3>
+          <ul className="space-y-2 text-gray-600">
+            <li><span className="inline-block w-2.5 h-2.5 rounded-full bg-green-500 mr-1.5" /><strong className="text-gray-800">Exemplary</strong> — Exceeded the 3-2-1 method across all dimensions.</li>
+            <li><span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500 mr-1.5" /><strong className="text-gray-800">Compliant</strong> — Met the spirit of the 3-2-1 method.</li>
+            <li><span className="inline-block w-2.5 h-2.5 rounded-full bg-orange-400 mr-1.5" /><strong className="text-gray-800">Needs Improvement</strong> — Visible effort but significant gaps.</li>
+            <li><span className="inline-block w-2.5 h-2.5 rounded-full bg-red-400 mr-1.5" /><strong className="text-gray-800">Non-Compliant</strong> — Did not follow the 3-2-1 method.</li>
+          </ul>
+
+          <h3 className="font-semibold text-gray-800 mt-4 mb-2">Key Signals</h3>
+          <ul className="space-y-2 text-gray-600">
+            <li><strong className="text-orange-700">Engagement Risk</strong> — Prospect is opening emails but the rep stopped reaching out. Highest-priority coaching moment.</li>
+            <li><strong className="text-gray-800">Meeting Booked</strong> — If a meeting is booked in week 1, the deal is automatically Compliant or better regardless of raw numbers.</li>
+            <li><strong className="text-gray-800">Activity Sparkline</strong> — Green dots are calls, blue dots are emails, plotted over the deal&apos;s lifetime. Dashed lines mark the day 3 and day 5 windows.</li>
+          </ul>
+        </div>
+      </div>
     </div>
   );
 }
