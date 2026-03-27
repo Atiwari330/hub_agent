@@ -225,7 +225,11 @@ export function PplDashboard() {
       filtered = filtered.filter((r) => r.risk_flag || r.engagement_risk);
     }
     if (selectedVerdict) {
-      filtered = filtered.filter((r) => r.verdict === selectedVerdict);
+      if (selectedVerdict === 'IN_PROGRESS') {
+        filtered = filtered.filter((r) => (r.deal_age_days || 0) < 3);
+      } else {
+        filtered = filtered.filter((r) => r.verdict === selectedVerdict && (r.deal_age_days || 0) >= 3);
+      }
     }
 
     // Sort
@@ -440,15 +444,23 @@ export function PplDashboard() {
           >
             All
           </button>
-          {(['NON_COMPLIANT', 'NEEDS_IMPROVEMENT', 'COMPLIANT', 'EXEMPLARY'] as const).map((v) => (
+          {([
+            ['NON_COMPLIANT', 'Non-Compliant'],
+            ['NEEDS_IMPROVEMENT', 'Needs Improvement'],
+            ['COMPLIANT', 'Compliant'],
+            ['EXEMPLARY', 'Exemplary'],
+            ['IN_PROGRESS', 'In Progress'],
+          ] as [string, string][]).map(([key, label]) => (
             <button
-              key={v}
-              onClick={() => setSelectedVerdict(selectedVerdict === v ? null : v)}
+              key={key}
+              onClick={() => setSelectedVerdict(selectedVerdict === key ? null : key)}
               className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
-                selectedVerdict === v ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                selectedVerdict === key
+                  ? key === 'IN_PROGRESS' ? 'bg-blue-600 text-white' : 'bg-gray-800 text-white'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               }`}
             >
-              {v.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()).replace(/Non Compliant/, 'Non-Compliant')}
+              {label}
             </button>
           ))}
         </div>
