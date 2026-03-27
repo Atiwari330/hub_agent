@@ -70,6 +70,27 @@ export async function runDealScrub(
   deals = deals.filter((d) => d.properties.pipeline === SALES_PIPELINE_ID);
   deals = deals.filter((d) => !closedStageIds.has(d.properties.dealstage || ''));
 
+  // Skip deals with zero activity in the last 30 days to reduce LLM calls.
+  // Uses notes_last_updated (engagement activity) and hs_lastmodifieddate (any record change).
+  const totalBeforeActivityFilter = deals.length;
+  const activityCutoff = new Date();
+  activityCutoff.setDate(activityCutoff.getDate() - 30);
+
+  deals = deals.filter((d) => {
+    const notesDate = d.properties.notes_last_updated ? new Date(d.properties.notes_last_updated) : null;
+    if (notesDate && notesDate >= activityCutoff) return true;
+
+    const modifiedDate = d.properties.hs_lastmodifieddate ? new Date(d.properties.hs_lastmodifieddate) : null;
+    if (modifiedDate && modifiedDate >= activityCutoff) return true;
+
+    return false;
+  });
+
+  const skippedInactive = totalBeforeActivityFilter - deals.length;
+  if (skippedInactive > 0) {
+    console.log(`[deal-scrub] Skipped ${skippedInactive} deals with no activity in 30+ days (${totalBeforeActivityFilter} → ${deals.length})`);
+  }
+
   if (deals.length === 0) {
     return {
       results: [],
