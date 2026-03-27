@@ -127,6 +127,12 @@ export function PplDealPanel({ result, onClose, onReanalyze }: PplDealPanelProps
     };
   };
 
+  // Prorated targets based on deal age
+  const ageDays = result.deal_age_days || 0;
+  const callTarget = ageDays >= 3 ? 6 : ageDays === 2 ? 5 : ageDays === 1 ? 3 : 2;
+  const touchTarget = ageDays >= 5 ? 7 : ageDays === 4 ? 6 : ageDays === 3 ? 5 : ageDays === 2 ? 4 : ageDays === 1 ? 3 : 2;
+  const isInProgress = ageDays < 3;
+
   const hubspotUrl = `https://app.hubspot.com/contacts/7358632/deal/${result.deal_id}`;
 
   const handleReanalyze = async () => {
@@ -151,8 +157,8 @@ export function PplDealPanel({ result, onClose, onReanalyze }: PplDealPanelProps
               <span className="text-gray-300">·</span>
               <span className="text-sm text-gray-500">{result.stage_name}</span>
               <span className="text-gray-300">·</span>
-              <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${VERDICT_BADGE[result.verdict] || VERDICT_BADGE.UNKNOWN}`}>
-                {VERDICT_LABELS[result.verdict] || result.verdict}
+              <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${isInProgress ? 'bg-blue-100 text-blue-800' : (VERDICT_BADGE[result.verdict] || VERDICT_BADGE.UNKNOWN)}`}>
+                {isInProgress ? 'In Progress' : (VERDICT_LABELS[result.verdict] || result.verdict)}
               </span>
             </div>
             {result.owner_name && (
@@ -168,6 +174,14 @@ export function PplDealPanel({ result, onClose, onReanalyze }: PplDealPanelProps
         </div>
 
         <div className="px-6 py-5 space-y-6">
+          {/* In Progress Notice */}
+          {isInProgress && (
+            <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-sm font-medium text-blue-800">In Progress — Deal is {ageDays} day{ageDays !== 1 ? 's' : ''} old</p>
+              <p className="text-xs text-blue-600 mt-1">This deal is still within the initial outreach window. Targets are prorated and the verdict will firm up after 3 business days of activity.</p>
+            </div>
+          )}
+
           {/* Executive Summary */}
           {result.executive_summary && (
             <div>
@@ -195,8 +209,8 @@ export function PplDealPanel({ result, onClose, onReanalyze }: PplDealPanelProps
             <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Key Metrics</h3>
             <div className="grid grid-cols-2 gap-3">
               <MetricCard label="Speed to Lead" value={formatSpeed(metrics.speedToLeadMinutes ?? null)} />
-              <MetricCard label="3-Day Calls" value={`${metrics.callsIn3BusinessDays || 0} / 6`} />
-              <MetricCard label="5-Day Touches" value={`${metrics.touchesIn5BusinessDays || 0} / 7`} />
+              <MetricCard label="3-Day Calls" value={`${metrics.callsIn3BusinessDays || 0} / ${callTarget}`} subtitle={ageDays < 3 ? `Day ${ageDays} of 3 — target prorated` : undefined} />
+              <MetricCard label="5-Day Touches" value={`${metrics.touchesIn5BusinessDays || 0} / ${touchTarget}`} subtitle={ageDays < 5 ? `Day ${ageDays} of 5 — target prorated` : undefined} />
               <MetricCard label="Channels" value={`${metrics.channelDiversity || 0} used`} subtitle={metrics.channelsUsed?.join(', ')} />
               <MetricCard label="Total Calls" value={String(metrics.totalCallAttempts || 0)} />
               <MetricCard label="Total Emails" value={String(metrics.totalOutboundEmails || 0)} />

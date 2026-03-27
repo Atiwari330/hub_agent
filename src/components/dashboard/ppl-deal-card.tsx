@@ -190,11 +190,16 @@ export function PplDealCard({ result, onClick }: PplDealCardProps) {
   const emailEng = metrics.emailEngagement;
   const openRate = emailEng?.openRate != null ? Math.round(emailEng.openRate * 100) : null;
   const touchTimestamps = metrics.touchTimestamps || [];
+  const isInProgress = ageDays < 3;
+
+  const borderColor = isInProgress ? 'border-l-blue-400' : (VERDICT_BORDER[result.verdict] || VERDICT_BORDER.UNKNOWN);
+  const badgeClass = isInProgress ? 'bg-blue-100 text-blue-800' : (VERDICT_BADGE[result.verdict] || VERDICT_BADGE.UNKNOWN);
+  const badgeLabel = isInProgress ? 'In Progress' : (VERDICT_LABELS[result.verdict] || result.verdict);
 
   return (
     <div
       onClick={onClick}
-      className={`bg-white rounded-xl border border-gray-200 border-l-4 ${VERDICT_BORDER[result.verdict] || VERDICT_BORDER.UNKNOWN} p-5 hover:shadow-md hover:border-gray-300 transition-all cursor-pointer`}
+      className={`bg-white rounded-xl border border-gray-200 border-l-4 ${borderColor} p-5 hover:shadow-md hover:border-gray-300 transition-all cursor-pointer`}
     >
       {/* Header */}
       <div className="flex items-start justify-between gap-2 mb-3">
@@ -207,8 +212,8 @@ export function PplDealCard({ result, onClick }: PplDealCardProps) {
             <p className="text-xs text-gray-400 mt-0.5">{result.owner_name}</p>
           )}
         </div>
-        <span className={`flex-shrink-0 px-2.5 py-1 text-xs font-semibold rounded-full ${VERDICT_BADGE[result.verdict] || VERDICT_BADGE.UNKNOWN}`}>
-          {VERDICT_LABELS[result.verdict] || result.verdict}
+        <span className={`flex-shrink-0 px-2.5 py-1 text-xs font-semibold rounded-full ${badgeClass}`}>
+          {badgeLabel}
         </span>
       </div>
 
