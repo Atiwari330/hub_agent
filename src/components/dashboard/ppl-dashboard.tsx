@@ -52,8 +52,33 @@ interface PplSummary {
 }
 
 type SortKey = 'verdict' | 'age' | 'amount' | 'speed';
+type WeekFilter = 'all' | 'this_week' | 'last_week';
 
 const MAX_AGE_DAYS = 14;
+
+/** Get Monday 00:00:00 EST for a given date */
+function getWeekStart(date: Date): Date {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = day === 0 ? 6 : day - 1; // Monday = 0 offset
+  d.setDate(d.getDate() - diff);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function getWeekRange(filter: WeekFilter): { start: Date; end: Date } | null {
+  if (filter === 'all') return null;
+  const now = new Date();
+  const thisWeekStart = getWeekStart(now);
+
+  if (filter === 'this_week') {
+    return { start: thisWeekStart, end: now };
+  }
+  // last_week
+  const lastWeekStart = new Date(thisWeekStart);
+  lastWeekStart.setDate(lastWeekStart.getDate() - 7);
+  return { start: lastWeekStart, end: thisWeekStart };
+}
 
 const VERDICT_ORDER: Record<string, number> = {
   NON_COMPLIANT: 0,
@@ -94,6 +119,7 @@ export function PplDashboard() {
   const [sortKey, setSortKey] = useState<SortKey>('verdict');
   const [selectedDeal, setSelectedDeal] = useState<PplResult | null>(null);
   const [showHowItWorks, setShowHowItWorks] = useState(false);
+  const [weekFilter, setWeekFilter] = useState<WeekFilter>('all');
 
   const fetchResults = useCallback(async () => {
     try {
@@ -132,11 +158,21 @@ export function PplDashboard() {
     }
   };
 
-  // Age-filtered results (last 14 days only)
+  // Age-filtered + week-filtered results
   const recentResults = useMemo(() => {
     const cutoff = Date.now() - MAX_AGE_DAYS * 24 * 60 * 60 * 1000;
-    return results.filter((r) => r.create_date && new Date(r.create_date).getTime() >= cutoff);
-  }, [results]);
+    let filtered = results.filter((r) => r.create_date && new Date(r.create_date).getTime() >= cutoff);
+
+    const range = getWeekRange(weekFilter);
+    if (range) {
+      filtered = filtered.filter((r) => {
+        const created = new Date(r.create_date).getTime();
+        return created >= range.start.getTime() && created < range.end.getTime();
+      });
+    }
+
+    return filtered;
+  }, [results, weekFilter]);
 
   // Recompute summary from recent results
   const recentSummary = useMemo(() => {
@@ -145,9 +181,13 @@ export function PplDashboard() {
     for (const r of recentResults) {
       byVerdict[r.verdict] = (byVerdict[r.verdict] || 0) + 1;
     }
+    const compliantPlus = (byVerdict['COMPLIANT'] || 0) + (byVerdict['EXEMPLARY'] || 0);
+    const complianceRate = recentResults.length > 0 ? compliantPlus / recentResults.length : 0;
     return {
       totalDeals: recentResults.length,
       byVerdict,
+      complianceRate,
+      compliantPlus,
       riskCount: recentResults.filter((r) => r.risk_flag).length,
       engagementRiskCount: recentResults.filter((r) => r.engagement_risk).length,
       lastAnalyzedAt: summary?.lastAnalyzedAt || null,
@@ -228,7 +268,7 @@ export function PplDashboard() {
           <h1 className="text-2xl font-bold text-gray-900">PPL Lead Effectiveness</h1>
           <div className="flex items-center gap-2 mt-1">
             <p className="text-sm text-gray-500">
-              3-2-1 cadence compliance for Paid Per Lead deals (last {MAX_AGE_DAYS} days)
+              3-2-1 cadence compliance for Paid Per Lead deals
             </p>
             <button
               onClick={() => setShowHowItWorks(!showHowItWorks)}
@@ -258,6 +298,45 @@ export function PplDashboard() {
 
       {/* How It Works */}
       {showHowItWorks && <HowItWorks onClose={() => setShowHowItWorks(false)} />}
+
+      {/* Week Filter + Team Compliance Score */}
+      <div className="flex flex-wrap items-center gap-4 mb-6">
+        {/* Week toggle */}
+        <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
+          {([
+            ['all', 'All'],
+            ['this_week', 'This Week'],
+            ['last_week', 'Last Week'],
+          ] as [WeekFilter, string][]).map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => setWeekFilter(key)}
+              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                weekFilter === key
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* Team Compliance Score */}
+        {recentSummary && (
+          <div className="flex items-center gap-3">
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-2xl font-bold text-gray-900">
+                {Math.round(recentSummary.complianceRate * 100)}%
+              </span>
+              <span className="text-sm text-gray-500">Team Compliance</span>
+            </div>
+            <span className="text-xs text-gray-400">
+              ({recentSummary.compliantPlus}/{recentSummary.totalDeals} deals compliant or better)
+            </span>
+          </div>
+        )}
+      </div>
 
       {/* Summary Stats */}
       {recentSummary && (
@@ -379,8 +458,12 @@ export function PplDashboard() {
           <svg className="w-12 h-12 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
           </svg>
-          <p className="text-sm font-medium">No PPL results found</p>
-          <p className="text-xs mt-1">Click Refresh to run a new analysis</p>
+          <p className="text-sm font-medium">No PPL deals found</p>
+          <p className="text-xs mt-1">
+            {weekFilter !== 'all'
+              ? `No Paid Lead deals were created ${weekFilter === 'this_week' ? 'this week' : 'last week'}. Try a different time range.`
+              : 'Click Refresh to run a new analysis'}
+          </p>
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
