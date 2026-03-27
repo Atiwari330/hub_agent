@@ -151,27 +151,41 @@ export function PplDealCard({ result, onClick }: PplDealCardProps) {
     };
   };
 
-  // Speed to lead bar
-  const speedRating =
-    result.speed_rating === 'FAST'
-      ? 'met'
-      : result.speed_rating === 'ACCEPTABLE'
-      ? 'partial'
-      : ('missed' as const);
+  // Speed to lead bar — use actual minutes, not LLM rating
+  const speedMins = metrics.speedToLeadMinutes;
+  const speedRating: 'met' | 'partial' | 'missed' =
+    speedMins !== null && speedMins !== undefined
+      ? speedMins <= 5 ? 'met' : speedMins <= 30 ? 'partial' : 'missed'
+      : 'missed'; // NO_CALL
   const speedVal =
-    result.speed_rating === 'FAST' ? 100 : result.speed_rating === 'ACCEPTABLE' ? 60 : result.speed_rating === 'SLOW' ? 30 : 0;
+    speedMins !== null && speedMins !== undefined
+      ? speedMins <= 5 ? 100 : speedMins <= 30 ? 60 : 30
+      : 0;
 
-  // Nurture bar
-  const nurtureRating =
-    metrics.postWeek1Assessment === 'COMPLIANT'
+  // Dynamic targets based on deal age (prorate for young deals)
+  const ageDays = result.deal_age_days || 0;
+  const callTarget = ageDays >= 3 ? 6 : ageDays === 2 ? 5 : ageDays === 1 ? 3 : 2;
+  const touchTarget = ageDays >= 5 ? 7 : ageDays === 4 ? 6 : ageDays === 3 ? 5 : ageDays === 2 ? 4 : ageDays === 1 ? 3 : 2;
+
+  // Nurture bar — 2-3 touches/week target, only through week 3
+  const nurtureRating: 'met' | 'partial' | 'missed' =
+    metrics.postWeek1Assessment === 'TOO_EARLY'
+      ? 'partial'
+      : ageDays > 21
+      ? 'met' // past week 3, nurture period is done
+      : (metrics.postWeek1TouchesPerWeek ?? 0) >= 2
       ? 'met'
-      : metrics.postWeek1Assessment === 'PARTIAL'
+      : (metrics.postWeek1TouchesPerWeek ?? 0) >= 1
       ? 'partial'
-      : metrics.postWeek1Assessment === 'TOO_EARLY'
-      ? 'partial'
-      : ('missed' as const);
+      : 'missed';
   const nurtureVal =
-    metrics.postWeek1Assessment === 'COMPLIANT' ? 100 : metrics.postWeek1Assessment === 'PARTIAL' ? 60 : metrics.postWeek1Assessment === 'TOO_EARLY' ? 50 : 10;
+    metrics.postWeek1Assessment === 'TOO_EARLY' ? 50
+    : ageDays > 21 ? 100
+    : Math.min(100, Math.round(((metrics.postWeek1TouchesPerWeek ?? 0) / 2.5) * 100));
+  const nurtureSuffix =
+    metrics.postWeek1Assessment === 'TOO_EARLY' ? 'Too Early'
+    : ageDays > 21 ? 'Complete'
+    : `${(metrics.postWeek1TouchesPerWeek ?? 0).toFixed(1)}/wk`;
 
   const emailEng = metrics.emailEngagement;
   const openRate = emailEng?.openRate != null ? Math.round(emailEng.openRate * 100) : null;
@@ -210,18 +224,18 @@ export function PplDealCard({ result, onClick }: PplDealCardProps) {
         <ComplianceBar
           label="3-Day Calls"
           value={metrics.callsIn3BusinessDays || 0}
-          target={6}
+          target={callTarget}
         />
         <ComplianceBar
           label="5-Day Touch"
           value={metrics.touchesIn5BusinessDays || 0}
-          target={7}
+          target={touchTarget}
         />
         <ComplianceBar
           label="Nurture"
           value={nurtureVal}
           target={100}
-          suffix={metrics.postWeek1Assessment === 'TOO_EARLY' ? 'Too Early' : `${(metrics.postWeek1TouchesPerWeek ?? 0).toFixed(1)}/wk`}
+          suffix={nurtureSuffix}
           rating={nurtureRating}
         />
         <ComplianceBar
