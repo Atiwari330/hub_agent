@@ -58,7 +58,7 @@ export async function GET(request: NextRequest) {
     const demosScheduledNeeded =
       schedToComp > 0 ? Math.ceil(demosCompletedNeeded / schedToComp) : 0;
 
-    // 4. Weekly pace from demo_tracker_snapshots
+    // 4. Weekly pace — try snapshots first, fall back to computing from deals
     const { data: snapshots } = await supabase
       .from('demo_tracker_snapshots')
       .select('week_number, week_start, week_end, demos_scheduled, demos_completed')
@@ -68,25 +68,83 @@ export async function GET(request: NextRequest) {
       .order('week_number', { ascending: true });
 
     const now = new Date();
-    const weeks = (snapshots || []).map((s) => {
-      const weekStart = new Date(s.week_start + 'T00:00:00');
-      const weekEnd = new Date(s.week_end + 'T23:59:59');
-      return {
-        weekNumber: s.week_number,
-        weekStart: s.week_start,
-        weekEnd: s.week_end,
-        demosScheduled: s.demos_scheduled,
-        demosCompleted: s.demos_completed,
-        isCurrent: now >= weekStart && now <= weekEnd,
-        isFuture: weekStart > now,
-      };
-    });
+    let weeks: Array<{
+      weekNumber: number;
+      weekStart: string;
+      weekEnd: string;
+      demosScheduled: number;
+      demosCompleted: number;
+      isCurrent: boolean;
+      isFuture: boolean;
+    }>;
+
+    if (snapshots && snapshots.length > 0) {
+      weeks = snapshots.map((s) => {
+        const weekStart = new Date(s.week_start + 'T00:00:00');
+        const weekEnd = new Date(s.week_end + 'T23:59:59');
+        return {
+          weekNumber: s.week_number,
+          weekStart: s.week_start,
+          weekEnd: s.week_end,
+          demosScheduled: s.demos_scheduled,
+          demosCompleted: s.demos_completed,
+          isCurrent: now >= weekStart && now <= weekEnd,
+          isFuture: weekStart > now,
+        };
+      });
+    } else {
+      // Compute weekly data from deals table directly
+      const { data: allDeals } = await supabase
+        .from('deals')
+        .select('demo_scheduled_entered_at, demo_completed_entered_at, deal_stage');
+
+      // Build 13 week buckets
+      const weekBuckets: Array<{ weekNumber: number; weekStart: Date; weekEnd: Date; sched: number; comp: number }> = [];
+      const bucketStart = new Date(qi.startDate);
+      for (let w = 1; w <= 13; w++) {
+        const ws = new Date(bucketStart);
+        const we = new Date(ws);
+        we.setDate(we.getDate() + 6);
+        weekBuckets.push({ weekNumber: w, weekStart: ws, weekEnd: we, sched: 0, comp: 0 });
+        bucketStart.setDate(bucketStart.getDate() + 7);
+      }
+
+      for (const deal of allDeals || []) {
+        if (deal.demo_scheduled_entered_at) {
+          const dt = new Date(deal.demo_scheduled_entered_at);
+          if (dt >= qi.startDate && dt <= qi.endDate) {
+            const diffMs = dt.getTime() - qi.startDate.getTime();
+            const weekIdx = Math.min(Math.floor(diffMs / (7 * 24 * 60 * 60 * 1000)), 12);
+            weekBuckets[weekIdx].sched++;
+          }
+        }
+        if (deal.demo_completed_entered_at) {
+          const dt = new Date(deal.demo_completed_entered_at);
+          if (dt >= qi.startDate && dt <= qi.endDate) {
+            const diffMs = dt.getTime() - qi.startDate.getTime();
+            const weekIdx = Math.min(Math.floor(diffMs / (7 * 24 * 60 * 60 * 1000)), 12);
+            weekBuckets[weekIdx].comp++;
+          }
+        }
+      }
+
+      const formatDate = (d: Date) => d.toISOString().split('T')[0];
+      weeks = weekBuckets.map((b) => ({
+        weekNumber: b.weekNumber,
+        weekStart: formatDate(b.weekStart),
+        weekEnd: formatDate(b.weekEnd),
+        demosScheduled: b.sched,
+        demosCompleted: b.comp,
+        isCurrent: now >= b.weekStart && now <= b.weekEnd,
+        isFuture: b.weekStart > now,
+      }));
+    }
 
     const totalWeeks = 13;
     const requiredPerWeek =
       demosScheduledNeeded > 0 ? demosScheduledNeeded / totalWeeks : 0;
 
-    const currentWeekNum = weeks.find((w) => w.isCurrent)?.weekNumber || progress.daysElapsed / 7;
+    const currentWeekNum = weeks.find((w) => w.isCurrent)?.weekNumber || Math.ceil(progress.daysElapsed / 7);
     const cumulativeScheduled = weeks
       .filter((w) => !w.isFuture)
       .reduce((sum, w) => sum + w.demosScheduled, 0);

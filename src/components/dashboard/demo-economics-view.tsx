@@ -110,11 +110,19 @@ function HeadlineCard({ data }: { data: DemoEconomicsData }) {
         {/* Close Rate */}
         <div>
           <div className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Close Rate (Demo → Won)</div>
-          <div className="text-3xl font-bold text-green-600">{pct1(economics.closeRate * 100)}</div>
+          <div className={`text-3xl font-bold ${economics.closeRate >= benchmarks.saasAvg ? 'text-green-600' : 'text-amber-600'}`}>
+            {pct1(economics.closeRate * 100)}
+          </div>
           <div className="mt-1.5 flex items-center gap-2">
-            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-50 text-green-700 border border-green-200">
-              Above industry avg
-            </span>
+            {economics.closeRate >= benchmarks.saasAvg ? (
+              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-50 text-green-700 border border-green-200">
+                Above industry avg
+              </span>
+            ) : (
+              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
+                Below industry avg
+              </span>
+            )}
           </div>
           <div className="text-xs text-gray-400 mt-1.5">
             Industry avg: {pct(benchmarks.saasAvg * 100)} (B2B SaaS) · Top: {pct(benchmarks.topPerformer * 100)}+
@@ -131,19 +139,14 @@ function HeadlineCard({ data }: { data: DemoEconomicsData }) {
 function MathChain({ data }: { data: DemoEconomicsData }) {
   const { target, economics, actuals } = data;
 
-  const steps = [
-    { label: 'Target ARR', value: fmt(target.revenueTarget), sub: null },
-    { label: 'Avg Deal Size', value: fmt(economics.avgDealSize), sub: '÷', isOp: true },
-    { label: 'Wins Needed', value: String(economics.dealsNeededToClose), sub: null },
-    { label: 'Close Rate', value: pct1(economics.closeRate * 100), sub: '÷', isOp: true },
-    { label: 'Demos Comp. Needed', value: String(economics.demosCompletedNeeded), sub: `actual: ${actuals.demosCompleted}` },
-    { label: 'Sched→Comp Rate', value: pct(economics.scheduledToCompletedRate * 100), sub: '÷', isOp: true },
-    {
-      label: 'Demos Sched. Needed',
-      value: String(economics.demosScheduledNeeded),
-      sub: `actual: ${actuals.demosScheduled}`,
-      highlight: true,
-    },
+  const steps: Array<{ label: string; value: string; sub?: string; highlight?: boolean; op?: string }> = [
+    { label: 'Target ARR', value: fmt(target.revenueTarget) },
+    { label: 'Avg Deal Size', value: fmt(economics.avgDealSize), op: '÷' },
+    { label: 'Wins Needed', value: String(economics.dealsNeededToClose), op: '=' },
+    { label: 'Close Rate', value: pct1(economics.closeRate * 100), op: '÷' },
+    { label: 'Demos Comp. Needed', value: String(economics.demosCompletedNeeded), sub: `actual: ${actuals.demosCompleted}`, op: '=' },
+    { label: 'Sched→Comp Rate', value: pct(economics.scheduledToCompletedRate * 100), op: '÷' },
+    { label: 'Demos Sched. Needed', value: String(economics.demosScheduledNeeded), sub: `actual: ${actuals.demosScheduled}`, highlight: true, op: '=' },
   ];
 
   return (
@@ -152,30 +155,26 @@ function MathChain({ data }: { data: DemoEconomicsData }) {
       <div className="flex items-center gap-1 overflow-x-auto pb-1">
         {steps.map((step, i) => (
           <React.Fragment key={i}>
-            {step.sub === '÷' ? (
-              <div className="flex-shrink-0 text-gray-400 text-lg font-light px-1">÷</div>
-            ) : i > 0 ? (
-              <div className="flex-shrink-0 text-gray-400 text-lg font-light px-1">=</div>
-            ) : null}
-            {step.sub !== '÷' && (
-              <div
-                className={`flex-shrink-0 rounded-lg px-4 py-3 text-center min-w-[100px] ${
-                  step.highlight
-                    ? 'border-2 border-red-400 bg-red-50'
-                    : 'border border-gray-200 bg-gray-50'
-                }`}
-              >
-                <div className={`text-lg font-bold ${step.highlight ? 'text-red-700' : 'text-gray-900'}`}>
-                  {step.value}
-                </div>
-                <div className="text-xs text-gray-500 mt-0.5">{step.label}</div>
-                {step.sub && step.sub !== '÷' && (
-                  <div className={`text-xs mt-0.5 ${step.highlight ? 'text-red-500 font-medium' : 'text-gray-400'}`}>
-                    {step.sub}
-                  </div>
-                )}
-              </div>
+            {step.op && (
+              <div className="flex-shrink-0 text-gray-400 text-lg font-light px-1">{step.op}</div>
             )}
+            <div
+              className={`flex-shrink-0 rounded-lg px-4 py-3 text-center min-w-[90px] ${
+                step.highlight
+                  ? 'border-2 border-red-400 bg-red-50'
+                  : 'border border-gray-200 bg-gray-50'
+              }`}
+            >
+              <div className={`text-lg font-bold ${step.highlight ? 'text-red-700' : 'text-gray-900'}`}>
+                {step.value}
+              </div>
+              <div className="text-xs text-gray-500 mt-0.5">{step.label}</div>
+              {step.sub && (
+                <div className={`text-xs mt-0.5 ${step.highlight ? 'text-red-500 font-medium' : 'text-gray-400'}`}>
+                  {step.sub}
+                </div>
+              )}
+            </div>
           </React.Fragment>
         ))}
       </div>
@@ -271,61 +270,45 @@ function WeeklyPaceChart({ data }: { data: DemoEconomicsData }) {
 
 function ConversionFunnel({ data }: { data: DemoEconomicsData }) {
   const { funnel } = data;
-  const maxWidth = funnel.demoScheduled || 1;
-
-  const stages = [
-    {
-      label: 'Demo Scheduled',
-      count: funnel.demoScheduled,
-      color: 'bg-indigo-500',
-      textColor: 'text-white',
-    },
-    {
-      label: 'Demo Completed',
-      count: funnel.demoCompleted,
-      color: 'bg-blue-500',
-      textColor: 'text-white',
-      ratePct: funnel.scheduledToCompletedPct,
-    },
-    {
-      label: 'Closed Won',
-      count: funnel.closedWon,
-      color: 'bg-green-500',
-      textColor: 'text-white',
-      ratePct: funnel.completedToWonPct,
-      revenue: funnel.closedWonRevenue,
-    },
-  ];
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-5">
       <div className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-4">Conversion Funnel</div>
-      <div className="flex items-center gap-2">
-        {stages.map((stage, i) => {
-          const widthPct = Math.max((stage.count / maxWidth) * 100, 15);
-          return (
-            <React.Fragment key={i}>
-              {stage.ratePct !== undefined && (
-                <div className="flex flex-col items-center flex-shrink-0">
-                  <div className="text-xs font-medium text-gray-500">{pct1(stage.ratePct)}</div>
-                  <svg className="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
-                </div>
-              )}
-              <div
-                className={`${stage.color} ${stage.textColor} rounded-lg py-3 px-4 text-center flex-shrink-0`}
-                style={{ width: `${widthPct}%`, minWidth: '120px' }}
-              >
-                <div className="text-xl font-bold">{stage.count}</div>
-                <div className="text-xs opacity-80">{stage.label}</div>
-                {stage.revenue !== undefined && (
-                  <div className="text-xs font-medium mt-0.5">{fmtFull(stage.revenue)}</div>
-                )}
-              </div>
-            </React.Fragment>
-          );
-        })}
+      <div className="flex items-center gap-3">
+        {/* Demo Scheduled */}
+        <div className="flex-1 bg-indigo-500 text-white rounded-lg py-3 px-4 text-center">
+          <div className="text-xl font-bold">{funnel.demoScheduled}</div>
+          <div className="text-xs opacity-80">Demo Scheduled</div>
+        </div>
+
+        {/* Arrow + rate */}
+        <div className="flex flex-col items-center flex-shrink-0">
+          <div className="text-xs font-medium text-gray-500">{pct1(funnel.scheduledToCompletedPct)}</div>
+          <svg className="w-5 h-5 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </div>
+
+        {/* Demo Completed */}
+        <div className="flex-1 bg-blue-500 text-white rounded-lg py-3 px-4 text-center">
+          <div className="text-xl font-bold">{funnel.demoCompleted}</div>
+          <div className="text-xs opacity-80">Demo Completed</div>
+        </div>
+
+        {/* Arrow + rate */}
+        <div className="flex flex-col items-center flex-shrink-0">
+          <div className="text-xs font-medium text-gray-500">{pct1(funnel.completedToWonPct)}</div>
+          <svg className="w-5 h-5 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </div>
+
+        {/* Closed Won */}
+        <div className="flex-1 bg-green-500 text-white rounded-lg py-3 px-4 text-center">
+          <div className="text-xl font-bold">{funnel.closedWon}</div>
+          <div className="text-xs opacity-80">Closed Won</div>
+          <div className="text-xs font-medium mt-0.5">{fmtFull(funnel.closedWonRevenue)}</div>
+        </div>
       </div>
     </div>
   );

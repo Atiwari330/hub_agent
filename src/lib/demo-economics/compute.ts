@@ -65,13 +65,20 @@ export async function computeQuarterStageCounts(
       !REGRESSION_STAGES.demoCompleted.has(d.deal_stage)
   );
 
-  // Closed Won: deal currently in closed-won stage with close_date or closed_won_entered_at in quarter
+  // Quarter date boundaries as YYYY-MM-DD for close_date (DATE column) comparison
+  const startMonth = (quarter - 1) * 3;
+  const qStartDate = `${year}-${String(startMonth + 1).padStart(2, '0')}-01`;
+  const lastDay = new Date(year, startMonth + 3, 0).getDate();
+  const qEndDate = `${year}-${String(startMonth + 3).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+
+  // Closed Won: deal currently in closed-won stage with EITHER close_date or closed_won_entered_at in quarter
   const closedWonDeals = (deals || []).filter((d) => {
     if (d.deal_stage !== CLOSED_WON_ID) return false;
-    const cwDate = d.closed_won_entered_at ? new Date(d.closed_won_entered_at) : null;
-    const closeDate = d.close_date ? new Date(d.close_date) : null;
-    const date = cwDate || closeDate;
-    return date && date >= qi.startDate && date <= qi.endDate;
+    // Check close_date (DATE column) via string comparison to avoid UTC/EST issues
+    const cdInQ = d.close_date && d.close_date >= qStartDate && d.close_date <= qEndDate;
+    // Check closed_won_entered_at (TIMESTAMP column) via normal date comparison
+    const cwInQ = d.closed_won_entered_at && new Date(d.closed_won_entered_at) >= qi.startDate && new Date(d.closed_won_entered_at) <= qi.endDate;
+    return cdInQ || cwInQ;
   });
 
   const closedWonRevenue = closedWonDeals.reduce(
