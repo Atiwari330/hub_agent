@@ -368,7 +368,7 @@ export function DemoEconomicsView() {
   const dateRange = `${qStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${qEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
 
   return (
-    <div className="p-6 space-y-4 max-w-6xl">
+    <div className="p-6 space-y-4">
       {/* Header */}
       <div className="flex items-baseline gap-3">
         <h1 className="text-xl font-bold text-gray-900">Demo Economics — {data.quarter.label}</h1>

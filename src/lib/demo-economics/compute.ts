@@ -37,13 +37,49 @@ export async function computeQuarterStageCounts(
 ): Promise<QuarterStageCounts> {
   const qi = getQuarterInfo(year, quarter);
 
-  const { data: deals, error } = await supabase
-    .from('deals')
-    .select(
-      'id, deal_name, amount, deal_stage, demo_scheduled_entered_at, demo_completed_entered_at, closed_won_entered_at, close_date'
-    );
+  // Quarter date boundaries as YYYY-MM-DD for close_date (DATE column) comparison
+  const startMonth = (quarter - 1) * 3;
+  const qStartDate = `${year}-${String(startMonth + 1).padStart(2, '0')}-01`;
+  const lastDay = new Date(year, startMonth + 3, 0).getDate();
+  const qEndDate = `${year}-${String(startMonth + 3).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
 
-  if (error) throw new Error(`Failed to fetch deals: ${error.message}`);
+  // Run two targeted queries instead of one unfiltered query.
+  // The deals table has ~2000 rows and Supabase defaults to 1000 row limit.
+
+  // Query 1: Deals with demo timestamps that could be in this quarter
+  // (We fetch all deals with non-null demo timestamps — much smaller set than all deals)
+  const { data: demoDeals, error: err1 } = await supabase
+    .from('deals')
+    .select('id, deal_name, amount, deal_stage, demo_scheduled_entered_at, demo_completed_entered_at')
+    .or('demo_scheduled_entered_at.not.is.null,demo_completed_entered_at.not.is.null');
+
+  if (err1) throw new Error(`Failed to fetch demo deals: ${err1.message}`);
+
+  // Query 2: Closed-won deals with close_date in this quarter
+  const { data: closedWonByDate, error: err2 } = await supabase
+    .from('deals')
+    .select('id, deal_name, amount, deal_stage, close_date, closed_won_entered_at')
+    .eq('deal_stage', CLOSED_WON_ID)
+    .gte('close_date', qStartDate)
+    .lte('close_date', qEndDate);
+
+  if (err2) throw new Error(`Failed to fetch closed-won deals: ${err2.message}`);
+
+  // Query 3: Closed-won deals by closed_won_entered_at in quarter (catches deals where close_date doesn't match)
+  const { data: closedWonByTimestamp, error: err3 } = await supabase
+    .from('deals')
+    .select('id, deal_name, amount, deal_stage, close_date, closed_won_entered_at')
+    .eq('deal_stage', CLOSED_WON_ID)
+    .gte('closed_won_entered_at', qi.startDate.toISOString())
+    .lte('closed_won_entered_at', qi.endDate.toISOString());
+
+  if (err3) throw new Error(`Failed to fetch closed-won deals by timestamp: ${err3.message}`);
+
+  // Merge closed-won results (deduplicate by id)
+  const closedWonMap = new Map<string, typeof closedWonByDate extends (infer T)[] | null ? T : never>();
+  for (const d of closedWonByDate || []) closedWonMap.set(d.id, d);
+  for (const d of closedWonByTimestamp || []) closedWonMap.set(d.id, d);
+  const closedWonDeals = Array.from(closedWonMap.values());
 
   function isInQuarter(dateStr: string | null): boolean {
     if (!dateStr) return false;
@@ -52,34 +88,18 @@ export async function computeQuarterStageCounts(
   }
 
   // Demo Scheduled: entered in quarter, exclude regressions to MQL/SQL
-  const demoScheduledDeals = (deals || []).filter(
+  const demoScheduledDeals = (demoDeals || []).filter(
     (d) =>
       isInQuarter(d.demo_scheduled_entered_at) &&
       !REGRESSION_STAGES.demoScheduled.has(d.deal_stage)
   );
 
   // Demo Completed: entered in quarter, exclude regressions to MQL/SQL/Demo Scheduled
-  const demoCompletedDeals = (deals || []).filter(
+  const demoCompletedDeals = (demoDeals || []).filter(
     (d) =>
       isInQuarter(d.demo_completed_entered_at) &&
       !REGRESSION_STAGES.demoCompleted.has(d.deal_stage)
   );
-
-  // Quarter date boundaries as YYYY-MM-DD for close_date (DATE column) comparison
-  const startMonth = (quarter - 1) * 3;
-  const qStartDate = `${year}-${String(startMonth + 1).padStart(2, '0')}-01`;
-  const lastDay = new Date(year, startMonth + 3, 0).getDate();
-  const qEndDate = `${year}-${String(startMonth + 3).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
-
-  // Closed Won: deal currently in closed-won stage with EITHER close_date or closed_won_entered_at in quarter
-  const closedWonDeals = (deals || []).filter((d) => {
-    if (d.deal_stage !== CLOSED_WON_ID) return false;
-    // Check close_date (DATE column) via string comparison to avoid UTC/EST issues
-    const cdInQ = d.close_date && d.close_date >= qStartDate && d.close_date <= qEndDate;
-    // Check closed_won_entered_at (TIMESTAMP column) via normal date comparison
-    const cwInQ = d.closed_won_entered_at && new Date(d.closed_won_entered_at) >= qi.startDate && new Date(d.closed_won_entered_at) <= qi.endDate;
-    return cdInQ || cwInQ;
-  });
 
   const closedWonRevenue = closedWonDeals.reduce(
     (sum, d) => sum + (d.amount ? Number(d.amount) : 0),

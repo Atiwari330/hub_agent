@@ -93,10 +93,11 @@ export async function GET(request: NextRequest) {
         };
       });
     } else {
-      // Compute weekly data from deals table directly
+      // Compute weekly data from deals table directly (only deals with demo timestamps)
       const { data: allDeals } = await supabase
         .from('deals')
-        .select('demo_scheduled_entered_at, demo_completed_entered_at, deal_stage');
+        .select('demo_scheduled_entered_at, demo_completed_entered_at, deal_stage')
+        .or('demo_scheduled_entered_at.not.is.null,demo_completed_entered_at.not.is.null');
 
       // Build 13 week buckets
       const weekBuckets: Array<{ weekNumber: number; weekStart: Date; weekEnd: Date; sched: number; comp: number }> = [];
