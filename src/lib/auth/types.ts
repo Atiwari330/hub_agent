@@ -142,8 +142,9 @@ export function getResourceFromPath(pathname: string): Resource | null {
   // Hot Tracker
   if (pathname.includes('/dashboard/hot-tracker')) return RESOURCES.HOT_TRACKER;
 
-  // Demo Tracker
+  // Demo Tracker & Demo Economics
   if (pathname.includes('/dashboard/demo-tracker')) return RESOURCES.DEMO_TRACKER;
+  if (pathname.includes('/dashboard/demo-economics')) return RESOURCES.DEMO_TRACKER;
 
   // AE pages
   if (pathname.match(/\/dashboard\/ae\/[^/]+/)) return RESOURCES.AE_DETAIL;
@@ -214,6 +215,7 @@ export function getResourceFromPath(pathname: string): Resource | null {
   if (pathname.includes('/api/briefing')) return RESOURCES.MORNING_BRIEFING;
   if (pathname.includes('/api/hot-tracker')) return RESOURCES.HOT_TRACKER;
   if (pathname.includes('/api/demo-tracker')) return RESOURCES.DEMO_TRACKER;
+  if (pathname.includes('/api/demo-economics')) return RESOURCES.DEMO_TRACKER;
   if (pathname.match(/\/api\/ae\/[^/]+/)) return RESOURCES.AE_DETAIL;
 
   return null;

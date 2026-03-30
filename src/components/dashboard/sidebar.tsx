@@ -196,8 +196,9 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
   const isOnBriefing = pathname === '/dashboard/briefing';
   // Hot Tracker
   const isOnHotTracker = pathname === '/dashboard/hot-tracker';
-  // Demo Tracker
+  // Demo Tracker & Demo Economics
   const isOnDemoTracker = pathname === '/dashboard/demo-tracker';
+  const isOnDemoEconomics = pathname === '/dashboard/demo-economics';
   // PPL Dashboard
   const isOnPplDashboard = pathname === '/dashboard/ppl';
   // Admin
@@ -388,6 +389,26 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
               </svg>
               {!isCollapsed && <span>Demo Tracker</span>}
+            </Link>
+          </div>
+        )}
+
+        {/* Demo Economics */}
+        {hasPermission(user, RESOURCES.DEMO_TRACKER) && (
+          <div className="mb-2">
+            <Link
+              href="/dashboard/demo-economics"
+              className={`flex items-center gap-3 py-2.5 text-sm font-medium transition-colors ${isCollapsed ? 'px-0 justify-center' : 'px-4'} ${
+                isOnDemoEconomics
+                  ? 'bg-indigo-600 text-white'
+                  : 'text-slate-300 hover:bg-slate-800'
+              }`}
+              title={isCollapsed ? 'Demo Economics' : undefined}
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+              </svg>
+              {!isCollapsed && <span>Demo Economics</span>}
             </Link>
           </div>
         )}
