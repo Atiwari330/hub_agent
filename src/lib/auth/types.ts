@@ -47,6 +47,7 @@ export const RESOURCES = {
   STRATEGIC_DIRECTIVES: 'strategic:directives',
   MORNING_BRIEFING: 'morning_briefing',
   PPL_DASHBOARD: 'ppl_dashboard',
+  Q2_GOAL_TRACKER: 'q2_goal_tracker',
 } as const;
 
 export type Resource = (typeof RESOURCES)[keyof typeof RESOURCES];
@@ -145,6 +146,7 @@ export function getResourceFromPath(pathname: string): Resource | null {
   // Demo Tracker & Demo Economics
   if (pathname.includes('/dashboard/demo-tracker')) return RESOURCES.DEMO_TRACKER;
   if (pathname.includes('/dashboard/demo-economics')) return RESOURCES.DEMO_TRACKER;
+  if (pathname.includes('/dashboard/q2-goal-tracker')) return RESOURCES.Q2_GOAL_TRACKER;
 
   // AE pages
   if (pathname.match(/\/dashboard\/ae\/[^/]+/)) return RESOURCES.AE_DETAIL;
@@ -216,6 +218,7 @@ export function getResourceFromPath(pathname: string): Resource | null {
   if (pathname.includes('/api/hot-tracker')) return RESOURCES.HOT_TRACKER;
   if (pathname.includes('/api/demo-tracker')) return RESOURCES.DEMO_TRACKER;
   if (pathname.includes('/api/demo-economics')) return RESOURCES.DEMO_TRACKER;
+  if (pathname.includes('/api/q2-goal-tracker')) return RESOURCES.Q2_GOAL_TRACKER;
   if (pathname.match(/\/api\/ae\/[^/]+/)) return RESOURCES.AE_DETAIL;
 
   return null;

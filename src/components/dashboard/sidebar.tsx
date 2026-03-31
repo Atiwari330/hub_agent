@@ -199,6 +199,8 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
   // Demo Tracker & Demo Economics
   const isOnDemoTracker = pathname === '/dashboard/demo-tracker';
   const isOnDemoEconomics = pathname === '/dashboard/demo-economics';
+  // Q2 Goal Tracker
+  const isOnQ2GoalTracker = pathname === '/dashboard/q2-goal-tracker';
   // PPL Dashboard
   const isOnPplDashboard = pathname === '/dashboard/ppl';
   // Admin
@@ -409,6 +411,26 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
               </svg>
               {!isCollapsed && <span>Demo Economics</span>}
+            </Link>
+          </div>
+        )}
+
+        {/* Q2 Goal Tracker */}
+        {hasPermission(user, RESOURCES.Q2_GOAL_TRACKER) && (
+          <div className="mb-2">
+            <Link
+              href="/dashboard/q2-goal-tracker"
+              className={`flex items-center gap-3 py-2.5 text-sm font-medium transition-colors ${isCollapsed ? 'px-0 justify-center' : 'px-4'} ${
+                isOnQ2GoalTracker
+                  ? 'bg-indigo-600 text-white'
+                  : 'text-slate-300 hover:bg-slate-800'
+              }`}
+              title={isCollapsed ? 'Q2 Goal Tracker' : undefined}
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+              </svg>
+              {!isCollapsed && <span>Q2 Goal Tracker</span>}
             </Link>
           </div>
         )}
