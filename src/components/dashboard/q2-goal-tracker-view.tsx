@@ -119,16 +119,20 @@ export function Q2GoalTrackerView() {
     const defaultDemos = defaults ? computeDemosNeeded(defaultDeals, defaults.demoToWonRate) : demosNeeded;
     const defaultLeads = defaults ? computeLeadsNeeded(defaultDemos, defaults.createToDemoRate) : leadsNeeded;
 
-    // Deadline calculations — dynamic based on slider cycle time
+    // Deadline calculations — both dynamic based on slider cycle time
+    // Demo-to-close portion = full cycle minus create-to-demo portion
+    // As you compress the full cycle, the demo deadline moves later (more time)
     const q2EndMs = new Date(data.quarter.endDate).getTime();
-    const demoDeadline = new Date(q2EndMs - selectedRates.medianDemoToClose * 86400000);
+    const createToDemoDays = selectedRates.medianCreateToDemo || 6;
+    const demoToCloseDays = Math.max(7, sliders.cycleTime - createToDemoDays);
+    const demoDeadline = new Date(q2EndMs - demoToCloseDays * 86400000);
     const leadDeadline = new Date(q2EndMs - sliders.cycleTime * 86400000);
 
     return {
       dealsNeeded, demosNeeded, leadsNeeded,
       weightedPipeline, teamForecastRaw, teamForecastWeighted, gap, gapCloses,
       timeline, aeBreakdown, sourceReqs, weeklyTargets,
-      demoDeadline,
+      demoDeadline, demoToCloseDays,
       leadDeadline,
       deltaDeals: dealsNeeded - defaultDeals,
       deltaDemos: demosNeeded - defaultDemos,
@@ -374,20 +378,30 @@ export function Q2GoalTrackerView() {
         <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
           <div className="bg-red-50 rounded-lg px-5 py-4 border border-red-200">
             <div className="text-xs font-semibold text-red-600 uppercase tracking-wide">Demo Completion Deadline</div>
-            <div className="text-2xl font-bold text-red-800 mt-1">
-              {computed.demoDeadline.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}
+            <div className="flex items-baseline gap-3 mt-1">
+              <span className="text-2xl font-bold text-red-800">
+                {computed.demosNeeded} demos
+              </span>
+              <span className="text-lg font-semibold text-red-700">
+                by {computed.demoDeadline.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}
+              </span>
             </div>
             <div className="text-xs text-red-600 mt-1">
-              All demos must be completed by this date to close within Q2 (based on {Math.round((new Date(data.quarter.endDate).getTime() - computed.demoDeadline.getTime()) / 86400000)}-day median demo-to-close cycle)
+              Based on {computed.demoToCloseDays}-day demo-to-close cycle. Demos completed after this date are unlikely to close in Q2.
             </div>
           </div>
           <div className="bg-amber-50 rounded-lg px-5 py-4 border border-amber-200">
             <div className="text-xs font-semibold text-amber-600 uppercase tracking-wide">New Lead Creation Deadline</div>
-            <div className="text-2xl font-bold text-amber-800 mt-1">
-              {computed.leadDeadline.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}
+            <div className="flex items-baseline gap-3 mt-1">
+              <span className="text-2xl font-bold text-amber-800">
+                {computed.leadsNeeded} leads
+              </span>
+              <span className="text-lg font-semibold text-amber-700">
+                by {computed.leadDeadline.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}
+              </span>
             </div>
             <div className="text-xs text-amber-600 mt-1">
-              New leads must be created by this date to close within Q2 (based on {sliders.cycleTime}-day median full cycle)
+              Based on {sliders.cycleTime}-day full cycle. Leads created after this date are unlikely to close in Q2.
             </div>
           </div>
         </div>
