@@ -52,6 +52,9 @@ export interface PipelineCredit {
   postDemoCount: number;
   preDemoRawARR: number;
   preDemoCount: number;
+  teamForecastARR: number;       // Sum of deals team confirmed "likely to close in Q2"
+  teamForecastCount: number;
+  teamForecastByAE: { name: string; arr: number; count: number }[];
   topDeals: PipelineDeal[];
 }
 

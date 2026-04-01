@@ -33,6 +33,27 @@ const STAGE_LABEL: Record<string, string> = Object.fromEntries(
   Object.values(SALES_PIPELINE_STAGES).map((s) => [s.id, s.label])
 );
 
+// Team-confirmed deals likely to close in Q2 (from pipeline triage exercise)
+// HubSpot Deal IDs where AEs said "Yes" to likely-to-close-in-Q2
+// Jack's deals (blank) are treated as "No" until confirmed
+// Last updated: 2026-04-01
+const TEAM_CONFIRMED_DEAL_IDS = new Set([
+  '55503351361', // Honey Lake Clinic - Chris - $100K
+  '58386755995', // Karolyn Worrell - Family Therapy Associates - Chris - $58K
+  '56449294650', // CMETFL | Eileen Rojas - Chris - $50K
+  '58208245310', // Gastineau Human Services - Chris - $45K
+  '57990777400', // Patrick Gallagher - Beecon Recovery - Chris - $30K
+  '53682351788', // Way Back Inn - Chris - $17.8K (grant dependent)
+  '58136032844', // Railbelt Mental Health - Chris - $17.5K
+  '54207891057', // Mirta Cabrera - Chris - $15K
+  '56942892436', // Ramah Vulles - TRS Recovery - Chris - $10K
+  '56981719313', // Serenity Outpatient Services - Chris - $10K
+  '57619606628', // MUSKEG Wellness - Chris - $10K (grant dependent)
+  '56715236962', // Carina Robinson - Think Rehab - Chris - $8K
+  '54258016884', // Family Service League - Adi - $14.2K
+  '47416276887', // Peoria Tribe - Adi - $11K
+]);
+
 // AE targets from the Q2 2026 KPI document
 const AE_TARGETS: Record<string, number> = {
   'cgarraffa@opusbehavioral.com': 400000,
@@ -389,11 +410,30 @@ export async function computeQ2GoalTrackerData(supabase: SupabaseClient) {
       };
     });
 
+  // Team forecast: deals confirmed "likely to close in Q2" by AEs
+  const teamConfirmedDeals = activeDeals.filter((d) => TEAM_CONFIRMED_DEAL_IDS.has(d.hubspot_deal_id));
+  const teamForecastARR = teamConfirmedDeals.reduce((s, d) => s + (Number(d.amount) || 0), 0);
+
+  // Group by AE
+  const forecastByAEMap = new Map<string, { name: string; arr: number; count: number }>();
+  for (const d of teamConfirmedDeals) {
+    const owner = ownerMap.get(d.owner_id);
+    const name = owner ? `${owner.first_name} ${owner.last_name}` : 'Unknown';
+    const key = d.owner_id || 'unknown';
+    if (!forecastByAEMap.has(key)) forecastByAEMap.set(key, { name, arr: 0, count: 0 });
+    const entry = forecastByAEMap.get(key)!;
+    entry.arr += Number(d.amount) || 0;
+    entry.count++;
+  }
+
   const pipelineCredit: PipelineCredit = {
     postDemoRawARR: postDemo.reduce((s, d) => s + (Number(d.amount) || 0), 0),
     postDemoCount: postDemo.length,
     preDemoRawARR: preDemo.reduce((s, d) => s + (Number(d.amount) || 0), 0),
     preDemoCount: preDemo.length,
+    teamForecastARR,
+    teamForecastCount: teamConfirmedDeals.length,
+    teamForecastByAE: Array.from(forecastByAEMap.values()).sort((a, b) => b.arr - a.arr),
     topDeals,
   };
 

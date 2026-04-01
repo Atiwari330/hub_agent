@@ -101,7 +101,9 @@ export function Q2GoalTrackerView() {
     const demosNeeded = computeDemosNeeded(dealsNeeded, sliders.demoToWonRate);
     const leadsNeeded = computeLeadsNeeded(demosNeeded, sliders.createToDemoRate);
     const weightedPipeline = computeWeightedPipeline(data.pipelineCredit, sliders.demoToWonRate, sliders.createToDemoRate);
-    const gap = computeGap(data.teamTarget, weightedPipeline);
+    const teamForecast = data.pipelineCredit.teamForecastARR || 0;
+    const teamForecastGap = computeGap(data.teamTarget, teamForecast);
+    const gap = computeGap(data.teamTarget, teamForecast); // Use team forecast as the real pipeline number
     const gapCloses = computeDealsNeeded(gap, sliders.avgDealSize);
     const selectedRates = data.rateSets?.[selectedRateSetIndex]?.rates || data.historicalRates;
     const timeline = computeWeeklyTimeline(
@@ -119,7 +121,7 @@ export function Q2GoalTrackerView() {
 
     return {
       dealsNeeded, demosNeeded, leadsNeeded,
-      weightedPipeline, gap, gapCloses,
+      weightedPipeline, teamForecast, teamForecastGap, gap, gapCloses,
       timeline, aeBreakdown, sourceReqs, weeklyTargets,
       deltaDeals: dealsNeeded - defaultDeals,
       deltaDemos: demosNeeded - defaultDemos,
@@ -227,7 +229,7 @@ export function Q2GoalTrackerView() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <HeadlineCard
           label="Team Target" value={fmt(data.teamTarget)}
-          sub={`Pipeline: ${fmt(computed.weightedPipeline)} weighted`}
+          sub={`Team Forecast: ${fmt(computed.teamForecast)} (${data.pipelineCredit.teamForecastCount} deals)`}
           sub2={`Gap: ${fmt(computed.gap)}`}
           color="indigo"
         />
@@ -327,7 +329,7 @@ export function Q2GoalTrackerView() {
         <div className="flex items-center gap-3 mt-4 pt-4 border-t border-gray-100 overflow-x-auto pb-3 justify-center">
           <ChainBoxLg label="Target" value={fmt(data.teamTarget)} />
           <ChainOpLg op="−" />
-          <ChainBoxLg label="Pipeline" value={fmt(computed.weightedPipeline)} muted />
+          <ChainBoxLg label="Team Forecast" value={fmt(computed.teamForecast)} muted />
           <ChainOpLg op="=" />
           <ChainBoxLg label="Gap" value={fmt(computed.gap)} highlight />
           <ChainOpLg op="→" />
@@ -484,16 +486,16 @@ export function Q2GoalTrackerView() {
       <div className="bg-white rounded-xl border border-gray-200 p-6">
         <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-4">Existing Pipeline Entering Q2</h2>
 
-        {/* Stacked bar */}
+        {/* Stacked bar — uses team forecast */}
         <div className="mb-4">
           <div className="flex h-8 rounded-lg overflow-hidden border border-gray-200">
-            {computed.weightedPipeline > 0 && (
+            {computed.teamForecast > 0 && (
               <div
-                className="bg-green-400 flex items-center justify-center text-[10px] font-bold text-white"
-                style={{ width: `${Math.min((computed.weightedPipeline / data.teamTarget) * 100, 100)}%` }}
-                title={`Weighted Pipeline: ${fmtFull(computed.weightedPipeline)}`}
+                className="bg-emerald-500 flex items-center justify-center text-[10px] font-bold text-white"
+                style={{ width: `${Math.min((computed.teamForecast / data.teamTarget) * 100, 100)}%` }}
+                title={`Team Forecast: ${fmtFull(computed.teamForecast)}`}
               >
-                {fmt(computed.weightedPipeline)}
+                Team Forecast: {fmt(computed.teamForecast)}
               </div>
             )}
             {computed.gap > 0 && (
@@ -511,23 +513,44 @@ export function Q2GoalTrackerView() {
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-4 mb-4 text-sm">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4 text-sm">
+          <div className="bg-emerald-50 rounded-lg p-3 border border-emerald-200">
+            <div className="text-xs text-emerald-600 font-medium">Team Forecast (AE-confirmed)</div>
+            <div className="text-lg font-bold text-emerald-800">{fmt(computed.teamForecast)}</div>
+            <div className="text-xs text-emerald-500">{data.pipelineCredit.teamForecastCount} deals marked &ldquo;likely to close&rdquo;</div>
+          </div>
           <div className="bg-green-50 rounded-lg p-3 border border-green-200">
-            <div className="text-xs text-green-600 font-medium">Post-Demo Pipeline</div>
+            <div className="text-xs text-green-600 font-medium">Post-Demo Pipeline (raw)</div>
             <div className="text-lg font-bold text-green-800">{fmt(data.pipelineCredit.postDemoRawARR)}</div>
-            <div className="text-xs text-green-500">{data.pipelineCredit.postDemoCount} deals (raw)</div>
+            <div className="text-xs text-green-500">{data.pipelineCredit.postDemoCount} deals total</div>
           </div>
           <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
-            <div className="text-xs text-blue-600 font-medium">Pre-Demo Pipeline</div>
+            <div className="text-xs text-blue-600 font-medium">Pre-Demo Pipeline (raw)</div>
             <div className="text-lg font-bold text-blue-800">{fmt(data.pipelineCredit.preDemoRawARR)}</div>
-            <div className="text-xs text-blue-500">{data.pipelineCredit.preDemoCount} deals (raw)</div>
+            <div className="text-xs text-blue-500">{data.pipelineCredit.preDemoCount} deals</div>
           </div>
-          <div className="bg-indigo-50 rounded-lg p-3 border border-indigo-200">
-            <div className="text-xs text-indigo-600 font-medium">Weighted Total</div>
-            <div className="text-lg font-bold text-indigo-800">{fmt(computed.weightedPipeline)}</div>
-            <div className="text-xs text-indigo-500">After conversion rates applied</div>
+          <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+            <div className="text-xs text-gray-500 font-medium">Statistical Weighted</div>
+            <div className="text-lg font-bold text-gray-600">{fmt(computed.weightedPipeline)}</div>
+            <div className="text-xs text-gray-400">Based on historical conversion rates</div>
           </div>
         </div>
+
+        {/* Team forecast by AE */}
+        {data.pipelineCredit.teamForecastByAE && data.pipelineCredit.teamForecastByAE.length > 0 && (
+          <div className="mb-4 bg-emerald-50 rounded-lg p-3 border border-emerald-200">
+            <h3 className="text-xs font-semibold text-emerald-700 uppercase tracking-wide mb-2">Team Forecast by AE</h3>
+            <div className="flex gap-4">
+              {data.pipelineCredit.teamForecastByAE.map((ae) => (
+                <div key={ae.name} className="text-sm">
+                  <span className="font-medium text-emerald-800">{ae.name}:</span>{' '}
+                  <span className="text-emerald-600">{fmt(ae.arr)} ({ae.count} deals)</span>
+                </div>
+              ))}
+            </div>
+            <div className="text-[10px] text-emerald-500 mt-1">Jack Rice&apos;s deals pending confirmation — treated as not included for now</div>
+          </div>
+        )}
 
         {/* Top deals table */}
         <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Top Post-Demo Deals</h3>
