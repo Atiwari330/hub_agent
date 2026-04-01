@@ -119,10 +119,17 @@ export function Q2GoalTrackerView() {
     const defaultDemos = defaults ? computeDemosNeeded(defaultDeals, defaults.demoToWonRate) : demosNeeded;
     const defaultLeads = defaults ? computeLeadsNeeded(defaultDemos, defaults.createToDemoRate) : leadsNeeded;
 
+    // Deadline calculations — dynamic based on slider cycle time
+    const q2EndMs = new Date(data.quarter.endDate).getTime();
+    const demoDeadline = new Date(q2EndMs - selectedRates.medianDemoToClose * 86400000);
+    const leadDeadline = new Date(q2EndMs - sliders.cycleTime * 86400000);
+
     return {
       dealsNeeded, demosNeeded, leadsNeeded,
       weightedPipeline, teamForecastRaw, teamForecastWeighted, gap, gapCloses,
       timeline, aeBreakdown, sourceReqs, weeklyTargets,
+      demoDeadline,
+      leadDeadline,
       deltaDeals: dealsNeeded - defaultDeals,
       deltaDemos: demosNeeded - defaultDemos,
       deltaLeads: leadsNeeded - defaultLeads,
@@ -363,16 +370,37 @@ export function Q2GoalTrackerView() {
           <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-amber-200 border border-amber-400" /> Demo only (too late for new leads)</span>
           <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-red-200 border border-red-400" /> Too late for median deal</span>
         </div>
-        {computed.timeline.some((w) => w.zone === 'yellow') && (
-          <p className="mt-3 text-sm text-gray-600 bg-amber-50 rounded-lg px-4 py-2 border border-amber-200">
-            Week {computed.timeline.find((w) => w.zone === 'yellow')?.weekNumber} ({formatWeekLabel(computed.timeline.find((w) => w.zone === 'yellow')?.weekStart || '')}) is the last week to create new leads that close within the {sliders.cycleTime}-day median cycle. After that, only existing pipeline can convert.
-          </p>
-        )}
+        {/* Deadline callout — dynamic based on sliders */}
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="bg-red-50 rounded-lg px-5 py-4 border border-red-200">
+            <div className="text-xs font-semibold text-red-600 uppercase tracking-wide">Demo Completion Deadline</div>
+            <div className="text-2xl font-bold text-red-800 mt-1">
+              {computed.demoDeadline.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}
+            </div>
+            <div className="text-xs text-red-600 mt-1">
+              All demos must be completed by this date to close within Q2 (based on {Math.round((new Date(data.quarter.endDate).getTime() - computed.demoDeadline.getTime()) / 86400000)}-day median demo-to-close cycle)
+            </div>
+          </div>
+          <div className="bg-amber-50 rounded-lg px-5 py-4 border border-amber-200">
+            <div className="text-xs font-semibold text-amber-600 uppercase tracking-wide">New Lead Creation Deadline</div>
+            <div className="text-2xl font-bold text-amber-800 mt-1">
+              {computed.leadDeadline.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}
+            </div>
+            <div className="text-xs text-amber-600 mt-1">
+              New leads must be created by this date to close within Q2 (based on {sliders.cycleTime}-day median full cycle)
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* ── Section 5: Cumulative Revenue Pacing ── */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-4">Cumulative Revenue Pacing</h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Cumulative Revenue Pacing</h2>
+          {chartData.every((d) => d.actual === 0) && (
+            <span className="text-xs text-gray-400">Populates as deals close throughout Q2</span>
+          )}
+        </div>
         <div className="h-72">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={chartData} margin={{ top: 10, right: 30, left: 10, bottom: 0 }}>
@@ -452,6 +480,7 @@ export function Q2GoalTrackerView() {
               <tr className="border-b border-gray-200">
                 <th className="text-left py-2 pr-4 font-medium text-gray-500">AE</th>
                 <th className="text-right py-2 px-3 font-medium text-gray-500">Q2 Target</th>
+                <th className="text-right py-2 px-3 font-medium text-gray-500">Pipeline</th>
                 <th className="text-right py-2 px-3 font-medium text-gray-500">Closes</th>
                 <th className="text-right py-2 px-3 font-medium text-gray-500">Demos</th>
                 <th className="text-right py-2 px-3 font-medium text-gray-500">Leads</th>
@@ -461,10 +490,15 @@ export function Q2GoalTrackerView() {
               </tr>
             </thead>
             <tbody>
-              {computed.aeBreakdown.map((ae) => (
+              {computed.aeBreakdown.map((ae) => {
+                const aeForecast = data.pipelineCredit.teamForecastByAE?.find((f) => f.name === ae.name);
+                return (
                 <tr key={ae.email} className="border-b border-gray-100 hover:bg-gray-50">
                   <td className="py-2.5 pr-4 font-medium text-gray-900">{ae.name}</td>
                   <td className="py-2.5 px-3 text-right">{fmt(ae.q2Target)}</td>
+                  <td className="py-2.5 px-3 text-right text-emerald-600 font-medium">
+                    {aeForecast ? `${fmt(aeForecast.arr)} (${aeForecast.count})` : '—'}
+                  </td>
                   <td className="py-2.5 px-3 text-right font-semibold">{ae.closesNeeded}</td>
                   <td className="py-2.5 px-3 text-right">{ae.demosNeeded}</td>
                   <td className="py-2.5 px-3 text-right">{ae.leadsNeeded}</td>
@@ -476,7 +510,8 @@ export function Q2GoalTrackerView() {
                     <GapBadge factor={ae.gapFactor} />
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -552,32 +587,6 @@ export function Q2GoalTrackerView() {
           </div>
         )}
 
-        {/* Top deals table */}
-        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Top Post-Demo Deals</h3>
-        <div className="overflow-x-auto max-h-64 overflow-y-auto">
-          <table className="w-full text-xs">
-            <thead className="sticky top-0 bg-white">
-              <tr className="border-b border-gray-200">
-                <th className="text-left py-1.5 pr-3 font-medium text-gray-500">Deal</th>
-                <th className="text-left py-1.5 px-3 font-medium text-gray-500">AE</th>
-                <th className="text-left py-1.5 px-3 font-medium text-gray-500">Stage</th>
-                <th className="text-right py-1.5 px-3 font-medium text-gray-500">Amount</th>
-                <th className="text-right py-1.5 pl-3 font-medium text-gray-500">Days</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.pipelineCredit.topDeals.map((d, i) => (
-                <tr key={i} className="border-b border-gray-50 hover:bg-gray-50">
-                  <td className="py-1.5 pr-3 text-gray-800 truncate max-w-[200px]">{d.dealName}</td>
-                  <td className="py-1.5 px-3 text-gray-500">{d.ownerName}</td>
-                  <td className="py-1.5 px-3 text-gray-500">{d.stage}</td>
-                  <td className="py-1.5 px-3 text-right font-medium text-gray-800">{fmt(d.amount)}</td>
-                  <td className="py-1.5 pl-3 text-right text-gray-400">{d.daysInPipeline}d</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
       </div>
 
       {/* ── Footer ── */}
