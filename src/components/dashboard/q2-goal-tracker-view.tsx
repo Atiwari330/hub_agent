@@ -597,7 +597,7 @@ export function Q2GoalTrackerView() {
                 </div>
               ))}
             </div>
-            <div className="text-[10px] text-emerald-500 mt-1">Jack Rice&apos;s deals pending confirmation — treated as not included for now</div>
+            <div className="text-[10px] text-emerald-500 mt-1">Based on team pipeline triage — all AEs confirmed</div>
           </div>
         )}
 

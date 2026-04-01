@@ -35,23 +35,27 @@ const STAGE_LABEL: Record<string, string> = Object.fromEntries(
 
 // Team-confirmed deals likely to close in Q2 (from pipeline triage exercise)
 // HubSpot Deal IDs where AEs said "Yes" to likely-to-close-in-Q2
-// Jack's deals (blank) are treated as "No" until confirmed
-// Last updated: 2026-04-01
+// Last updated: 2026-04-01 (includes Jack's confirmations)
 const TEAM_CONFIRMED_DEAL_IDS = new Set([
-  '55503351361', // Honey Lake Clinic - Chris - $100K
-  '58386755995', // Karolyn Worrell - Family Therapy Associates - Chris - $58K
-  '56449294650', // CMETFL | Eileen Rojas - Chris - $50K
-  '58208245310', // Gastineau Human Services - Chris - $45K
-  '57990777400', // Patrick Gallagher - Beecon Recovery - Chris - $30K
-  '53682351788', // Way Back Inn - Chris - $17.8K (grant dependent)
-  '58136032844', // Railbelt Mental Health - Chris - $17.5K
-  '54207891057', // Mirta Cabrera - Chris - $15K
-  '56942892436', // Ramah Vulles - TRS Recovery - Chris - $10K
-  '56981719313', // Serenity Outpatient Services - Chris - $10K
-  '57619606628', // MUSKEG Wellness - Chris - $10K (grant dependent)
-  '56715236962', // Carina Robinson - Think Rehab - Chris - $8K
-  '54258016884', // Family Service League - Adi - $14.2K
-  '47416276887', // Peoria Tribe - Adi - $11K
+  // Chris Garraffa - 12 deals, $371K
+  '55503351361', // Honey Lake Clinic - $100K
+  '58386755995', // Karolyn Worrell - Family Therapy Associates - $58K
+  '56449294650', // CMETFL | Eileen Rojas - $50K
+  '58208245310', // Gastineau Human Services - $45K
+  '57990777400', // Patrick Gallagher - Beecon Recovery - $30K
+  '53682351788', // Way Back Inn - $17.8K (grant dependent)
+  '58136032844', // Railbelt Mental Health - $17.5K
+  '54207891057', // Mirta Cabrera - $15K
+  '56942892436', // Ramah Vulles - TRS Recovery - $10K
+  '56981719313', // Serenity Outpatient Services - $10K
+  '57619606628', // MUSKEG Wellness - $10K (grant dependent)
+  '56715236962', // Carina Robinson - Think Rehab - $8K
+  // Jack Rice - 2 deals, $42K
+  '55433807933', // New Horizons Recovery Center - $30K
+  '58522738565', // City of Livingston, MT - $12K
+  // Adi Tiwari - 2 deals, $25K
+  '54258016884', // Family Service League - $14.2K
+  '47416276887', // Peoria Tribe - $11K
 ]);
 
 // AE targets from the Q2 2026 KPI document
