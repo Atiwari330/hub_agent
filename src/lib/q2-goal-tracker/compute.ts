@@ -10,6 +10,7 @@ import { getQuarterInfo, getQuarterProgress } from '@/lib/utils/quarter';
 import { SALES_PIPELINE_STAGES } from '@/lib/hubspot/stage-config';
 import type {
   HistoricalRates,
+  RateSet,
   LeadSourceRate,
   AEData,
   WeeklyActual,
@@ -91,33 +92,21 @@ function median(arr: number[]): number {
   return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 }
 
-// ── Main compute function ──
+// ── Compute rates for a set of cohort quarters ──
 
-export async function computeQ2GoalTrackerData(supabase: SupabaseClient) {
-  // Fetch all data
-  const [allDeals, ownersResult] = await Promise.all([
-    fetchAllSalesPipelineDeals(supabase),
-    supabase.from('owners').select('id, first_name, last_name, email, hubspot_owner_id'),
-  ]);
-
-  const owners = ownersResult.data || [];
-  const ownerMap = new Map(owners.map((o) => [o.id, o]));
-
-  // ── Historical rates from mature cohorts (Q1-Q4 2025) ──
-  const cohortQuarters = [
-    getQuarterInfo(2025, 1), getQuarterInfo(2025, 2),
-    getQuarterInfo(2025, 3), getQuarterInfo(2025, 4),
-  ];
-
+function computeCohortRates(
+  allDeals: Deal[],
+  quarters: ReturnType<typeof getQuarterInfo>[],
+): { rates: HistoricalRates; totalCreated: number; totalDemoCompleted: number; totalClosedWon: number; totalWonARR: number } {
   let totalCreated = 0;
   let totalDemoCompleted = 0;
   let totalClosedWon = 0;
   let totalWonARR = 0;
-  const allCycleTimes: number[] = [];
-  const allDemoToCloseTimes: number[] = [];
-  const allCreateToDemoTimes: number[] = [];
+  const cycleTimes: number[] = [];
+  const demoToCloseTimes: number[] = [];
+  const createToDemoTimes: number[] = [];
 
-  for (const qi of cohortQuarters) {
+  for (const qi of quarters) {
     const created = allDeals.filter((d) => d.hubspot_created_at && isInQuarter(d.hubspot_created_at, qi));
     totalCreated += created.length;
 
@@ -130,25 +119,146 @@ export async function computeQ2GoalTrackerData(supabase: SupabaseClient) {
 
     for (const d of won) {
       if (d.hubspot_created_at && d.closed_won_entered_at) {
-        allCycleTimes.push(daysBetween(d.hubspot_created_at, d.closed_won_entered_at));
+        cycleTimes.push(daysBetween(d.hubspot_created_at, d.closed_won_entered_at));
       }
       if (d.demo_completed_entered_at && d.closed_won_entered_at) {
-        allDemoToCloseTimes.push(daysBetween(d.demo_completed_entered_at, d.closed_won_entered_at));
+        demoToCloseTimes.push(daysBetween(d.demo_completed_entered_at, d.closed_won_entered_at));
       }
       if (d.hubspot_created_at && d.demo_completed_entered_at) {
-        allCreateToDemoTimes.push(daysBetween(d.hubspot_created_at, d.demo_completed_entered_at));
+        createToDemoTimes.push(daysBetween(d.hubspot_created_at, d.demo_completed_entered_at));
       }
     }
   }
 
-  const historicalRates: HistoricalRates = {
-    avgDealSize: totalClosedWon > 0 ? totalWonARR / totalClosedWon : 25000,
-    demoToWonRate: totalDemoCompleted > 0 ? totalClosedWon / totalDemoCompleted : 0.2,
-    createToDemoRate: totalCreated > 0 ? totalDemoCompleted / totalCreated : 0.5,
-    medianCycleTime: median(allCycleTimes) || 50,
-    medianDemoToClose: median(allDemoToCloseTimes) || 48,
-    medianCreateToDemo: median(allCreateToDemoTimes) || 6,
+  // For Q1 2026 cohort specifically, many deals haven't had time to progress
+  // so we also look at deals that CLOSED in Q1 2026 regardless of creation quarter
+  // for avg deal size and cycle time (stage-entry based approach)
+
+  return {
+    rates: {
+      avgDealSize: totalClosedWon > 0 ? totalWonARR / totalClosedWon : 25000,
+      demoToWonRate: totalDemoCompleted > 0 ? totalClosedWon / totalDemoCompleted : 0.2,
+      createToDemoRate: totalCreated > 0 ? totalDemoCompleted / totalCreated : 0.5,
+      medianCycleTime: median(cycleTimes) || 50,
+      medianDemoToClose: median(demoToCloseTimes) || 48,
+      medianCreateToDemo: median(createToDemoTimes) || 6,
+    },
+    totalCreated,
+    totalDemoCompleted,
+    totalClosedWon,
+    totalWonARR,
   };
+}
+
+// For Q1 2026, we use deals that CLOSED in Q1 (by closed_won_entered_at or close_date)
+// rather than cohort-based, since the cohort is still immature
+function computeQ1_2026ClosingRates(
+  allDeals: Deal[],
+): { rates: HistoricalRates; totalClosedWon: number; totalWonARR: number; totalDemoCompleted: number; totalCreated: number } {
+  const qi = getQuarterInfo(2026, 1);
+  const CLOSED_WON_ID = S.CLOSED_WON.id;
+
+  // Quarter date boundaries for close_date comparison
+  const qStartDate = '2026-01-01';
+  const qEndDate = '2026-03-31';
+
+  // Closed-won by timestamp
+  const wonByTimestamp = allDeals.filter((d) => isInQuarter(d.closed_won_entered_at, qi));
+  // Closed-won by stage + close_date
+  const wonByDate = allDeals.filter((d) =>
+    d.deal_stage === CLOSED_WON_ID && d.close_date && d.close_date >= qStartDate && d.close_date <= qEndDate
+  );
+
+  // Merge & deduplicate
+  const wonMap = new Map<string, Deal>();
+  for (const d of wonByTimestamp) wonMap.set(d.id, d);
+  for (const d of wonByDate) wonMap.set(d.id, d);
+  const closedWon = Array.from(wonMap.values());
+
+  const totalWonARR = closedWon.reduce((s, d) => s + (Number(d.amount) || 0), 0);
+
+  // Demo completed that entered in Q1
+  const demoCompInQ1 = allDeals.filter((d) => isInQuarter(d.demo_completed_entered_at, qi));
+  // Deals created in Q1
+  const createdInQ1 = allDeals.filter((d) => d.hubspot_created_at && isInQuarter(d.hubspot_created_at, qi));
+
+  // Demo→Won = closedWon / demos completed in Q1
+  const demoToWon = demoCompInQ1.length > 0 ? closedWon.length / demoCompInQ1.length : 0.2;
+  // Create→Demo = demos completed / deals created in Q1
+  const createToDemo = createdInQ1.length > 0 ? demoCompInQ1.length / createdInQ1.length : 0.5;
+
+  // Cycle times from the actual closed deals
+  const cycleTimes: number[] = [];
+  const demoToCloseTimes: number[] = [];
+  const createToDemoTimes: number[] = [];
+
+  for (const d of closedWon) {
+    if (d.hubspot_created_at && d.closed_won_entered_at) {
+      cycleTimes.push(daysBetween(d.hubspot_created_at, d.closed_won_entered_at));
+    }
+    if (d.demo_completed_entered_at && d.closed_won_entered_at) {
+      demoToCloseTimes.push(daysBetween(d.demo_completed_entered_at, d.closed_won_entered_at));
+    }
+    if (d.hubspot_created_at && d.demo_completed_entered_at) {
+      createToDemoTimes.push(daysBetween(d.hubspot_created_at, d.demo_completed_entered_at));
+    }
+  }
+
+  return {
+    rates: {
+      avgDealSize: closedWon.length > 0 ? totalWonARR / closedWon.length : 25000,
+      demoToWonRate: demoToWon,
+      createToDemoRate: createToDemo,
+      medianCycleTime: median(cycleTimes) || 50,
+      medianDemoToClose: median(demoToCloseTimes) || 48,
+      medianCreateToDemo: median(createToDemoTimes) || 6,
+    },
+    totalClosedWon: closedWon.length,
+    totalWonARR,
+    totalDemoCompleted: demoCompInQ1.length,
+    totalCreated: createdInQ1.length,
+  };
+}
+
+// ── Main compute function ──
+
+export async function computeQ2GoalTrackerData(supabase: SupabaseClient) {
+  // Fetch all data
+  const [allDeals, ownersResult] = await Promise.all([
+    fetchAllSalesPipelineDeals(supabase),
+    supabase.from('owners').select('id, first_name, last_name, email, hubspot_owner_id'),
+  ]);
+
+  const owners = ownersResult.data || [];
+  const ownerMap = new Map(owners.map((o) => [o.id, o]));
+
+  // ── Rate Set 1: Q1 2026 (default — most recent quarter) ──
+  const q1_2026_data = computeQ1_2026ClosingRates(allDeals);
+  const q1RateSet: RateSet = {
+    label: 'Q1 2026',
+    description: `${q1_2026_data.totalClosedWon} closed-won deals, $${Math.round(q1_2026_data.totalWonARR).toLocaleString()} ARR`,
+    rates: q1_2026_data.rates,
+    sampleSize: q1_2026_data.totalClosedWon,
+    totalARR: q1_2026_data.totalWonARR,
+  };
+
+  // ── Rate Set 2: Q1-Q4 2025 cohorts (larger sample) ──
+  const cohortQuarters = [
+    getQuarterInfo(2025, 1), getQuarterInfo(2025, 2),
+    getQuarterInfo(2025, 3), getQuarterInfo(2025, 4),
+  ];
+  const cohortData = computeCohortRates(allDeals, cohortQuarters);
+  const cohortRateSet: RateSet = {
+    label: 'Q1-Q4 2025',
+    description: `${cohortData.totalClosedWon} closed-won deals, $${Math.round(cohortData.totalWonARR).toLocaleString()} ARR`,
+    rates: cohortData.rates,
+    sampleSize: cohortData.totalClosedWon,
+    totalARR: cohortData.totalWonARR,
+  };
+
+  const rateSets = [q1RateSet, cohortRateSet];
+  // Default = Q1 2026 (first in array)
+  const historicalRates = q1RateSet.rates;
 
   // ── Lead source rates from Q1 2026 (most recent full quarter with PPL data) ──
   const q1_2026 = getQuarterInfo(2026, 1);
@@ -304,6 +414,7 @@ export async function computeQ2GoalTrackerData(supabase: SupabaseClient) {
       currentWeek,
       totalWeeks: 13,
     },
+    rateSets,
     historicalRates,
     leadSourceRates,
     aeData,

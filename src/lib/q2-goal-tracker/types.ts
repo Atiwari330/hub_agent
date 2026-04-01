@@ -55,6 +55,14 @@ export interface PipelineCredit {
   topDeals: PipelineDeal[];
 }
 
+export interface RateSet {
+  label: string;           // e.g., "Q1 2026" or "Q1-Q4 2025"
+  description: string;     // e.g., "13 closed-won deals, $241K ARR"
+  rates: HistoricalRates;
+  sampleSize: number;      // number of closed-won deals
+  totalARR: number;
+}
+
 export interface Q2GoalTrackerApiResponse {
   quarter: {
     year: number;
@@ -70,7 +78,8 @@ export interface Q2GoalTrackerApiResponse {
     currentWeek: number;
     totalWeeks: number;
   };
-  historicalRates: HistoricalRates;
+  rateSets: RateSet[];     // multiple cohort options, first is default
+  historicalRates: HistoricalRates; // kept for backward compat (= first rateSet)
   leadSourceRates: LeadSourceRate[];
   aeData: AEData[];
   weeklyActuals: WeeklyActual[];

@@ -50,6 +50,16 @@ export function Q2GoalTrackerView() {
   const [error, setError] = useState<string | null>(null);
   const [sliders, setSliders] = useState<SliderValues | null>(null);
   const [defaults, setDefaults] = useState<SliderValues | null>(null);
+  const [selectedRateSetIndex, setSelectedRateSetIndex] = useState(0);
+
+  function ratesToSliders(rates: Q2GoalTrackerApiResponse['historicalRates']): SliderValues {
+    return {
+      avgDealSize: Math.round(rates.avgDealSize),
+      demoToWonRate: rates.demoToWonRate,
+      createToDemoRate: rates.createToDemoRate,
+      cycleTime: rates.medianCycleTime,
+    };
+  }
 
   const fetchData = useCallback(async () => {
     try {
@@ -59,20 +69,26 @@ export function Q2GoalTrackerView() {
       const json: Q2GoalTrackerApiResponse = await res.json();
       setData(json);
 
-      const d: SliderValues = {
-        avgDealSize: Math.round(json.historicalRates.avgDealSize),
-        demoToWonRate: json.historicalRates.demoToWonRate,
-        createToDemoRate: json.historicalRates.createToDemoRate,
-        cycleTime: json.historicalRates.medianCycleTime,
-      };
+      // Default to first rate set (Q1 2026)
+      const rates = json.rateSets?.[0]?.rates || json.historicalRates;
+      const d = ratesToSliders(rates);
       setDefaults(d);
       setSliders(d);
+      setSelectedRateSetIndex(0);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load data');
     } finally {
       setLoading(false);
     }
   }, []);
+
+  function switchRateSet(index: number) {
+    if (!data?.rateSets?.[index]) return;
+    setSelectedRateSetIndex(index);
+    const d = ratesToSliders(data.rateSets[index].rates);
+    setDefaults(d);
+    setSliders(d);
+  }
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -87,9 +103,10 @@ export function Q2GoalTrackerView() {
     const weightedPipeline = computeWeightedPipeline(data.pipelineCredit, sliders.demoToWonRate, sliders.createToDemoRate);
     const gap = computeGap(data.teamTarget, weightedPipeline);
     const gapCloses = computeDealsNeeded(gap, sliders.avgDealSize);
+    const selectedRates = data.rateSets?.[selectedRateSetIndex]?.rates || data.historicalRates;
     const timeline = computeWeeklyTimeline(
       data.quarter.startDate, data.quarter.endDate,
-      sliders.cycleTime, data.historicalRates.medianDemoToClose
+      sliders.cycleTime, selectedRates.medianDemoToClose
     );
     const aeBreakdown = computeAEBreakdown(data.aeData, sliders.avgDealSize, sliders.demoToWonRate, sliders.createToDemoRate);
     const sourceReqs = computeSourceRequirements(demosNeeded, data.leadSourceRates);
@@ -108,7 +125,7 @@ export function Q2GoalTrackerView() {
       deltaDemos: demosNeeded - defaultDemos,
       deltaLeads: leadsNeeded - defaultLeads,
     };
-  }, [data, sliders, defaults]);
+  }, [data, sliders, defaults, selectedRateSetIndex]);
 
   // ── Loading / Error states ──
 
@@ -165,7 +182,26 @@ export function Q2GoalTrackerView() {
             Apr 1 – Jun 30 &middot; Week {data.progress.currentWeek} of 13
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-4">
+          {/* Cohort toggle */}
+          {data.rateSets && data.rateSets.length > 1 && (
+            <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
+              {data.rateSets.map((rs, i) => (
+                <button
+                  key={rs.label}
+                  onClick={() => switchRateSet(i)}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                    selectedRateSetIndex === i
+                      ? 'bg-white text-indigo-700 shadow-sm border border-gray-200'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                  title={rs.description}
+                >
+                  {rs.label}
+                </button>
+              ))}
+            </div>
+          )}
           <div className="text-right">
             <div className="text-xs text-gray-500">{Math.round(data.progress.percentComplete)}% through quarter</div>
             <div className="mt-1 w-32 h-2 bg-gray-200 rounded-full overflow-hidden">
@@ -174,6 +210,18 @@ export function Q2GoalTrackerView() {
           </div>
         </div>
       </div>
+
+      {/* ── Cohort info banner ── */}
+      {data.rateSets?.[selectedRateSetIndex] && (
+        <div className="bg-gray-50 rounded-lg px-4 py-2 border border-gray-200 text-xs text-gray-600 flex items-center justify-between">
+          <span>
+            Using <strong>{data.rateSets[selectedRateSetIndex].label}</strong> rates: {data.rateSets[selectedRateSetIndex].description}
+          </span>
+          <span className="text-gray-400">
+            Sample: {data.rateSets[selectedRateSetIndex].sampleSize} deals
+          </span>
+        </div>
+      )}
 
       {/* ── Section 1: Headline Cards ── */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -206,37 +254,7 @@ export function Q2GoalTrackerView() {
         />
       </div>
 
-      {/* ── Section 2: Math Chain ── */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-4">Reverse-Engineering Formula</h2>
-        <div className="flex items-center gap-2 overflow-x-auto pb-2">
-          <ChainBox label="Target" value={fmt(data.teamTarget)} />
-          <ChainOp op="÷" />
-          <ChainBox label="Avg Deal" value={fmtFull(sliders.avgDealSize)} muted />
-          <ChainOp op="=" />
-          <ChainBox label="Closes" value={String(computed.dealsNeeded)} highlight />
-          <ChainOp op="÷" />
-          <ChainBox label="Demo→Won" value={pct1(sliders.demoToWonRate)} muted />
-          <ChainOp op="=" />
-          <ChainBox label="Demos" value={String(computed.demosNeeded)} highlight />
-          <ChainOp op="÷" />
-          <ChainBox label="Create→Demo" value={pct1(sliders.createToDemoRate)} muted />
-          <ChainOp op="=" />
-          <ChainBox label="Leads" value={String(computed.leadsNeeded)} highlight />
-        </div>
-        {/* Gap row */}
-        <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-100 overflow-x-auto pb-2">
-          <ChainBox label="Target" value={fmt(data.teamTarget)} />
-          <ChainOp op="−" />
-          <ChainBox label="Pipeline" value={fmt(computed.weightedPipeline)} muted />
-          <ChainOp op="=" />
-          <ChainBox label="Gap" value={fmt(computed.gap)} highlight />
-          <ChainOp op="→" />
-          <ChainBox label="Add&apos;l Closes" value={String(computed.gapCloses)} highlight />
-        </div>
-      </div>
-
-      {/* ── Section 3: Interactive Sliders ── */}
+      {/* ── Section 2: Adjust Assumptions (MOVED ABOVE formula) ── */}
       <div className="bg-indigo-50 rounded-xl border border-indigo-200 p-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-semibold text-indigo-800 uppercase tracking-wide">Adjust Assumptions</h2>
@@ -284,6 +302,36 @@ export function Q2GoalTrackerView() {
             format={(v) => `${v} days`}
             onChange={(v) => setSliders({ ...sliders, cycleTime: v })}
           />
+        </div>
+      </div>
+
+      {/* ── Section 3: Reverse-Engineering Formula (BIGGER) ── */}
+      <div className="bg-white rounded-xl border border-gray-200 p-8">
+        <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-6">Reverse-Engineering Formula</h2>
+        <div className="flex items-center gap-3 overflow-x-auto pb-3 justify-center">
+          <ChainBoxLg label="Target" value={fmt(data.teamTarget)} />
+          <ChainOpLg op="÷" />
+          <ChainBoxLg label="Avg Deal" value={fmtFull(sliders.avgDealSize)} muted />
+          <ChainOpLg op="=" />
+          <ChainBoxLg label="Closes" value={String(computed.dealsNeeded)} highlight />
+          <ChainOpLg op="÷" />
+          <ChainBoxLg label="Demo→Won" value={pct1(sliders.demoToWonRate)} muted />
+          <ChainOpLg op="=" />
+          <ChainBoxLg label="Demos" value={String(computed.demosNeeded)} highlight />
+          <ChainOpLg op="÷" />
+          <ChainBoxLg label="Create→Demo" value={pct1(sliders.createToDemoRate)} muted />
+          <ChainOpLg op="=" />
+          <ChainBoxLg label="Leads" value={String(computed.leadsNeeded)} highlight />
+        </div>
+        {/* Gap row */}
+        <div className="flex items-center gap-3 mt-4 pt-4 border-t border-gray-100 overflow-x-auto pb-3 justify-center">
+          <ChainBoxLg label="Target" value={fmt(data.teamTarget)} />
+          <ChainOpLg op="−" />
+          <ChainBoxLg label="Pipeline" value={fmt(computed.weightedPipeline)} muted />
+          <ChainOpLg op="=" />
+          <ChainBoxLg label="Gap" value={fmt(computed.gap)} highlight />
+          <ChainOpLg op="→" />
+          <ChainBoxLg label="Add'l Closes" value={String(computed.gapCloses)} highlight />
         </div>
       </div>
 
@@ -577,6 +625,32 @@ function ChainBox({ label, value, highlight, muted }: {
 function ChainOp({ op }: { op: string }) {
   return (
     <div className="flex-shrink-0 text-lg font-bold text-gray-400 px-1">{op}</div>
+  );
+}
+
+function ChainBoxLg({ label, value, highlight, muted }: {
+  label: string;
+  value: string;
+  highlight?: boolean;
+  muted?: boolean;
+}) {
+  return (
+    <div className={`flex-shrink-0 rounded-xl px-6 py-4 text-center border-2 ${
+      highlight
+        ? 'bg-indigo-50 border-indigo-400'
+        : muted
+          ? 'bg-gray-50 border-gray-200'
+          : 'bg-white border-gray-200'
+    }`}>
+      <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{label}</div>
+      <div className={`text-2xl font-bold mt-1 ${highlight ? 'text-indigo-700' : 'text-gray-900'}`}>{value}</div>
+    </div>
+  );
+}
+
+function ChainOpLg({ op }: { op: string }) {
+  return (
+    <div className="flex-shrink-0 text-2xl font-bold text-gray-400 px-1">{op}</div>
   );
 }
 
