@@ -57,7 +57,7 @@ export function Q2GoalTrackerView() {
       avgDealSize: Math.round(rates.avgDealSize),
       demoToWonRate: rates.demoToWonRate,
       createToDemoRate: rates.createToDemoRate,
-      cycleTime: rates.medianCycleTime,
+      cycleTime: rates.avgCycleTime,
     };
   }
 
@@ -108,7 +108,7 @@ export function Q2GoalTrackerView() {
     const selectedRates = data.rateSets?.[selectedRateSetIndex]?.rates || data.historicalRates;
     const timeline = computeWeeklyTimeline(
       data.quarter.startDate, data.quarter.endDate,
-      sliders.cycleTime, selectedRates.medianDemoToClose
+      sliders.cycleTime, selectedRates.avgDemoToClose
     );
     const aeBreakdown = computeAEBreakdown(data.aeData, sliders.avgDealSize, sliders.demoToWonRate, sliders.createToDemoRate);
     const sourceReqs = computeSourceRequirements(demosNeeded, data.leadSourceRates);
@@ -123,14 +123,19 @@ export function Q2GoalTrackerView() {
     // Demo-to-close portion = full cycle minus create-to-demo portion
     // As you compress the full cycle, the demo deadline moves later (more time)
     const q2EndMs = new Date(data.quarter.endDate).getTime();
-    const createToDemoDays = selectedRates.medianCreateToDemo || 6;
+    const createToDemoDays = selectedRates.avgCreateToDemo || 6;
     const demoToCloseDays = Math.max(7, sliders.cycleTime - createToDemoDays);
     const demoDeadline = new Date(q2EndMs - demoToCloseDays * 86400000);
     const leadDeadline = new Date(q2EndMs - sliders.cycleTime * 86400000);
 
+    // Gap-specific reverse engineering (Row 3)
+    const gapDemos = computeDemosNeeded(gapCloses, sliders.demoToWonRate);
+    const gapLeads = computeLeadsNeeded(gapDemos, sliders.createToDemoRate);
+
     return {
       dealsNeeded, demosNeeded, leadsNeeded,
       weightedPipeline, teamForecastRaw, teamForecastWeighted, gap, gapCloses,
+      gapDemos, gapLeads,
       timeline, aeBreakdown, sourceReqs, weeklyTargets,
       demoDeadline, demoToCloseDays,
       leadDeadline,
@@ -170,6 +175,8 @@ export function Q2GoalTrackerView() {
       cycleTime: Math.max(20, Math.round(defaults.cycleTime / multiplier)),
     });
   }
+
+  const selectedRates = data?.rateSets?.[selectedRateSetIndex]?.rates || data?.historicalRates;
 
   // ── Cumulative chart data ──
 
@@ -243,6 +250,7 @@ export function Q2GoalTrackerView() {
           sub={`Expected from Pipeline: ${fmt(computed.teamForecastWeighted)}`}
           sub2={`Gap: ${fmt(computed.gap)}`}
           color="indigo"
+          tooltip={`Team-confirmed pipeline ($${Math.round(computed.teamForecastRaw / 1000)}K raw) weighted by ${pct1(sliders.demoToWonRate)} close rate = ${fmt(computed.teamForecastWeighted)} expected revenue.`}
         />
         <HeadlineCard
           label="Deals to Close" value={String(computed.dealsNeeded)}
@@ -250,6 +258,7 @@ export function Q2GoalTrackerView() {
           sub2={`~${Math.ceil(computed.dealsNeeded / 3)}/month`}
           delta={computed.deltaDeals} deltaLabel="deals"
           color="blue"
+          tooltip={`${fmt(data.teamTarget)} target ÷ ${fmtFull(sliders.avgDealSize)} avg deal size = ${computed.dealsNeeded} deals. Avg deal size based on ${selectedRates.closedWonCount} closed-won deals totaling ${fmt(selectedRates.totalWonARR)}.`}
         />
         <HeadlineCard
           label="Demos Needed" value={String(computed.demosNeeded)}
@@ -257,6 +266,7 @@ export function Q2GoalTrackerView() {
           sub2={`~${Math.ceil(computed.demosNeeded / 3)}/month`}
           delta={computed.deltaDemos} deltaLabel="demos"
           color="purple"
+          tooltip={`Of ${selectedRates.demoCompletedCount} deals that completed a demo, ${selectedRates.closedWonCount} closed won = ${pct1(sliders.demoToWonRate)} close rate. ${computed.dealsNeeded} closes ÷ ${pct1(sliders.demoToWonRate)} = ${computed.demosNeeded} demos needed.`}
         />
         <HeadlineCard
           label="Leads Needed" value={String(computed.leadsNeeded)}
@@ -264,6 +274,7 @@ export function Q2GoalTrackerView() {
           sub2={`~${Math.ceil(computed.leadsNeeded / 3)}/month`}
           delta={computed.deltaLeads} deltaLabel="leads"
           color="emerald"
+          tooltip={`Of ${selectedRates.dealsCreatedCount} deals created, ${selectedRates.demoCompletedCount} reached demo completed = ${pct1(sliders.createToDemoRate)} rate. ${computed.demosNeeded} demos ÷ ${pct1(sliders.createToDemoRate)} = ${computed.leadsNeeded} leads. Includes ALL lead sources (PPL, organic, PPC, etc.).`}
         />
       </div>
 
@@ -309,7 +320,7 @@ export function Q2GoalTrackerView() {
             onChange={(v) => setSliders({ ...sliders, createToDemoRate: v })}
           />
           <SliderControl
-            label="Median Cycle Time"
+            label="Avg Cycle Time"
             value={sliders.cycleTime}
             min={20} max={120} step={1}
             format={(v) => `${v} days`}
@@ -320,7 +331,12 @@ export function Q2GoalTrackerView() {
 
       {/* ── Section 3: Reverse-Engineering Formula (BIGGER) ── */}
       <div className="bg-white rounded-xl border border-gray-200 p-8">
-        <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-6">Reverse-Engineering Formula</h2>
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Reverse-Engineering Formula</h2>
+          <span className="text-xs text-gray-400">Row 1: Total requirement | Row 2: Pipeline credit | Row 3: New Q2 activity needed</span>
+        </div>
+        {/* Row 1: Total requirements */}
+        <div className="text-[10px] font-medium text-gray-400 uppercase tracking-wide mb-2 ml-1">Total Requirement</div>
         <div className="flex items-center gap-3 overflow-x-auto pb-3 justify-center">
           <ChainBoxLg label="Target" value={fmt(data.teamTarget)} />
           <ChainOpLg op="÷" />
@@ -336,15 +352,31 @@ export function Q2GoalTrackerView() {
           <ChainOpLg op="=" />
           <ChainBoxLg label="Leads" value={String(computed.leadsNeeded)} highlight />
         </div>
-        {/* Gap row */}
-        <div className="flex items-center gap-3 mt-4 pt-4 border-t border-gray-100 overflow-x-auto pb-3 justify-center">
+        {/* Row 2: Pipeline credit → gap */}
+        <div className="text-[10px] font-medium text-gray-400 uppercase tracking-wide mb-2 ml-1 mt-4 pt-4 border-t border-gray-100">Pipeline Credit</div>
+        <div className="flex items-center gap-3 overflow-x-auto pb-3 justify-center">
           <ChainBoxLg label="Target" value={fmt(data.teamTarget)} />
           <ChainOpLg op="−" />
           <ChainBoxLg label="Expected Pipeline" value={fmt(computed.teamForecastWeighted)} muted />
           <ChainOpLg op="=" />
           <ChainBoxLg label="Gap" value={fmt(computed.gap)} highlight />
-          <ChainOpLg op="→" />
-          <ChainBoxLg label="Add'l Closes" value={String(computed.gapCloses)} highlight />
+        </div>
+        {/* Row 3: Gap reverse-engineering */}
+        <div className="text-[10px] font-medium text-amber-600 uppercase tracking-wide mb-2 ml-1 mt-4 pt-4 border-t border-gray-100">New Q2 Activity Needed (The Work)</div>
+        <div className="flex items-center gap-3 overflow-x-auto pb-3 justify-center">
+          <ChainBoxLg label="Gap" value={fmt(computed.gap)} />
+          <ChainOpLg op="÷" />
+          <ChainBoxLg label="Avg Deal" value={fmtFull(sliders.avgDealSize)} muted />
+          <ChainOpLg op="=" />
+          <ChainBoxLg label="New Closes" value={String(computed.gapCloses)} highlight />
+          <ChainOpLg op="÷" />
+          <ChainBoxLg label="Demo→Won" value={pct1(sliders.demoToWonRate)} muted />
+          <ChainOpLg op="=" />
+          <ChainBoxLg label="New Demos" value={String(computed.gapDemos)} highlight />
+          <ChainOpLg op="÷" />
+          <ChainBoxLg label="Create→Demo" value={pct1(sliders.createToDemoRate)} muted />
+          <ChainOpLg op="=" />
+          <ChainBoxLg label="New Leads" value={String(computed.gapLeads)} highlight />
         </div>
       </div>
 
@@ -615,7 +647,7 @@ export function Q2GoalTrackerView() {
 
 // ── Sub-components ──
 
-function HeadlineCard({ label, value, sub, sub2, delta, deltaLabel, color }: {
+function HeadlineCard({ label, value, sub, sub2, delta, deltaLabel, color, tooltip }: {
   label: string;
   value: string;
   sub: string;
@@ -623,6 +655,7 @@ function HeadlineCard({ label, value, sub, sub2, delta, deltaLabel, color }: {
   delta?: number;
   deltaLabel?: string;
   color: 'indigo' | 'blue' | 'purple' | 'emerald';
+  tooltip?: string;
 }) {
   const colors = {
     indigo: 'border-indigo-200 bg-indigo-50/30',
@@ -633,7 +666,10 @@ function HeadlineCard({ label, value, sub, sub2, delta, deltaLabel, color }: {
 
   return (
     <div className={`rounded-xl border p-5 ${colors[color]}`}>
-      <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">{label}</div>
+      <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+        {label}
+        {tooltip && <InfoTip text={tooltip} />}
+      </div>
       <div className="flex items-baseline gap-2 mt-1">
         <span className="text-3xl font-bold text-gray-900">{value}</span>
         {delta !== undefined && delta !== 0 && (
@@ -729,6 +765,28 @@ function SliderControl({ label, value, min, max, step, format, onChange }: {
         <span>{format(max)}</span>
       </div>
     </div>
+  );
+}
+
+function InfoTip({ text }: { text: string }) {
+  const [show, setShow] = useState(false);
+  return (
+    <span className="relative inline-block ml-1">
+      <button
+        onMouseEnter={() => setShow(true)}
+        onMouseLeave={() => setShow(false)}
+        onClick={() => setShow(!show)}
+        className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-gray-200 text-gray-500 text-[9px] font-bold hover:bg-gray-300 cursor-help"
+      >
+        i
+      </button>
+      {show && (
+        <div className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg shadow-lg leading-relaxed">
+          {text}
+          <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-px border-4 border-transparent border-t-gray-900" />
+        </div>
+      )}
+    </span>
   );
 }
 

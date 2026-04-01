@@ -159,14 +159,20 @@ function computeCohortRates(
   // so we also look at deals that CLOSED in Q1 2026 regardless of creation quarter
   // for avg deal size and cycle time (stage-entry based approach)
 
+  const avg = (arr: number[]) => arr.length > 0 ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length) : 0;
+
   return {
     rates: {
       avgDealSize: totalClosedWon > 0 ? totalWonARR / totalClosedWon : 25000,
       demoToWonRate: totalDemoCompleted > 0 ? totalClosedWon / totalDemoCompleted : 0.2,
       createToDemoRate: totalCreated > 0 ? totalDemoCompleted / totalCreated : 0.5,
-      medianCycleTime: median(cycleTimes) || 50,
-      medianDemoToClose: median(demoToCloseTimes) || 48,
-      medianCreateToDemo: median(createToDemoTimes) || 6,
+      avgCycleTime: avg(cycleTimes) || 50,
+      avgDemoToClose: avg(demoToCloseTimes) || 48,
+      avgCreateToDemo: avg(createToDemoTimes) || 6,
+      closedWonCount: totalClosedWon,
+      demoCompletedCount: totalDemoCompleted,
+      dealsCreatedCount: totalCreated,
+      totalWonARR,
     },
     totalCreated,
     totalDemoCompleted,
@@ -229,14 +235,20 @@ function computeQ1_2026ClosingRates(
     }
   }
 
+  const avg = (arr: number[]) => arr.length > 0 ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length) : 0;
+
   return {
     rates: {
       avgDealSize: closedWon.length > 0 ? totalWonARR / closedWon.length : 25000,
       demoToWonRate: demoToWon,
       createToDemoRate: createToDemo,
-      medianCycleTime: median(cycleTimes) || 50,
-      medianDemoToClose: median(demoToCloseTimes) || 48,
-      medianCreateToDemo: median(createToDemoTimes) || 6,
+      avgCycleTime: avg(cycleTimes) || 50,
+      avgDemoToClose: avg(demoToCloseTimes) || 48,
+      avgCreateToDemo: avg(createToDemoTimes) || 6,
+      closedWonCount: closedWon.length,
+      demoCompletedCount: demoCompInQ1.length,
+      dealsCreatedCount: createdInQ1.length,
+      totalWonARR,
     },
     totalClosedWon: closedWon.length,
     totalWonARR,

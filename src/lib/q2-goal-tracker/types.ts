@@ -6,9 +6,14 @@ export interface HistoricalRates {
   avgDealSize: number;
   demoToWonRate: number;       // 0-1
   createToDemoRate: number;    // 0-1
-  medianCycleTime: number;     // days, create → close
-  medianDemoToClose: number;   // days, demo → close
-  medianCreateToDemo: number;  // days, create → demo
+  avgCycleTime: number;        // days, create → close (average)
+  avgDemoToClose: number;      // days, demo → close (average)
+  avgCreateToDemo: number;     // days, create → demo (average)
+  // Sample sizes for tooltips
+  closedWonCount: number;
+  demoCompletedCount: number;
+  dealsCreatedCount: number;
+  totalWonARR: number;
 }
 
 export interface LeadSourceRate {
