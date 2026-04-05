@@ -42,7 +42,6 @@ export const RESOURCES = {
   HOT_TRACKER: 'hot_tracker',
   DEMO_TRACKER: 'demo_tracker',
   AE_HOME: 'ae_home',
-  QUEUE_ENRICHMENT_VIEW: 'queue:enrichment-view',
   ANALYZE_TICKET: 'analyze:ticket',
   STRATEGIC_DIRECTIVES: 'strategic:directives',
   MORNING_BRIEFING: 'morning_briefing',
@@ -131,8 +130,6 @@ export function getResourceFromPath(pathname: string): Resource | null {
 
   // AE dashboard pages
   if (pathname.includes('/dashboard/home')) return RESOURCES.AE_HOME;
-  if (pathname.includes('/dashboard/my-enrichment')) return RESOURCES.QUEUE_ENRICHMENT_VIEW;
-  if (pathname.includes('/dashboard/my-compliance')) return RESOURCES.QUEUE_ENRICHMENT_VIEW;
 
   // PPL Dashboard
   if (pathname.includes('/dashboard/ppl')) return RESOURCES.PPL_DASHBOARD;
@@ -154,10 +151,6 @@ export function getResourceFromPath(pathname: string): Resource | null {
   // Dashboard
   if (pathname === '/dashboard' || pathname === '/dashboard/')
     return RESOURCES.DASHBOARD;
-
-  // AE read-only API routes
-  if (pathname.includes('/api/my-enrichment')) return RESOURCES.QUEUE_ENRICHMENT_VIEW;
-  if (pathname.includes('/api/my-compliance')) return RESOURCES.QUEUE_ENRICHMENT_VIEW;
 
   // API routes
   if (pathname.includes('/api/portal')) return RESOURCES.PORTAL;

@@ -207,8 +207,6 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
   const isOnAdmin = pathname === '/dashboard/admin';
   // AE pages
   const isOnAEHome = pathname === '/dashboard/home';
-  const isOnMyEnrichment = pathname === '/dashboard/my-enrichment';
-  const isOnMyCompliance = pathname === '/dashboard/my-compliance';
 
   return (
     <aside className={`fixed left-0 top-0 h-screen bg-slate-900 text-slate-100 flex flex-col transition-all duration-300 ${isCollapsed ? 'w-16' : 'w-64'}`}>
@@ -250,56 +248,6 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
                 {!isCollapsed && <span>Home</span>}
               </Link>
             </div>
-            {!isCollapsed && (
-              <div className="px-4 py-2">
-                <div className="border-t border-slate-700"></div>
-              </div>
-            )}
-          </>
-        )}
-
-        {/* AE Research Section */}
-        {hasPermission(user, RESOURCES.QUEUE_ENRICHMENT_VIEW) && (
-          <>
-            {!isCollapsed && (
-              <div className="px-4 pt-2 pb-1">
-                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Research</span>
-              </div>
-            )}
-            <ul className="space-y-0.5">
-              <li>
-                <Link
-                  href="/dashboard/my-enrichment"
-                  className={`flex items-center gap-3 py-2 text-sm transition-colors ${isCollapsed ? 'px-0 justify-center' : 'px-4 pl-6'} ${
-                    isOnMyEnrichment
-                      ? 'bg-indigo-600 text-white'
-                      : 'text-slate-300 hover:bg-slate-800'
-                  }`}
-                  title={isCollapsed ? 'Domain Enrichment' : undefined}
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
-                  </svg>
-                  {!isCollapsed && <span>Domain Enrichment</span>}
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/dashboard/my-compliance"
-                  className={`flex items-center gap-3 py-2 text-sm transition-colors ${isCollapsed ? 'px-0 justify-center' : 'px-4 pl-6'} ${
-                    isOnMyCompliance
-                      ? 'bg-indigo-600 text-white'
-                      : 'text-slate-300 hover:bg-slate-800'
-                  }`}
-                  title={isCollapsed ? 'Compliance Research' : undefined}
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                  </svg>
-                  {!isCollapsed && <span>Compliance Research</span>}
-                </Link>
-              </li>
-            </ul>
             {!isCollapsed && (
               <div className="px-4 py-2">
                 <div className="border-t border-slate-700"></div>
