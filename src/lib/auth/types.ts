@@ -44,7 +44,6 @@ export const RESOURCES = {
   AE_HOME: 'ae_home',
   ANALYZE_TICKET: 'analyze:ticket',
   STRATEGIC_DIRECTIVES: 'strategic:directives',
-  MORNING_BRIEFING: 'morning_briefing',
   PPL_DASHBOARD: 'ppl_dashboard',
   Q2_GOAL_TRACKER: 'q2_goal_tracker',
 } as const;
@@ -134,10 +133,7 @@ export function getResourceFromPath(pathname: string): Resource | null {
   // PPL Dashboard
   if (pathname.includes('/dashboard/ppl')) return RESOURCES.PPL_DASHBOARD;
 
-  // Morning Briefing
-  if (pathname.includes('/dashboard/briefing')) return RESOURCES.MORNING_BRIEFING;
-
-  // Hot Tracker
+// Hot Tracker
   if (pathname.includes('/dashboard/hot-tracker')) return RESOURCES.HOT_TRACKER;
 
   // Demo Tracker & Demo Economics
@@ -207,7 +203,6 @@ export function getResourceFromPath(pathname: string): Resource | null {
   if (pathname.includes('/api/strategic-directives'))
     return RESOURCES.STRATEGIC_DIRECTIVES;
   if (pathname.includes('/api/ppl')) return RESOURCES.PPL_DASHBOARD;
-  if (pathname.includes('/api/briefing')) return RESOURCES.MORNING_BRIEFING;
   if (pathname.includes('/api/hot-tracker')) return RESOURCES.HOT_TRACKER;
   if (pathname.includes('/api/demo-tracker')) return RESOURCES.DEMO_TRACKER;
   if (pathname.includes('/api/demo-economics')) return RESOURCES.DEMO_TRACKER;

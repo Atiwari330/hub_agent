@@ -192,8 +192,6 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
   const isOnSupportManager = pathname === '/dashboard/queues/support-manager';
   const isOnSupportTrainer = pathname === '/dashboard/queues/support-trainer';
   const isOnSupportActionBoard = pathname === '/dashboard/queues/support-action-board';
-  // Morning Briefing
-  const isOnBriefing = pathname === '/dashboard/briefing';
   // Hot Tracker
   const isOnHotTracker = pathname === '/dashboard/hot-tracker';
   // Demo Tracker & Demo Economics
@@ -282,27 +280,7 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
           </>
         )}
 
-        {/* Morning Briefing Link */}
-        {hasPermission(user, RESOURCES.MORNING_BRIEFING) && (
-          <div className="mb-2">
-            <Link
-              href="/dashboard/briefing"
-              className={`flex items-center gap-3 py-2.5 text-sm font-medium transition-colors ${isCollapsed ? 'px-0 justify-center' : 'px-4'} ${
-                isOnBriefing
-                  ? 'bg-indigo-600 text-white'
-                  : 'text-slate-300 hover:bg-slate-800'
-              }`}
-              title={isCollapsed ? 'Morning Briefing' : undefined}
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
-              </svg>
-              {!isCollapsed && <span>Morning Briefing</span>}
-            </Link>
-          </div>
-        )}
-
-        {/* Hot Tracker Link */}
+{/* Hot Tracker Link */}
         {hasPermission(user, RESOURCES.HOT_TRACKER) && (
           <div className="mb-2">
             <Link
