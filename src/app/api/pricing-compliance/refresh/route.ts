@@ -11,21 +11,17 @@ export async function POST(request: Request) {
 
   const supabase = createServiceClient();
 
-  const { data: run, error: runError } = await supabase
+  const { data: run } = await supabase
     .from('workflow_runs')
     .insert({
-      workflow_type: 'pricing_compliance_refresh',
+      workflow_name: 'pricing_compliance_refresh',
       status: 'running',
       started_at: new Date().toISOString(),
     })
     .select('id')
     .single();
 
-  if (runError || !run) {
-    return NextResponse.json({ error: 'Failed to create run record' }, { status: 500 });
-  }
-
-  const runId = run.id;
+  const runId = run?.id;
 
   try {
     const result = await runPricingCompliance({
@@ -33,18 +29,20 @@ export async function POST(request: Request) {
       concurrency: 3,
     });
 
-    await supabase
-      .from('workflow_runs')
-      .update({
-        status: 'completed',
-        completed_at: new Date().toISOString(),
-        results_json: {
-          totalDeals: result.summary.totalDeals,
-          analyzed: result.summary.analyzed,
-          failed: result.summary.failed,
-        },
-      })
-      .eq('id', runId);
+    if (runId) {
+      await supabase
+        .from('workflow_runs')
+        .update({
+          status: 'completed',
+          completed_at: new Date().toISOString(),
+          result: {
+            totalDeals: result.summary.totalDeals,
+            analyzed: result.summary.analyzed,
+            failed: result.summary.failed,
+          },
+        })
+        .eq('id', runId);
+    }
 
     return NextResponse.json({
       runId,
@@ -54,14 +52,16 @@ export async function POST(request: Request) {
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
 
-    await supabase
-      .from('workflow_runs')
-      .update({
-        status: 'failed',
-        completed_at: new Date().toISOString(),
-        error: errMsg,
-      })
-      .eq('id', runId);
+    if (runId) {
+      await supabase
+        .from('workflow_runs')
+        .update({
+          status: 'failed',
+          completed_at: new Date().toISOString(),
+          error: errMsg,
+        })
+        .eq('id', runId);
+    }
 
     return NextResponse.json({ runId, status: 'failed', error: errMsg }, { status: 500 });
   }
