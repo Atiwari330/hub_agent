@@ -98,7 +98,13 @@ async function fetchAllSalesPipelineDeals(supabase: SupabaseClient) {
     hasMore = (data || []).length === PAGE_SIZE;
     offset += PAGE_SIZE;
   }
-  return allDeals;
+
+  // Deduplicate by hubspot_deal_id — keep the latest row (last in created_at order)
+  const dedupMap = new Map<string, Deal>();
+  for (const d of allDeals) {
+    if (d.hubspot_deal_id) dedupMap.set(d.hubspot_deal_id, d);
+  }
+  return Array.from(dedupMap.values());
 }
 
 function isInQuarter(dateStr: string | null, qi: ReturnType<typeof getQuarterInfo>): boolean {
@@ -218,10 +224,10 @@ function computeQ1_2026ClosingRates(
     d.deal_stage === CLOSED_WON_ID && d.close_date && d.close_date >= qStartDate && d.close_date <= qEndDate
   );
 
-  // Merge & deduplicate
+  // Merge & deduplicate by HubSpot deal ID (not Supabase row ID)
   const wonMap = new Map<string, Deal>();
-  for (const d of wonByTimestamp) wonMap.set(d.id, d);
-  for (const d of wonByDate) wonMap.set(d.id, d);
+  for (const d of wonByTimestamp) wonMap.set(d.hubspot_deal_id, d);
+  for (const d of wonByDate) wonMap.set(d.hubspot_deal_id, d);
   const closedWon = Array.from(wonMap.values());
 
   const totalWonARR = closedWon.reduce((s, d) => s + (Number(d.amount) || 0), 0);
