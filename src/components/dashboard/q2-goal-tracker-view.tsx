@@ -232,15 +232,67 @@ export function Q2GoalTrackerView() {
         </div>
       </div>
 
-      {/* ── Cohort info banner ── */}
+      {/* ── Cohort info banner (clickable to show deals) ── */}
       {data.rateSets?.[selectedRateSetIndex] && (
-        <div className="bg-gray-50 rounded-lg px-4 py-2 border border-gray-200 text-xs text-gray-600 flex items-center justify-between">
-          <span>
-            Using <strong>{data.rateSets[selectedRateSetIndex].label}</strong> rates: {data.rateSets[selectedRateSetIndex].description}
-          </span>
-          <span className="text-gray-400">
-            Sample: {data.rateSets[selectedRateSetIndex].sampleSize} deals
-          </span>
+        <div className="bg-gray-50 rounded-lg border border-gray-200">
+          <button
+            onClick={() => setShowClosedDeals(!showClosedDeals)}
+            className="w-full px-4 py-2 text-xs text-gray-600 flex items-center justify-between hover:bg-gray-100 rounded-lg transition-colors"
+          >
+            <span>
+              Using <strong>{data.rateSets[selectedRateSetIndex].label}</strong> rates: {data.rateSets[selectedRateSetIndex].description}
+            </span>
+            <span className="flex items-center gap-2">
+              <span className="text-indigo-600 font-medium">
+                {showClosedDeals ? 'Hide Deals' : 'View Deals'}
+              </span>
+              <span className={`text-indigo-600 transition-transform ${showClosedDeals ? 'rotate-180' : ''}`}>
+                &#9660;
+              </span>
+            </span>
+          </button>
+          {showClosedDeals && data.rateSets[selectedRateSetIndex].deals && (
+            <div className="px-4 pb-4 pt-2 border-t border-gray-200">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-200">
+                      <th className="text-left py-2 pr-4 font-medium text-gray-500 text-xs">Deal Name</th>
+                      <th className="text-left py-2 px-4 font-medium text-gray-500 text-xs">Owner</th>
+                      <th className="text-right py-2 px-4 font-medium text-gray-500 text-xs">Amount</th>
+                      <th className="text-right py-2 pl-4 font-medium text-gray-500 text-xs">Closed Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...data.rateSets[selectedRateSetIndex].deals]
+                      .sort((a, b) => (b.amount || 0) - (a.amount || 0))
+                      .map((deal) => (
+                      <tr key={deal.hubspotDealId} className="border-b border-gray-100 hover:bg-white">
+                        <td className="py-1.5 pr-4 font-medium text-gray-900 text-xs">{deal.dealName}</td>
+                        <td className="py-1.5 px-4 text-gray-600 text-xs">{deal.ownerName}</td>
+                        <td className="py-1.5 px-4 text-right font-medium text-gray-900 text-xs">{fmtFull(deal.amount)}</td>
+                        <td className="py-1.5 pl-4 text-right text-gray-600 text-xs">
+                          {deal.closedWonDate
+                            ? new Date(deal.closedWonDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                            : '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t-2 border-gray-300">
+                      <td className="py-2 pr-4 font-semibold text-gray-900 text-xs">Total</td>
+                      <td className="py-2 px-4 text-gray-500 text-xs">{data.rateSets[selectedRateSetIndex].deals.length} deals</td>
+                      <td className="py-2 px-4 text-right font-semibold text-gray-900 text-xs">
+                        {fmtFull(data.rateSets[selectedRateSetIndex].deals.reduce((s, d) => s + d.amount, 0))}
+                      </td>
+                      <td />
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

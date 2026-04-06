@@ -69,6 +69,7 @@ export interface RateSet {
   rates: HistoricalRates;
   sampleSize: number;      // number of closed-won deals
   totalARR: number;
+  deals: ClosedWonDeal[];  // actual deals in this rate set for fact-checking
 }
 
 export interface ClosedWonDeal {

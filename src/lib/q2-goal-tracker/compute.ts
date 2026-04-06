@@ -123,7 +123,8 @@ function median(arr: number[]): number {
 function computeCohortRates(
   allDeals: Deal[],
   quarters: ReturnType<typeof getQuarterInfo>[],
-): { rates: HistoricalRates; totalCreated: number; totalDemoCompleted: number; totalClosedWon: number; totalWonARR: number } {
+  ownerMap: Map<string, Deal>,
+): { rates: HistoricalRates; totalCreated: number; totalDemoCompleted: number; totalClosedWon: number; totalWonARR: number; deals: ClosedWonDeal[] } {
   let totalCreated = 0;
   let totalDemoCompleted = 0;
   let totalClosedWon = 0;
@@ -131,6 +132,7 @@ function computeCohortRates(
   const cycleTimes: number[] = [];
   const demoToCloseTimes: number[] = [];
   const createToDemoTimes: number[] = [];
+  const allWonDeals: Deal[] = [];
 
   for (const qi of quarters) {
     const created = allDeals.filter((d) => d.hubspot_created_at && isInQuarter(d.hubspot_created_at, qi));
@@ -142,6 +144,7 @@ function computeCohortRates(
     const won = created.filter((d) => d.closed_won_entered_at);
     totalClosedWon += won.length;
     totalWonARR += won.reduce((s, d) => s + (Number(d.amount) || 0), 0);
+    allWonDeals.push(...won);
 
     for (const d of won) {
       if (d.hubspot_created_at && d.closed_won_entered_at) {
@@ -162,6 +165,18 @@ function computeCohortRates(
 
   const avg = (arr: number[]) => arr.length > 0 ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length) : 0;
 
+  const deals: ClosedWonDeal[] = allWonDeals.map((d) => {
+    const owner = ownerMap.get(d.owner_id);
+    return {
+      dealName: d.deal_name,
+      ownerName: owner ? `${owner.first_name} ${owner.last_name}` : 'Unknown',
+      amount: Number(d.amount) || 0,
+      closedWonDate: d.closed_won_entered_at || d.close_date || '',
+      weekNumber: 0,
+      hubspotDealId: d.hubspot_deal_id,
+    };
+  });
+
   return {
     rates: {
       avgDealSize: totalClosedWon > 0 ? totalWonARR / totalClosedWon : 25000,
@@ -179,6 +194,7 @@ function computeCohortRates(
     totalDemoCompleted,
     totalClosedWon,
     totalWonARR,
+    deals,
   };
 }
 
@@ -186,7 +202,8 @@ function computeCohortRates(
 // rather than cohort-based, since the cohort is still immature
 function computeQ1_2026ClosingRates(
   allDeals: Deal[],
-): { rates: HistoricalRates; totalClosedWon: number; totalWonARR: number; totalDemoCompleted: number; totalCreated: number } {
+  ownerMap: Map<string, Deal>,
+): { rates: HistoricalRates; totalClosedWon: number; totalWonARR: number; totalDemoCompleted: number; totalCreated: number; deals: ClosedWonDeal[] } {
   const qi = getQuarterInfo(2026, 1);
   const CLOSED_WON_ID = S.CLOSED_WON.id;
 
@@ -238,6 +255,18 @@ function computeQ1_2026ClosingRates(
 
   const avg = (arr: number[]) => arr.length > 0 ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length) : 0;
 
+  const deals: ClosedWonDeal[] = closedWon.map((d) => {
+    const owner = ownerMap.get(d.owner_id);
+    return {
+      dealName: d.deal_name,
+      ownerName: owner ? `${owner.first_name} ${owner.last_name}` : 'Unknown',
+      amount: Number(d.amount) || 0,
+      closedWonDate: d.closed_won_entered_at || d.close_date || '',
+      weekNumber: 0,
+      hubspotDealId: d.hubspot_deal_id,
+    };
+  });
+
   return {
     rates: {
       avgDealSize: closedWon.length > 0 ? totalWonARR / closedWon.length : 25000,
@@ -255,6 +284,7 @@ function computeQ1_2026ClosingRates(
     totalWonARR,
     totalDemoCompleted: demoCompInQ1.length,
     totalCreated: createdInQ1.length,
+    deals,
   };
 }
 
@@ -271,13 +301,14 @@ export async function computeQ2GoalTrackerData(supabase: SupabaseClient) {
   const ownerMap = new Map(owners.map((o) => [o.id, o]));
 
   // ── Rate Set 1: Q1 2026 (default — most recent quarter) ──
-  const q1_2026_data = computeQ1_2026ClosingRates(allDeals);
+  const q1_2026_data = computeQ1_2026ClosingRates(allDeals, ownerMap);
   const q1RateSet: RateSet = {
     label: 'Q1 2026',
     description: `${q1_2026_data.totalClosedWon} closed-won deals, $${Math.round(q1_2026_data.totalWonARR).toLocaleString()} ARR`,
     rates: q1_2026_data.rates,
     sampleSize: q1_2026_data.totalClosedWon,
     totalARR: q1_2026_data.totalWonARR,
+    deals: q1_2026_data.deals,
   };
 
   // ── Rate Set 2: Q1-Q4 2025 cohorts (larger sample) ──
@@ -285,13 +316,14 @@ export async function computeQ2GoalTrackerData(supabase: SupabaseClient) {
     getQuarterInfo(2025, 1), getQuarterInfo(2025, 2),
     getQuarterInfo(2025, 3), getQuarterInfo(2025, 4),
   ];
-  const cohortData = computeCohortRates(allDeals, cohortQuarters);
+  const cohortData = computeCohortRates(allDeals, cohortQuarters, ownerMap);
   const cohortRateSet: RateSet = {
     label: 'Q1-Q4 2025',
     description: `${cohortData.totalClosedWon} closed-won deals, $${Math.round(cohortData.totalWonARR).toLocaleString()} ARR`,
     rates: cohortData.rates,
     sampleSize: cohortData.totalClosedWon,
     totalARR: cohortData.totalWonARR,
+    deals: cohortData.deals,
   };
 
   const rateSets = [q1RateSet, cohortRateSet];
