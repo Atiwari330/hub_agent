@@ -51,6 +51,7 @@ export function Q2GoalTrackerView() {
   const [sliders, setSliders] = useState<SliderValues | null>(null);
   const [defaults, setDefaults] = useState<SliderValues | null>(null);
   const [selectedRateSetIndex, setSelectedRateSetIndex] = useState(0);
+  const [showClosedDeals, setShowClosedDeals] = useState(false);
 
   function ratesToSliders(rates: Q2GoalTrackerApiResponse['historicalRates']): SliderValues {
     return {
@@ -470,6 +471,68 @@ export function Q2GoalTrackerView() {
           </ResponsiveContainer>
         </div>
       </div>
+
+      {/* ── Section 5b: Closed-Won Deal Drill-Down ── */}
+      {data.closedWonDeals && data.closedWonDeals.length > 0 && (
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <button
+            onClick={() => setShowClosedDeals(!showClosedDeals)}
+            className="w-full flex items-center justify-between text-left"
+          >
+            <div className="flex items-center gap-3">
+              <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
+                Closed in Q2
+              </h2>
+              <span className="text-sm text-gray-500">
+                {data.closedWonDeals.length} deals &middot; {fmtFull(data.closedWonDeals.reduce((s, d) => s + d.amount, 0))} ARR
+              </span>
+            </div>
+            <span className={`text-xs font-medium text-indigo-600 transition-transform ${showClosedDeals ? 'rotate-180' : ''}`}>
+              &#9660;
+            </span>
+          </button>
+          {showClosedDeals && (
+            <div className="mt-4 overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-200">
+                    <th className="text-left py-2 pr-4 font-medium text-gray-500">Deal Name</th>
+                    <th className="text-left py-2 px-4 font-medium text-gray-500">Owner</th>
+                    <th className="text-right py-2 px-4 font-medium text-gray-500">Amount</th>
+                    <th className="text-right py-2 px-4 font-medium text-gray-500">Closed Date</th>
+                    <th className="text-right py-2 pl-4 font-medium text-gray-500">Week</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...data.closedWonDeals]
+                    .sort((a, b) => new Date(b.closedWonDate).getTime() - new Date(a.closedWonDate).getTime())
+                    .map((deal) => (
+                    <tr key={deal.hubspotDealId} className="border-b border-gray-100 hover:bg-gray-50">
+                      <td className="py-2 pr-4 font-medium text-gray-900">{deal.dealName}</td>
+                      <td className="py-2 px-4 text-gray-600">{deal.ownerName}</td>
+                      <td className="py-2 px-4 text-right font-medium text-gray-900">{fmtFull(deal.amount)}</td>
+                      <td className="py-2 px-4 text-right text-gray-600">
+                        {new Date(deal.closedWonDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      </td>
+                      <td className="py-2 pl-4 text-right text-gray-500">Wk {deal.weekNumber}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t-2 border-gray-300">
+                    <td className="py-2 pr-4 font-semibold text-gray-900">Total</td>
+                    <td className="py-2 px-4 text-gray-500">{data.closedWonDeals.length} deals</td>
+                    <td className="py-2 px-4 text-right font-semibold text-gray-900">
+                      {fmtFull(data.closedWonDeals.reduce((s, d) => s + d.amount, 0))}
+                    </td>
+                    <td colSpan={2} />
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── Section 6: Lead Source Breakdown ── */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">

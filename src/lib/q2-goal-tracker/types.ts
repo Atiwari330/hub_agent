@@ -71,6 +71,15 @@ export interface RateSet {
   totalARR: number;
 }
 
+export interface ClosedWonDeal {
+  dealName: string;
+  ownerName: string;
+  amount: number;
+  closedWonDate: string;   // ISO date string (from closed_won_entered_at)
+  weekNumber: number;       // 1-13, which Q2 week this falls in
+  hubspotDealId: string;
+}
+
 export interface Q2GoalTrackerApiResponse {
   quarter: {
     year: number;
@@ -93,4 +102,5 @@ export interface Q2GoalTrackerApiResponse {
   weeklyActuals: WeeklyActual[];
   pipelineCredit: PipelineCredit;
   teamTarget: number;
+  closedWonDeals: ClosedWonDeal[];
 }

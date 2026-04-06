@@ -16,6 +16,7 @@ import type {
   WeeklyActual,
   PipelineCredit,
   PipelineDeal,
+  ClosedWonDeal,
 } from './types';
 
 const SALES_PIPELINE_ID = '1c27e5a3-5e5e-4403-ab0f-d356bf268cf3';
@@ -382,6 +383,7 @@ export async function computeQ2GoalTrackerData(supabase: SupabaseClient) {
   const q2 = getQuarterInfo(2026, 2);
   const q2Start = new Date(q2.startDate);
   const weeklyActuals: WeeklyActual[] = [];
+  const closedWonDeals: ClosedWonDeal[] = [];
 
   for (let i = 0; i < 13; i++) {
     const weekStart = new Date(q2Start.getTime() + i * 7 * 86400000);
@@ -400,6 +402,18 @@ export async function computeQ2GoalTrackerData(supabase: SupabaseClient) {
       closedWonARR: weekDeals.reduce((s, d) => s + (Number(d.amount) || 0), 0),
       closedWonCount: weekDeals.length,
     });
+
+    for (const d of weekDeals) {
+      const owner = ownerMap.get(d.owner_id);
+      closedWonDeals.push({
+        dealName: d.deal_name,
+        ownerName: owner ? `${owner.first_name} ${owner.last_name}` : 'Unknown',
+        amount: Number(d.amount) || 0,
+        closedWonDate: d.closed_won_entered_at,
+        weekNumber: i + 1,
+        hubspotDealId: d.hubspot_deal_id,
+      });
+    }
   }
 
   // ── Pipeline credit ──
@@ -477,5 +491,6 @@ export async function computeQ2GoalTrackerData(supabase: SupabaseClient) {
     weeklyActuals,
     pipelineCredit,
     teamTarget: 925000,
+    closedWonDeals,
   };
 }
