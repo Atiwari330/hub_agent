@@ -46,6 +46,7 @@ export const RESOURCES = {
   STRATEGIC_DIRECTIVES: 'strategic:directives',
   PPL_DASHBOARD: 'ppl_dashboard',
   Q2_GOAL_TRACKER: 'q2_goal_tracker',
+  PRICING_COMPLIANCE: 'pricing_compliance',
 } as const;
 
 export type Resource = (typeof RESOURCES)[keyof typeof RESOURCES];
@@ -130,6 +131,9 @@ export function getResourceFromPath(pathname: string): Resource | null {
   // AE dashboard pages
   if (pathname.includes('/dashboard/home')) return RESOURCES.AE_HOME;
 
+  // Pricing Compliance
+  if (pathname.includes('/dashboard/pricing-compliance')) return RESOURCES.PRICING_COMPLIANCE;
+
   // PPL Dashboard
   if (pathname.includes('/dashboard/ppl')) return RESOURCES.PPL_DASHBOARD;
 
@@ -202,6 +206,7 @@ export function getResourceFromPath(pathname: string): Resource | null {
     return RESOURCES.QUEUE_CS_HYGIENE;
   if (pathname.includes('/api/strategic-directives'))
     return RESOURCES.STRATEGIC_DIRECTIVES;
+  if (pathname.includes('/api/pricing-compliance')) return RESOURCES.PRICING_COMPLIANCE;
   if (pathname.includes('/api/ppl')) return RESOURCES.PPL_DASHBOARD;
   if (pathname.includes('/api/hot-tracker')) return RESOURCES.HOT_TRACKER;
   if (pathname.includes('/api/demo-tracker')) return RESOURCES.DEMO_TRACKER;

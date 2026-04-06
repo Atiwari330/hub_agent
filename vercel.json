@@ -44,6 +44,10 @@
     {
       "path": "/api/cron/ppl-cadence",
       "schedule": "0 * * * 1-5"
+    },
+    {
+      "path": "/api/cron/pricing-compliance",
+      "schedule": "0 5 * * *"
     }
   ]
 }
