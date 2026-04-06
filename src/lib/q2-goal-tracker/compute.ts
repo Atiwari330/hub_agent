@@ -100,11 +100,23 @@ async function fetchAllSalesPipelineDeals(supabase: SupabaseClient) {
   }
 
   // Deduplicate by hubspot_deal_id — keep the latest row (last in created_at order)
-  const dedupMap = new Map<string, Deal>();
+  const dedupById = new Map<string, Deal>();
   for (const d of allDeals) {
-    if (d.hubspot_deal_id) dedupMap.set(d.hubspot_deal_id, d);
+    if (d.hubspot_deal_id) dedupById.set(d.hubspot_deal_id, d);
   }
-  return Array.from(dedupMap.values());
+  const uniqueById = Array.from(dedupById.values());
+
+  // Second pass: dedup HubSpot-level duplicates (same deal name + amount + close date
+  // but different hubspot_deal_ids). Keep the row with a known owner_id if possible.
+  const dedupByContent = new Map<string, Deal>();
+  for (const d of uniqueById) {
+    const key = `${(d.deal_name || '').trim().toLowerCase()}|${d.amount || 0}|${d.close_date || ''}`;
+    const existing = dedupByContent.get(key);
+    if (!existing || (!existing.owner_id && d.owner_id)) {
+      dedupByContent.set(key, d);
+    }
+  }
+  return Array.from(dedupByContent.values());
 }
 
 function isInQuarter(dateStr: string | null, qi: ReturnType<typeof getQuarterInfo>): boolean {
