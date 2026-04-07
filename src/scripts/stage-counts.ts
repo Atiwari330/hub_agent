@@ -46,8 +46,9 @@ const STAGE_LABEL: Record<string, string> = Object.fromEntries(
 
 function parseArgs() {
   const args = process.argv.slice(2);
-  let year = 2026;
-  let quarter = 1;
+  const now = new Date();
+  let year = now.getFullYear();
+  let quarter = Math.floor(now.getMonth() / 3) + 1;
 
   for (const arg of args) {
     if (arg.startsWith('--year=')) year = parseInt(arg.split('=')[1]);
@@ -64,7 +65,7 @@ async function main() {
   console.log(`\n📊 Stage Counts for ${qi.label}`);
   console.log(`   ${qi.startDate.toISOString()} → ${qi.endDate.toISOString()}\n`);
 
-  // Fetch all deals with stage timestamps and current stage
+  // Fetch deals with demo timestamps (targeted query to avoid Supabase 1000-row default limit)
   const { data: deals, error } = await supabase
     .from('deals')
     .select(`
@@ -78,7 +79,8 @@ async function main() {
       demo_completed_entered_at,
       closed_won_entered_at,
       proposal_entered_at
-    `);
+    `)
+    .or('demo_scheduled_entered_at.not.is.null,demo_completed_entered_at.not.is.null');
 
   if (error) {
     console.error('Error fetching deals:', error.message);

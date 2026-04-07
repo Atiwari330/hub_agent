@@ -67,7 +67,11 @@ const SOURCE_COLORS = [
 ];
 
 export function LeadSourceDashboard() {
-  const [startDate, setStartDate] = useState('2026-01-01');
+  const [startDate, setStartDate] = useState(() => {
+    const now = new Date();
+    const q = Math.floor(now.getMonth() / 3);
+    return new Date(now.getFullYear(), q * 3, 1).toISOString().split('T')[0];
+  });
   const [endDate, setEndDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [selectedSource, setSelectedSource] = useState<string | null>(null);
   const [data, setData] = useState<LeadSourceData | null>(null);

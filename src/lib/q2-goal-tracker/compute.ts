@@ -116,7 +116,22 @@ async function fetchAllSalesPipelineDeals(supabase: SupabaseClient) {
       dedupByContent.set(key, d);
     }
   }
-  return Array.from(dedupByContent.values());
+  const afterContentDedup = Array.from(dedupByContent.values());
+
+  // Third pass: dedup by company prefix + amount. Catches HubSpot duplicates where
+  // the same deal exists under different suffixes (e.g. "Kinan Behavioral Health - EHR"
+  // vs "Kinan Behavioral Health - New Deal"). Keep the row with a known owner_id.
+  const dedupByPrefix = new Map<string, Deal>();
+  for (const d of afterContentDedup) {
+    const name = (d.deal_name || '').trim().toLowerCase();
+    const prefix = name.includes(' - ') ? name.split(' - ')[0] : name;
+    const key = `${prefix}|${d.amount || 0}`;
+    const existing = dedupByPrefix.get(key);
+    if (!existing || (!existing.owner_id && d.owner_id)) {
+      dedupByPrefix.set(key, d);
+    }
+  }
+  return Array.from(dedupByPrefix.values());
 }
 
 function isInQuarter(dateStr: string | null, qi: ReturnType<typeof getQuarterInfo>): boolean {

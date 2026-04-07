@@ -323,7 +323,7 @@ export function DemoEconomicsView() {
 
   const fetchData = useCallback(async () => {
     try {
-      const res = await fetch('/api/demo-economics?year=2026&quarter=1');
+      const res = await fetch('/api/demo-economics');
       if (!res.ok) throw new Error(`Failed to fetch: ${res.status}`);
       const json = await res.json();
       setData(json);

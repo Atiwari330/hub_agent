@@ -27,12 +27,28 @@ const UPSELL_PIPELINE_ID = '130845758';
 const UPSELL_CLOSED_WON = '226986249';
 const UPSELL_ACTIVE_STAGES = ['226988101', '226988102', '1054253346', '226986248'];
 
-// Q1 2026
-const Q_LABEL = 'Q1 2026';
-const Q_START_DATE = '2026-01-01';
-const Q_END_DATE = '2026-03-31';
-const Q_START_TS = '2026-01-01T00:00:00.000Z';
-const Q_END_TS = '2026-03-31T23:59:59.999Z';
+// Parse --year and --quarter flags, default to current quarter
+function parseQuarterArgs() {
+  const args = process.argv.slice(2);
+  const now = new Date();
+  let year = now.getFullYear();
+  let quarter = Math.floor(now.getMonth() / 3) + 1;
+  for (const arg of args) {
+    if (arg.startsWith('--year=')) year = parseInt(arg.split('=')[1]);
+    if (arg.startsWith('--quarter=')) quarter = parseInt(arg.split('=')[1]);
+  }
+  return { year, quarter };
+}
+
+const { year: Q_YEAR, quarter: Q_NUM } = parseQuarterArgs();
+const Q_LABEL = `Q${Q_NUM} ${Q_YEAR}`;
+const qStartMonth = (Q_NUM - 1) * 3; // 0-indexed month
+const qStartDate = new Date(Q_YEAR, qStartMonth, 1);
+const qEndDate = new Date(Q_YEAR, qStartMonth + 3, 0); // last day of quarter
+const Q_START_DATE = qStartDate.toISOString().split('T')[0];
+const Q_END_DATE = qEndDate.toISOString().split('T')[0];
+const Q_START_TS = `${Q_START_DATE}T00:00:00.000Z`;
+const Q_END_TS = `${Q_END_DATE}T23:59:59.999Z`;
 
 // --- Formatting helpers ---
 const fmt = (n: number | null | undefined) => {
@@ -92,8 +108,8 @@ async function main() {
     supabase
       .from('quotas')
       .select('quota_amount')
-      .eq('fiscal_year', 2026)
-      .eq('fiscal_quarter', 1),
+      .eq('fiscal_year', Q_YEAR)
+      .eq('fiscal_quarter', Q_NUM),
 
     // 4. Funnel — all sales pipeline deals with stage entry timestamps
     supabase

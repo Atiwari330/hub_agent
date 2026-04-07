@@ -72,7 +72,10 @@ function formatWeekLabel(monday: Date): string {
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const startDate = searchParams.get('startDate') || '2026-01-01';
+    const now = new Date();
+    const qMonth = Math.floor(now.getMonth() / 3) * 3;
+    const defaultStart = new Date(now.getFullYear(), qMonth, 1).toISOString().split('T')[0];
+    const startDate = searchParams.get('startDate') || defaultStart;
     const endDate = searchParams.get('endDate') || new Date().toISOString().split('T')[0];
 
     const supabase = createServiceClient();
