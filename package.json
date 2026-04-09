@@ -23,7 +23,8 @@
     "inspect-ticket": "tsx src/scripts/inspect-ticket.ts",
     "triage": "tsx src/scripts/ticket-triage.ts",
     "deal-scrub": "tsx src/scripts/deal-scrub.ts",
-    "ppl-cadence": "tsx src/scripts/ppl-cadence.ts"
+    "ppl-cadence": "tsx src/scripts/ppl-cadence.ts",
+    "advise": "tsx src/scripts/strategic-advisor.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.2",

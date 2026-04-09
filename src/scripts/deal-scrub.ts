@@ -12,9 +12,11 @@ import {
   getMeetingsByDealId,
   getTasksByDealId,
 } from '../lib/hubspot/engagements';
+import { getHubSpotDealUrl } from '../lib/hubspot/calls';
 import { generateText } from 'ai';
 import { createDeepSeek } from '@ai-sdk/deepseek';
 import fs from 'fs';
+import path from 'path';
 import type { HubSpotDeal } from '../types/hubspot';
 import type { HubSpotEmail, HubSpotCall, HubSpotMeeting, HubSpotTask } from '../lib/hubspot/engagements';
 import type { HubSpotNoteWithAuthor } from '../types/exception-context';
@@ -28,6 +30,42 @@ function getScrubModel() {
   if (!apiKey) throw new Error('AI_GATEWAY_API_KEY is not configured');
   const deepseek = createDeepSeek({ apiKey, baseURL: 'https://ai-gateway.vercel.sh/v1' });
   return deepseek('deepseek/deepseek-v3.2');
+}
+
+// ---------------------------------------------------------------------------
+// Result caching
+// ---------------------------------------------------------------------------
+
+const CACHE_DIR = path.resolve(process.cwd(), '.cache', 'deal-scrub');
+
+interface CachedEntry {
+  lastModified: string;
+  analyzedAt: string;
+  result: ScrubResult;
+}
+
+function ensureCacheDir(): void {
+  fs.mkdirSync(CACHE_DIR, { recursive: true });
+}
+
+function getCachedResult(dealId: string, lastModified: string | null): ScrubResult | null {
+  if (!lastModified) return null;
+  const file = path.join(CACHE_DIR, `${dealId}.json`);
+  try {
+    const raw = fs.readFileSync(file, 'utf-8');
+    const entry: CachedEntry = JSON.parse(raw);
+    if (entry.lastModified === lastModified) return entry.result;
+  } catch {
+    // Cache miss — file doesn't exist or is corrupt
+  }
+  return null;
+}
+
+function setCachedResult(dealId: string, lastModified: string | null, result: ScrubResult): void {
+  if (!lastModified) return;
+  const file = path.join(CACHE_DIR, `${dealId}.json`);
+  const entry: CachedEntry = { lastModified, analyzedAt: new Date().toISOString(), result };
+  fs.writeFileSync(file, JSON.stringify(entry), 'utf-8');
 }
 
 // ---------------------------------------------------------------------------
@@ -566,6 +604,96 @@ export const RECOMMENDATION_ORDER = [
   'UNKNOWN',
 ];
 
+// ---------------------------------------------------------------------------
+// CSV output
+// ---------------------------------------------------------------------------
+
+function csvEscape(value: string): string {
+  if (value.includes(',') || value.includes('"') || value.includes('\n')) {
+    return `"${value.replace(/"/g, '""')}"`;
+  }
+  return value;
+}
+
+function truncateAtSentence(text: string, maxLen: number): string {
+  if (text.length <= maxLen) return text;
+  const cut = text.slice(0, maxLen);
+  const lastPeriod = cut.lastIndexOf('.');
+  return lastPeriod > maxLen * 0.4 ? cut.slice(0, lastPeriod + 1) : cut.slice(0, cut.lastIndexOf(' ')) + '...';
+}
+
+function formatManagerCsv(results: ScrubResult[]): string {
+  const headers = [
+    'Deal Name',
+    'HubSpot Link',
+    'Stage',
+    'Amount',
+    'Age (days)',
+    'Days in Stage',
+    'Close Date',
+    'Activity',
+    'Customer Engagement',
+    'AE Effort',
+    'AE Effort Rationale',
+    'Momentum',
+    'Recommendation',
+    'Summary',
+  ];
+
+  const rows = results.map((r) => [
+    r.dealName,
+    getHubSpotDealUrl(r.dealId),
+    r.stageName,
+    r.amount != null ? String(r.amount) : '',
+    String(r.dealAgeDays),
+    r.daysInCurrentStage != null ? String(r.daysInCurrentStage) : '',
+    r.closeDate || '',
+    r.activityLevel,
+    r.customerEngagement,
+    r.aeEffort,
+    truncateAtSentence(r.recommendationRationale, 200),
+    r.dealMomentum,
+    r.recommendation,
+    r.executiveSummary,
+  ]);
+
+  return [headers, ...rows].map((row) => row.map(csvEscape).join(',')).join('\n');
+}
+
+function formatAeCsv(results: ScrubResult[]): string {
+  const headers = [
+    'Deal Name',
+    'HubSpot Link',
+    'Stage',
+    'Amount',
+    'Age (days)',
+    'Days in Stage',
+    'Close Date',
+    'Activity',
+    'Customer Engagement',
+    'Momentum',
+    'Recommendation',
+    'Summary',
+  ];
+
+  const rows = results.map((r) => [
+    r.dealName,
+    getHubSpotDealUrl(r.dealId),
+    r.stageName,
+    r.amount != null ? String(r.amount) : '',
+    String(r.dealAgeDays),
+    r.daysInCurrentStage != null ? String(r.daysInCurrentStage) : '',
+    r.closeDate || '',
+    r.activityLevel,
+    r.customerEngagement,
+    r.dealMomentum,
+    r.recommendation,
+    r.executiveSummary,
+  ]);
+
+  return [headers, ...rows].map((row) => row.map(csvEscape).join(',')).join('\n');
+}
+
 export function formatReport(
   results: ScrubResult[],
   ownerName: string,
@@ -673,6 +801,7 @@ function parseArgs() {
   let verbose = false;
   let output: string | null = null;
   let dealId: string | null = null;
+  let noCache = false;
 
   for (let i = 0; i < args.length; i++) {
     if (args[i].startsWith('--owner=')) {
@@ -697,6 +826,8 @@ function parseArgs() {
       dealId = args[i].split('=')[1];
     } else if (args[i] === '--deal' && args[i + 1]) {
       dealId = args[++i];
+    } else if (args[i] === '--no-cache') {
+      noCache = true;
     } else if (args[i] === '--help' || args[i] === '-h') {
       console.log(`
 Usage: npx tsx src/scripts/deal-scrub.ts --owner=EMAIL [options]
@@ -712,6 +843,7 @@ Options:
   --concurrency=N      Max parallel deals (default: 3)
   --verbose            Include full activity timeline per deal
   --output=FILE        Custom output path (default: deal-scrub-{name}-{date}.md)
+  --no-cache           Force re-analysis of all deals (ignore cache)
   --help, -h           Show this help
 
 Examples:
@@ -728,7 +860,7 @@ Examples:
     process.exit(1);
   }
 
-  return { owner, stage, concurrency, verbose, output, dealId };
+  return { owner, stage, concurrency, verbose, output, dealId, noCache };
 }
 
 // ---------------------------------------------------------------------------
@@ -829,19 +961,41 @@ async function main() {
 
   console.log(`\nAnalyzing ${deals.length} deal${deals.length === 1 ? '' : 's'} for ${ownerName} (concurrency: ${args.concurrency})...\n`);
 
+  // Set up cache
+  if (!args.noCache) ensureCacheDir();
+
   const startTime = Date.now();
   let completed = 0;
+  let cached = 0;
 
   const results = await processWithConcurrency(
     deals,
     args.concurrency,
     async (deal, _index) => {
+      // Check cache
+      if (!args.noCache) {
+        const lastMod = deal.properties.hs_lastmodifieddate || null;
+        const hit = getCachedResult(deal.id, lastMod);
+        if (hit) {
+          completed++;
+          cached++;
+          console.log(
+            `  [${completed}/${deals.length}] ○ ${deal.properties.dealname} → ${hit.recommendation} [cached]`
+          );
+          return hit;
+        }
+      }
+
       try {
         const result = await scrubDeal(deal, stageNameMap, ownerMap, ownerName);
         completed++;
         console.log(
           `  [${completed}/${deals.length}] ✓ ${deal.properties.dealname} → ${result.recommendation}`
         );
+        // Write to cache
+        if (!args.noCache) {
+          setCachedResult(deal.id, deal.properties.hs_lastmodifieddate || null, result);
+        }
         return result;
       } catch (err) {
         completed++;
@@ -877,7 +1031,7 @@ async function main() {
   const successes = results.filter((r) => !r.error).length;
   const failures = results.filter((r) => r.error).length;
 
-  console.log(`\nDone in ${elapsed}s — ${successes} analyzed, ${failures} failed\n`);
+  console.log(`\nDone in ${elapsed}s — ${successes} analyzed, ${cached} cached, ${failures} failed\n`);
 
   // Generate report
   const filters = args.stage ? `Stage: ${args.stage.join(', ')}` : 'All open stages';
@@ -887,7 +1041,16 @@ async function main() {
   const ownerSlug = ownerName.split(' ').pop()?.toLowerCase() || 'unknown';
   const outputFile = args.output || `deal-scrub-${ownerSlug}-${today}.md`;
   fs.writeFileSync(outputFile, report, 'utf-8');
-  console.log(`Report written to ${outputFile}\n`);
+  console.log(`Report written to ${outputFile}`);
+
+  // Write CSVs
+  const managerCsvFile = outputFile.replace(/\.md$/, '-manager.csv');
+  fs.writeFileSync(managerCsvFile, formatManagerCsv(results), 'utf-8');
+  console.log(`Manager CSV written to ${managerCsvFile}`);
+
+  const aeCsvFile = outputFile.replace(/\.md$/, '-ae.csv');
+  fs.writeFileSync(aeCsvFile, formatAeCsv(results), 'utf-8');
+  console.log(`AE CSV written to ${aeCsvFile}\n`);
 
   // Print to stdout
   console.log(report);
