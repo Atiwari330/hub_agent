@@ -105,12 +105,7 @@ export function DealReviewCard({ deal, onOverrideChange }: DealReviewCardProps) 
               <span>Close: {closeDate}</span>
             </div>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <span
-              className={`rounded px-2 py-0.5 text-xs font-bold ${GRADE_COLORS[deal.overallGrade] || 'bg-gray-100'}`}
-            >
-              {deal.overallGrade}
-            </span>
+          <div className="shrink-0">
             <span className="text-xs text-gray-400">
               AI: {AI_TIER_LABELS[deal.likelihoodTier] || deal.likelihoodTier}
             </span>
