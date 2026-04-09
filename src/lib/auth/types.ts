@@ -47,6 +47,7 @@ export const RESOURCES = {
   PPL_DASHBOARD: 'ppl_dashboard',
   Q2_GOAL_TRACKER: 'q2_goal_tracker',
   PRICING_COMPLIANCE: 'pricing_compliance',
+  Q2_COMMAND_CENTER: 'q2_command_center',
 } as const;
 
 export type Resource = (typeof RESOURCES)[keyof typeof RESOURCES];
@@ -143,6 +144,7 @@ export function getResourceFromPath(pathname: string): Resource | null {
   // Demo Tracker & Demo Economics
   if (pathname.includes('/dashboard/demo-tracker')) return RESOURCES.DEMO_TRACKER;
   if (pathname.includes('/dashboard/demo-economics')) return RESOURCES.DEMO_TRACKER;
+  if (pathname.includes('/dashboard/q2-command-center')) return RESOURCES.Q2_COMMAND_CENTER;
   if (pathname.includes('/dashboard/q2-goal-tracker')) return RESOURCES.Q2_GOAL_TRACKER;
 
   // AE pages
@@ -211,6 +213,7 @@ export function getResourceFromPath(pathname: string): Resource | null {
   if (pathname.includes('/api/hot-tracker')) return RESOURCES.HOT_TRACKER;
   if (pathname.includes('/api/demo-tracker')) return RESOURCES.DEMO_TRACKER;
   if (pathname.includes('/api/demo-economics')) return RESOURCES.DEMO_TRACKER;
+  if (pathname.includes('/api/command-center')) return RESOURCES.Q2_COMMAND_CENTER;
   if (pathname.includes('/api/q2-goal-tracker')) return RESOURCES.Q2_GOAL_TRACKER;
   if (pathname.match(/\/api\/ae\/[^/]+/)) return RESOURCES.AE_DETAIL;
 

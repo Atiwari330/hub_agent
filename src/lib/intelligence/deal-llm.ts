@@ -7,6 +7,7 @@
  * Runs on: never-analyzed deals, deals >3 days stale, grade D/F deals (daily), stage-changed deals
  */
 
+import type { LanguageModel } from 'ai';
 import { createServiceClient } from '@/lib/supabase/client';
 import { analyzeDealCoach, type DealCoachAnalysis } from '@/app/api/queues/deal-coach/analyze/analyze-core';
 import { computeGrade, computeOverallScore } from './deal-rules';
@@ -14,6 +15,7 @@ import { PRE_DEMO_STAGE_IDS } from '@/lib/hubspot/stage-config';
 import { SALES_PIPELINE_STAGES } from '@/lib/hubspot/stage-config';
 import { batchFetchDealEngagements } from '@/lib/hubspot/batch-engagements';
 import { analyzePreDemoEffort } from './pre-demo-llm';
+import { getDeepSeekModel } from '@/lib/ai/provider';
 
 // --- Score Mapping from LLM outputs ---
 
@@ -82,11 +84,12 @@ export async function analyzeDealIntelligence(dealId: string): Promise<LLMAnalys
       .single();
 
     if (dealData && PRE_DEMO_STAGE_IDS.includes(dealData.deal_stage)) {
-      return analyzePreDemoDealIntelligence(dealId, dealData);
+      return analyzePreDemoDealIntelligence(dealId, dealData, getDeepSeekModel());
     }
 
-    // Post-demo: run the existing Deal Coach analysis
-    const result = await analyzeDealCoach(dealId);
+    // Post-demo: run the existing Deal Coach analysis with DeepSeek
+    const model = getDeepSeekModel();
+    const result = await analyzeDealCoach(dealId, { model });
 
     if (!result.success) {
       return { success: false, dealId, error: result.error };
@@ -188,7 +191,8 @@ const STAGE_LABEL_MAP = new Map<string, string>(
 
 async function analyzePreDemoDealIntelligence(
   dealId: string,
-  dealData: { deal_stage: string; deal_name: string | null; hubspot_created_at: string | null; pipeline: string }
+  dealData: { deal_stage: string; deal_name: string | null; hubspot_created_at: string | null; pipeline: string },
+  model?: LanguageModel
 ): Promise<LLMAnalysisResult> {
   const supabase = createServiceClient();
 
@@ -228,7 +232,8 @@ async function analyzePreDemoDealIntelligence(
       engagements.calls,
       engagements.emails,
       engagements.meetings,
-      notes
+      notes,
+      model ? { model } : undefined
     );
 
     if (!result.success) {

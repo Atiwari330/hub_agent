@@ -12,7 +12,7 @@
  * dimension scores with LLM-derived values.
  */
 
-import { generateText } from 'ai';
+import { generateText, type LanguageModel } from 'ai';
 import { getModel } from '@/lib/ai/provider';
 import { createServiceClient } from '@/lib/supabase/client';
 import type { HubSpotCall, HubSpotEmail, HubSpotMeeting } from '@/lib/hubspot/engagements';
@@ -146,7 +146,8 @@ export async function analyzePreDemoEffort(
   calls: HubSpotCall[],
   emails: HubSpotEmail[],
   meetings: HubSpotMeeting[],
-  notes: { note_body: string; note_timestamp: string; author_name: string | null }[] = []
+  notes: { note_body: string; note_timestamp: string; author_name: string | null }[] = [],
+  options?: { model?: LanguageModel }
 ): Promise<{ success: true; result: PreDemoLLMResult } | { success: false; error: string }> {
   try {
     const prompt = buildPreDemoEffortPrompt({
@@ -160,7 +161,7 @@ export async function analyzePreDemoEffort(
     });
 
     const { text } = await generateText({
-      model: getModel(),
+      model: options?.model ?? getModel(),
       prompt,
     });
 

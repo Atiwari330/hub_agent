@@ -4,7 +4,7 @@ import { getEmailsByDealId, getCallsByDealId, getMeetingsByDealId } from '@/lib/
 import { SALES_PIPELINE_STAGES } from '@/lib/hubspot/stage-config';
 import { TRACKED_STAGES } from '@/lib/hubspot/stage-mappings';
 import { getOutcomeLabel, formatCallDuration } from '@/lib/utils/call-outcomes';
-import { generateText } from 'ai';
+import { generateText, type LanguageModel } from 'ai';
 import { getModel } from '@/lib/ai/provider';
 import { getCurrentQuarter, getQuarterFromDate } from '@/lib/utils/quarter';
 
@@ -60,7 +60,7 @@ const STAGE_ENTRY_COLUMNS: { dbColumn: string; label: string; stageId: string }[
 
 // --- Core Analysis Function ---
 
-export async function analyzeDealCoach(dealId: string): Promise<AnalyzeResult> {
+export async function analyzeDealCoach(dealId: string, options?: { model?: LanguageModel }): Promise<AnalyzeResult> {
   const supabase = await createServerSupabaseClient();
   const serviceClient = createServiceClient();
 
@@ -439,7 +439,7 @@ ${engagementText}`;
 
     // 10. Call LLM
     const result = await generateText({
-      model: getModel(),
+      model: options?.model ?? getModel(),
       system: systemPrompt,
       prompt: userPrompt,
     });
