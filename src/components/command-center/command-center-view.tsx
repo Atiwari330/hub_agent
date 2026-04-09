@@ -129,7 +129,7 @@ export function CommandCenterView() {
       <PacingSection pacing={data.pacing} currentWeek={currentWeek} />
       <InitiativeTracker initiatives={data.initiatives} />
       <WeeklyOperatingTable weeklyRows={data.pacing.weeklyRows} currentWeek={currentWeek} />
-      {forecast && <ForecastSection forecast={forecast} deals={deals} onDealClick={setSelectedDeal} />}
+      {forecast && <ForecastSection forecast={forecast} deals={deals} onDealClick={setSelectedDeal} onRefresh={refetchForecast} />}
       <AEExecutionSection
         aeExecutions={aeExecutions}
         onSelectAE={setAeFilter}

@@ -28,11 +28,31 @@ interface ForecastSectionProps {
   forecast: ForecastSummary;
   deals?: DealForecastItem[];
   onDealClick?: (dealId: string) => void;
+  onRefresh?: () => void;
 }
 
-export function ForecastSection({ forecast, deals, onDealClick }: ForecastSectionProps) {
+export function ForecastSection({ forecast, deals, onDealClick, onRefresh }: ForecastSectionProps) {
   const [expandedTier, setExpandedTier] = useState<LikelihoodTier | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshResult, setRefreshResult] = useState<string | null>(null);
   const maxBarValue = Math.max(forecast.projectedTotal, forecast.target) * 1.1;
+
+  async function handleRefresh() {
+    setRefreshing(true);
+    setRefreshResult(null);
+    try {
+      const res = await fetch('/api/command-center/refresh-intelligence', { method: 'POST' });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Refresh failed');
+      const secs = Math.round(json.durationMs / 1000);
+      setRefreshResult(`Analyzed ${json.phase2.analyzed} deals in ${secs}s`);
+      onRefresh?.();
+    } catch (e) {
+      setRefreshResult(e instanceof Error ? e.message : 'Refresh failed');
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   // Stacked bar segments
   const segments = [
@@ -61,9 +81,24 @@ export function ForecastSection({ forecast, deals, onDealClick }: ForecastSectio
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold text-gray-900">Rolling Forecast</h2>
-        <span className={`rounded-full border px-3 py-1 text-xs font-medium ${conf.color}`}>
-          {conf.label}
-        </span>
+        <div className="flex items-center gap-3">
+          {refreshResult && (
+            <span className="text-xs text-gray-500">{refreshResult}</span>
+          )}
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            <svg className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            {refreshing ? 'Analyzing...' : 'Refresh Intelligence'}
+          </button>
+          <span className={`rounded-full border px-3 py-1 text-xs font-medium ${conf.color}`}>
+            {conf.label}
+          </span>
+        </div>
       </div>
 
       {/* Stacked forecast bar */}
