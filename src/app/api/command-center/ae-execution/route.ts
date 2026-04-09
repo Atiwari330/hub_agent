@@ -33,8 +33,8 @@ export async function GET() {
   const supabase = await createServerSupabaseClient();
 
   try {
-    // Fetch intelligence, owners, and Q2 closed-won deals in parallel
-    const [intResult, ownersResult, closedWonResult] = await Promise.all([
+    // Fetch intelligence, owners, deals (for close dates), and Q2 closed-won deals
+    const [intResult, ownersResult, dealsResult, closedWonResult] = await Promise.all([
       supabase
         .from('deal_intelligence')
         .select('hubspot_deal_id, owner_id, owner_name, overall_score, overall_grade, amount, stage_id')
@@ -43,6 +43,10 @@ export async function GET() {
         .from('owners')
         .select('id, first_name, last_name, email')
         .in('email', Object.keys(AE_TARGETS)),
+      supabase
+        .from('deals')
+        .select('hubspot_deal_id, close_date, deal_stage')
+        .eq('pipeline', SYNC_CONFIG.TARGET_PIPELINE_ID),
       supabase
         .from('deals')
         .select('hubspot_deal_id, owner_id, amount')
@@ -56,14 +60,21 @@ export async function GET() {
 
     const allIntel = intResult.data || [];
     const owners = ownersResult.data || [];
+    const allDeals = dealsResult.data || [];
     const closedWonDeals = closedWonResult.data || [];
     const openStageSet = new Set(ALL_OPEN_STAGE_IDS);
 
-    // Group intelligence by owner
+    // Build close date lookup to filter to Q2-closing deals only
+    const closeDateMap = new Map(allDeals.map((d) => [d.hubspot_deal_id, d.close_date]));
+
+    // Group intelligence by owner — only include open deals closing in Q2
     const ownerIntelMap = new Map<string, typeof allIntel>();
     for (const row of allIntel) {
       if (!row.owner_id) continue;
       if (!openStageSet.has(row.stage_id || '')) continue;
+      // Only include deals with close date in Q2 (or no close date, assumed Q2)
+      const closeDate = closeDateMap.get(row.hubspot_deal_id);
+      if (closeDate && (closeDate < Q2_START || closeDate > '2026-06-30')) continue;
       const list = ownerIntelMap.get(row.owner_id) || [];
       list.push(row);
       ownerIntelMap.set(row.owner_id, list);
