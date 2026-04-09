@@ -32,14 +32,14 @@ export function CommandCenterView() {
     return (
       <div className="space-y-8 p-6">
         <div className="animate-pulse space-y-6">
-          <div className="h-24 rounded-lg bg-slate-800/50" />
+          <div className="h-16 rounded-lg bg-gray-200" />
           <div className="grid grid-cols-4 gap-4">
             {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="h-24 rounded-lg bg-slate-800/50" />
+              <div key={i} className="h-24 rounded-lg bg-gray-200" />
             ))}
           </div>
-          <div className="h-64 rounded-lg bg-slate-800/50" />
-          <div className="h-48 rounded-lg bg-slate-800/50" />
+          <div className="h-64 rounded-lg bg-gray-200" />
+          <div className="h-48 rounded-lg bg-gray-200" />
         </div>
       </div>
     );
@@ -48,12 +48,12 @@ export function CommandCenterView() {
   if (error) {
     return (
       <div className="p-6">
-        <div className="rounded-lg border border-red-500/20 bg-red-500/10 p-6 text-center">
-          <p className="text-sm text-red-400">Failed to load Command Center data</p>
-          <p className="mt-1 text-xs text-red-400/70">{error}</p>
+        <div className="rounded-lg border border-red-200 bg-red-50 p-6 text-center">
+          <p className="text-sm text-red-700">Failed to load Command Center data</p>
+          <p className="mt-1 text-xs text-red-500">{error}</p>
           <button
             onClick={fetchData}
-            className="mt-4 rounded-md bg-slate-700 px-4 py-2 text-sm text-slate-200 hover:bg-slate-600 transition-colors"
+            className="mt-4 rounded-md bg-gray-100 px-4 py-2 text-sm text-gray-700 hover:bg-gray-200 transition-colors"
           >
             Retry
           </button>

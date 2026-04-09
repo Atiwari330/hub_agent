@@ -17,7 +17,6 @@ interface PacingSectionProps {
 }
 
 export function PacingSection({ pacing, currentWeek }: PacingSectionProps) {
-  // Build cumulative chart data
   const chartData = pacing.weeklyRows.map((row, i) => {
     const cumulativeActual = pacing.weeklyRows
       .slice(0, i + 1)
@@ -35,36 +34,36 @@ export function PacingSection({ pacing, currentWeek }: PacingSectionProps) {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-lg font-semibold text-white">Deal Creation Pacing</h2>
+      <h2 className="text-lg font-semibold text-gray-900">Deal Creation Pacing</h2>
 
       {/* Cumulative chart */}
-      <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-5">
-        <h3 className="mb-4 text-sm font-medium text-slate-300">
+      <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
+        <h3 className="mb-4 text-sm font-medium text-gray-700">
           Cumulative Deals Created vs Required Pace
         </h3>
         <ResponsiveContainer width="100%" height={280}>
           <AreaChart data={chartData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-            <XAxis dataKey="weekLabel" tick={{ fill: '#94a3b8', fontSize: 12 }} />
-            <YAxis tick={{ fill: '#94a3b8', fontSize: 12 }} />
+            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+            <XAxis dataKey="weekLabel" tick={{ fill: '#6b7280', fontSize: 12 }} />
+            <YAxis tick={{ fill: '#6b7280', fontSize: 12 }} />
             <Tooltip
               contentStyle={{
-                backgroundColor: '#1e293b',
-                border: '1px solid #475569',
+                backgroundColor: '#fff',
+                border: '1px solid #e5e7eb',
                 borderRadius: '8px',
-                color: '#f1f5f9',
+                color: '#111827',
               }}
             />
             <ReferenceLine
               x={chartData[currentWeek - 1]?.weekLabel}
               stroke="#6366f1"
               strokeDasharray="3 3"
-              label={{ value: 'Now', fill: '#818cf8', fontSize: 11 }}
+              label={{ value: 'Now', fill: '#6366f1', fontSize: 11 }}
             />
             <Area
               type="monotone"
               dataKey="required"
-              stroke="#64748b"
+              stroke="#9ca3af"
               fill="none"
               strokeDasharray="6 3"
               name="Required Pace"
@@ -74,7 +73,7 @@ export function PacingSection({ pacing, currentWeek }: PacingSectionProps) {
               dataKey="actual"
               stroke="#6366f1"
               fill="#6366f1"
-              fillOpacity={0.15}
+              fillOpacity={0.1}
               name="Actual"
               connectNulls={false}
             />
@@ -83,12 +82,12 @@ export function PacingSection({ pacing, currentWeek }: PacingSectionProps) {
       </div>
 
       {/* Source breakdown table */}
-      <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-5">
-        <h3 className="mb-4 text-sm font-medium text-slate-300">Source Breakdown</h3>
+      <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
+        <h3 className="mb-4 text-sm font-medium text-gray-700">Source Breakdown</h3>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-slate-700 text-left text-xs uppercase tracking-wider text-slate-400">
+              <tr className="border-b border-gray-200 text-left text-xs uppercase tracking-wider text-gray-500">
                 <th className="pb-3 pr-4">Source</th>
                 <th className="pb-3 pr-4 text-right">Created</th>
                 <th className="pb-3 pr-4 text-right">Required</th>
@@ -97,10 +96,10 @@ export function PacingSection({ pacing, currentWeek }: PacingSectionProps) {
             </thead>
             <tbody>
               {pacing.sourceBreakdown.map((s) => (
-                <tr key={s.source} className="border-b border-slate-700/50">
-                  <td className="py-2.5 pr-4 text-slate-200">{s.source}</td>
-                  <td className="py-2.5 pr-4 text-right font-mono text-slate-200">{s.totalCreated}</td>
-                  <td className="py-2.5 pr-4 text-right font-mono text-slate-400">{s.requiredTotal}</td>
+                <tr key={s.source} className="border-b border-gray-100">
+                  <td className="py-2.5 pr-4 text-gray-900">{s.source}</td>
+                  <td className="py-2.5 pr-4 text-right font-mono text-gray-900">{s.totalCreated}</td>
+                  <td className="py-2.5 pr-4 text-right font-mono text-gray-500">{s.requiredTotal}</td>
                   <td className="py-2.5 text-right">
                     <PaceStatusBadge status={s.paceStatus} />
                   </td>
@@ -108,7 +107,7 @@ export function PacingSection({ pacing, currentWeek }: PacingSectionProps) {
               ))}
             </tbody>
             <tfoot>
-              <tr className="text-slate-300 font-medium">
+              <tr className="font-medium text-gray-900">
                 <td className="pt-3 pr-4">Total</td>
                 <td className="pt-3 pr-4 text-right font-mono">{pacing.totalLeadsCreated}</td>
                 <td className="pt-3 pr-4 text-right font-mono">{pacing.totalLeadsRequired}</td>
@@ -124,9 +123,9 @@ export function PacingSection({ pacing, currentWeek }: PacingSectionProps) {
 
 function PaceStatusBadge({ status }: { status: 'ahead' | 'on_pace' | 'behind' }) {
   const styles = {
-    ahead: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
-    on_pace: 'bg-slate-500/10 text-slate-300 border-slate-500/20',
-    behind: 'bg-red-500/10 text-red-400 border-red-500/20',
+    ahead: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    on_pace: 'bg-gray-50 text-gray-600 border-gray-200',
+    behind: 'bg-red-50 text-red-700 border-red-200',
   };
   const labels = { ahead: 'Ahead', on_pace: 'On Pace', behind: 'Behind' };
 
