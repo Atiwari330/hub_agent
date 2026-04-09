@@ -7,7 +7,7 @@
 
 import { SupabaseClient } from '@supabase/supabase-js';
 import { getQuarterInfo, getQuarterProgress } from '@/lib/utils/quarter';
-import type { PacingData, WeeklyPacingRow, SourcePacing } from './types';
+import type { PacingData, WeeklyPacingRow, WeeklyDealRef, SourcePacing } from './types';
 import type { Q2GoalTrackerApiResponse } from '@/lib/q2-goal-tracker/types';
 import { computeLeadsNeeded, computeDemosNeeded, computeDealsNeeded } from '@/lib/q2-goal-tracker/math';
 
@@ -25,13 +25,28 @@ export async function computePacingData(
   // Fetch all Q2 deals from Supabase (created in Q2 + in sales pipeline)
   const { data: q2Deals, error } = await supabase
     .from('deals')
-    .select('hubspot_deal_id, deal_name, amount, lead_source, hubspot_created_at, demo_completed_entered_at, closed_won_entered_at, deal_stage')
+    .select('hubspot_deal_id, deal_name, amount, lead_source, hubspot_created_at, demo_scheduled_entered_at, demo_completed_entered_at, closed_won_entered_at, deal_stage, owner_id')
     .eq('pipeline', SALES_PIPELINE_ID)
     .gte('hubspot_created_at', q2.startDate.toISOString())
     .lte('hubspot_created_at', q2.endDate.toISOString());
 
+  // Fetch owner names for deal refs
+  const { data: owners } = await supabase
+    .from('owners')
+    .select('id, first_name, last_name');
+  const ownerMap = new Map((owners || []).map((o) => [String(o.id), [o.first_name, o.last_name].filter(Boolean).join(' ')]));
+
   if (error) throw new Error(`Failed to fetch Q2 deals: ${error.message}`);
   const deals = q2Deals || [];
+
+  function toRef(d: typeof deals[number]): WeeklyDealRef {
+    return {
+      hubspotDealId: d.hubspot_deal_id,
+      dealName: d.deal_name || '',
+      amount: Number(d.amount) || 0,
+      ownerName: ownerMap.get(String(d.owner_id)) || '',
+    };
+  }
 
   // Use the default rate set (first = Q1 2026) for required calculations
   const rates = goalTrackerData.historicalRates;
@@ -54,9 +69,22 @@ export async function computePacingData(
       return t >= weekStart.getTime() && t <= weekEnd.getTime();
     });
 
+    const weekDemosScheduled = deals.filter((d) => {
+      if (!d.demo_scheduled_entered_at) return false;
+      const t = new Date(d.demo_scheduled_entered_at).getTime();
+      return t >= weekStart.getTime() && t <= weekEnd.getTime();
+    });
+
     const weekDemos = deals.filter((d) => {
       if (!d.demo_completed_entered_at) return false;
       const t = new Date(d.demo_completed_entered_at).getTime();
+      return t >= weekStart.getTime() && t <= weekEnd.getTime();
+    });
+
+    // Closed-won deals for this week (from all Q2 deals, not just created-in-Q2)
+    const weekClosedWon = deals.filter((d) => {
+      if (!d.closed_won_entered_at) return false;
+      const t = new Date(d.closed_won_entered_at).getTime();
       return t >= weekStart.getTime() && t <= weekEnd.getTime();
     });
 
@@ -65,9 +93,14 @@ export async function computePacingData(
       weekStart: weekStart.toISOString().split('T')[0],
       weekEnd: weekEnd.toISOString().split('T')[0],
       leadsCreated: weekDeals.length,
+      demosScheduled: weekDemosScheduled.length,
       dealsToDemo: weekDemos.length,
       closedWonARR: goalTrackerData.weeklyActuals[i]?.closedWonARR || 0,
       closedWonCount: goalTrackerData.weeklyActuals[i]?.closedWonCount || 0,
+      leadsCreatedDeals: weekDeals.map(toRef),
+      demosScheduledDeals: weekDemosScheduled.map(toRef),
+      demoCompletedDeals: weekDemos.map(toRef),
+      closedWonDeals: weekClosedWon.map(toRef),
     });
   }
 

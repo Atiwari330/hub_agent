@@ -26,14 +26,27 @@ export type {
 
 // -- Pacing --
 
+export interface WeeklyDealRef {
+  hubspotDealId: string;
+  dealName: string;
+  amount: number;
+  ownerName: string;
+}
+
 export interface WeeklyPacingRow {
   weekNumber: number;        // 1-13
   weekStart: string;         // YYYY-MM-DD
   weekEnd: string;
   leadsCreated: number;      // deals created this week
-  dealsToDemo: number;       // deals that entered demo this week
+  demosScheduled: number;    // deals that entered demo scheduled this week
+  dealsToDemo: number;       // deals that completed demo this week
   closedWonARR: number;
   closedWonCount: number;
+  // Deal-level refs for drill-down
+  leadsCreatedDeals: WeeklyDealRef[];
+  demosScheduledDeals: WeeklyDealRef[];
+  demoCompletedDeals: WeeklyDealRef[];
+  closedWonDeals: WeeklyDealRef[];
 }
 
 export interface SourcePacing {
