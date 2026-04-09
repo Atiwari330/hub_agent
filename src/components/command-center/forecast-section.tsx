@@ -238,7 +238,17 @@ export function ForecastSection({ forecast, deals, onDealClick, onRefresh }: For
                                     onDealClick?.(deal.hubspotDealId);
                                   }}
                                 >
-                                  <td className="py-1.5 pr-3 text-blue-600 hover:underline">{deal.dealName}</td>
+                                  <td className="py-1.5 pr-3">
+                                    <span className="text-blue-600 hover:underline">{deal.dealName}</span>
+                                    {deal.override && (
+                                      <span
+                                        className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-violet-100 text-violet-700"
+                                        title={`Override by ${deal.override.overriddenBy}: "${deal.override.reason}"`}
+                                      >
+                                        AE Override
+                                      </span>
+                                    )}
+                                  </td>
                                   <td className="py-1.5 pr-3 text-gray-600">{deal.ownerName}</td>
                                   <td className="py-1.5 pr-3 text-right font-mono text-gray-700">{fmt(deal.amount)}</td>
                                   <td className="py-1.5 pr-3 text-gray-600">{deal.stage}</td>
