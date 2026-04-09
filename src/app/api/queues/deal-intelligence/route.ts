@@ -100,7 +100,8 @@ export async function GET() {
     const { data: intelligence, error } = await supabase
       .from('deal_intelligence')
       .select('*')
-      .order('overall_score', { ascending: true });
+      .order('overall_score', { ascending: true })
+      .limit(5000);
 
     if (error) {
       console.error('Error fetching deal intelligence:', error);
@@ -121,7 +122,8 @@ export async function GET() {
         .select('hubspot_deal_id')
         .in('hubspot_deal_id', dealIds)
         .eq('pipeline', SYNC_CONFIG.TARGET_PIPELINE_ID)
-        .in('deal_stage', ALL_OPEN_STAGE_IDS);
+        .in('deal_stage', ALL_OPEN_STAGE_IDS)
+        .limit(5000);
 
       openDealIds = new Set(
         (salesOpen || []).map(d => d.hubspot_deal_id)

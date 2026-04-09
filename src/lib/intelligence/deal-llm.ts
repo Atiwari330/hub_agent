@@ -174,7 +174,8 @@ export async function getDealsNeedingLLMAnalysis(): Promise<string[]> {
   const { data: deals, error } = await supabase
     .from('deal_intelligence')
     .select('hubspot_deal_id, overall_grade, llm_analyzed_at')
-    .or(`llm_analyzed_at.is.null,llm_analyzed_at.lt.${threeDaysAgo.toISOString()},overall_grade.in.(D,F)`);
+    .or(`llm_analyzed_at.is.null,llm_analyzed_at.lt.${threeDaysAgo.toISOString()},overall_grade.in.(D,F)`)
+    .limit(5000);
 
   if (error) {
     console.error('Error fetching deals needing LLM analysis:', error);

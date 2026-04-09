@@ -259,7 +259,8 @@ export async function computeHotTrackerForQuarter(
     .from('deals')
     .select('hubspot_deal_id')
     .not('discovery_entered_at', 'is', null)
-    .eq('pipeline', SYNC_CONFIG.TARGET_PIPELINE_ID);
+    .eq('pipeline', SYNC_CONFIG.TARGET_PIPELINE_ID)
+    .limit(5000);
 
   const sqlDealIdSet = new Set((sqlStageDealRows || []).map((d) => d.hubspot_deal_id));
 

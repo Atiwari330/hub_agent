@@ -303,7 +303,8 @@ export async function GET(request: Request) {
       .from('deals')
       .select('id, hubspot_deal_id, deal_name, deal_stage')
       .eq('pipeline', SYNC_CONFIG.TARGET_PIPELINE_ID)
-      .in('deal_stage', [...ACTIVE_STAGE_IDS, '2030251']); // ACTIVE_STAGE_IDS + MQL
+      .in('deal_stage', [...ACTIVE_STAGE_IDS, '2030251']) // ACTIVE_STAGE_IDS + MQL
+      .limit(5000);
 
     const orphansToRefresh = (staleActiveDeals || []).filter(
       (d) => !allSyncedDealIds.has(d.hubspot_deal_id)

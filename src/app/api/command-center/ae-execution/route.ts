@@ -38,7 +38,8 @@ export async function GET() {
       supabase
         .from('deal_intelligence')
         .select('hubspot_deal_id, owner_id, owner_name, overall_score, overall_grade, amount, stage_id')
-        .eq('pipeline', SYNC_CONFIG.TARGET_PIPELINE_ID),
+        .eq('pipeline', SYNC_CONFIG.TARGET_PIPELINE_ID)
+        .limit(5000),
       supabase
         .from('owners')
         .select('id, first_name, last_name, email')
@@ -46,7 +47,8 @@ export async function GET() {
       supabase
         .from('deals')
         .select('hubspot_deal_id, close_date, deal_stage')
-        .eq('pipeline', SYNC_CONFIG.TARGET_PIPELINE_ID),
+        .eq('pipeline', SYNC_CONFIG.TARGET_PIPELINE_ID)
+        .limit(5000),
       supabase
         .from('deals')
         .select('hubspot_deal_id, owner_id, amount')

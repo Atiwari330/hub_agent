@@ -461,7 +461,8 @@ export async function computeAllDealIntelligence(): Promise<{ processed: number;
     .from('deals')
     .select('*')
     .eq('pipeline', SYNC_CONFIG.TARGET_PIPELINE_ID)
-    .in('deal_stage', ALL_OPEN_STAGE_IDS);
+    .in('deal_stage', ALL_OPEN_STAGE_IDS)
+    .limit(5000);
 
   if (salesError) {
     console.error('Error fetching deals for intelligence:', salesError);

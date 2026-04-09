@@ -39,7 +39,8 @@ export async function POST() {
     const { data: candidates, error } = await supabase
       .from('deal_intelligence')
       .select('hubspot_deal_id, stage_id, overall_grade, llm_analyzed_at, updated_at, deal_name')
-      .eq('pipeline', SYNC_CONFIG.TARGET_PIPELINE_ID);
+      .eq('pipeline', SYNC_CONFIG.TARGET_PIPELINE_ID)
+      .limit(5000);
 
     if (error) throw new Error(`Fetch error: ${error.message}`);
 

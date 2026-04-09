@@ -19,7 +19,8 @@ export async function fetchQ2Deals(supabase: SupabaseClient): Promise<DealForeca
       .from('deal_intelligence')
       .select('*')
       .eq('pipeline', SYNC_CONFIG.TARGET_PIPELINE_ID)
-      .order('overall_score', { ascending: false }),
+      .order('overall_score', { ascending: false })
+      .limit(5000),
     supabase
       .from('deals')
       .select('hubspot_deal_id, deal_name, amount, deal_stage, close_date, lead_source, owner_id, closed_won_entered_at')

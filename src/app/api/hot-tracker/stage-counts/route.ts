@@ -64,7 +64,8 @@ export async function GET(request: NextRequest) {
   const { data: deals, error } = await supabase
     .from('deals')
     .select('owner_id, hubspot_created_at, mql_entered_at, discovery_entered_at, demo_scheduled_entered_at, demo_completed_entered_at, proposal_entered_at')
-    .eq('pipeline', SYNC_CONFIG.TARGET_PIPELINE_ID);
+    .eq('pipeline', SYNC_CONFIG.TARGET_PIPELINE_ID)
+    .limit(5000);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
