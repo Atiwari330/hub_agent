@@ -199,6 +199,8 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
   const isOnDemoEconomics = pathname === '/dashboard/demo-economics';
   // Q2 Goal Tracker
   const isOnQ2GoalTracker = pathname === '/dashboard/q2-goal-tracker';
+  // Q2 Command Center
+  const isOnCommandCenter = pathname === '/dashboard/q2-command-center';
   // PPL Dashboard
   const isOnPplDashboard = pathname === '/dashboard/ppl';
   // Pricing Compliance
@@ -359,6 +361,26 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
               </svg>
               {!isCollapsed && <span>Q2 Goal Tracker</span>}
+            </Link>
+          </div>
+        )}
+
+        {/* Q2 Command Center */}
+        {hasPermission(user, RESOURCES.Q2_COMMAND_CENTER) && (
+          <div className="mb-2">
+            <Link
+              href="/dashboard/q2-command-center"
+              className={`flex items-center gap-3 py-2.5 text-sm font-medium transition-colors ${isCollapsed ? 'px-0 justify-center' : 'px-4'} ${
+                isOnCommandCenter
+                  ? 'bg-indigo-600 text-white'
+                  : 'text-slate-300 hover:bg-slate-800'
+              }`}
+              title={isCollapsed ? 'Q2 Command Center' : undefined}
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
+              </svg>
+              {!isCollapsed && <span>Q2 Command Center</span>}
             </Link>
           </div>
         )}
