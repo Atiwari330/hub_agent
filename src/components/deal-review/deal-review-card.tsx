@@ -36,10 +36,10 @@ const MOMENTUM_LABELS: Record<string, { label: string; color: string }> = {
 };
 
 const AI_TIER_LABELS: Record<string, string> = {
-  highly_likely: 'Highly Likely',
-  likely: 'Likely',
+  highly_likely: 'Commit',
+  likely: 'Strong',
   possible: 'Possible',
-  unlikely: 'Unlikely',
+  unlikely: 'Upside',
   insufficient_data: 'No Data',
 };
 
