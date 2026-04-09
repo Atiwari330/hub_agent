@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import type { WeeklyPacingRow, WeeklyDealRef } from '@/lib/command-center/types';
 
 function fmt(n: number): string {
@@ -121,8 +121,8 @@ export function WeeklyOperatingTable({ weeklyRows, currentWeek }: WeeklyOperatin
               const showDrill = drillDown?.weekNumber === row.weekNumber;
 
               return (
-                <>
-                  <tr key={row.weekNumber} className={rowClass}>
+                <Fragment key={row.weekNumber}>
+                  <tr className={rowClass}>
                     <td className="px-4 py-2.5 font-medium text-gray-900">
                       W{row.weekNumber}
                       {isCurrent && (
@@ -155,7 +155,7 @@ export function WeeklyOperatingTable({ weeklyRows, currentWeek }: WeeklyOperatin
                       onClose={() => setDrillDown(null)}
                     />
                   )}
-                </>
+                </Fragment>
               );
             })}
           </tbody>
