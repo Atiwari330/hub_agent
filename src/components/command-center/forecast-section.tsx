@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import type { ForecastSummary, LikelihoodTier, DealForecastItem } from '@/lib/command-center/types';
 import { LIKELIHOOD_WEIGHTS } from '@/lib/command-center/config';
 
@@ -176,9 +176,8 @@ export function ForecastSection({ forecast, deals, onDealClick, onRefresh }: For
               const hasDeals = tierDeals.length > 0;
 
               return (
-                <>
+                <Fragment key={t.key}>
                   <tr
-                    key={t.key}
                     className={`border-b border-gray-100 ${hasDeals ? 'cursor-pointer hover:bg-gray-50' : ''}`}
                     onClick={() => hasDeals && setExpandedTier(isExpanded ? null : t.key)}
                   >
@@ -240,7 +239,7 @@ export function ForecastSection({ forecast, deals, onDealClick, onRefresh }: For
                       </td>
                     </tr>
                   )}
-                </>
+                </Fragment>
               );
             })}
           </tbody>

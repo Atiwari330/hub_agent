@@ -13,24 +13,53 @@ interface InitiativeTrackerProps {
 }
 
 export function InitiativeTracker({ initiatives }: InitiativeTrackerProps) {
-  if (initiatives.length === 0 || initiatives.every((i) => i.leadsCreated === 0)) {
-    return (
-      <div className="space-y-4">
-        <h2 className="text-lg font-semibold text-gray-900">Initiative Tracking</h2>
-        <div className="rounded-lg border border-gray-200 bg-white p-8 text-center text-sm text-gray-400 shadow-sm">
-          No initiative activity recorded yet. Verify lead source values match HubSpot.
-        </div>
-      </div>
-    );
-  }
+  const totalTarget = initiatives.reduce((s, i) => s + i.q2LeadTarget, 0);
+  const totalCreated = initiatives.reduce((s, i) => s + i.leadsCreated, 0);
 
   return (
     <div className="space-y-4">
-      <h2 className="text-lg font-semibold text-gray-900">Initiative Tracking</h2>
-      <div className="grid gap-4 md:grid-cols-2">
-        {initiatives.map((init) => (
-          <InitiativeCard key={init.id} initiative={init} />
-        ))}
+      <div className="flex items-center gap-2">
+        <h2 className="text-lg font-semibold text-gray-900">Initiative Tracking</h2>
+        <span className="text-xs text-gray-500">
+          Humberto — {totalCreated} / {totalTarget} leads
+        </span>
+        <GapTooltip />
+      </div>
+      {initiatives.length === 0 || initiatives.every((i) => i.leadsCreated === 0) ? (
+        <div className="rounded-lg border border-gray-200 bg-white p-8 text-center text-sm text-gray-400 shadow-sm">
+          No initiative activity recorded yet. Verify lead source values match HubSpot.
+        </div>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2">
+          {initiatives.map((init) => (
+            <InitiativeCard key={init.id} initiative={init} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function GapTooltip() {
+  return (
+    <div className="group relative">
+      <button className="flex h-5 w-5 items-center justify-center rounded-full border border-gray-300 text-xs text-gray-400 hover:border-gray-400 hover:text-gray-600">
+        ?
+      </button>
+      <div className="pointer-events-none absolute left-0 top-7 z-50 w-80 rounded-lg border border-gray-200 bg-white p-3 text-xs text-gray-600 opacity-0 shadow-lg transition-opacity group-hover:pointer-events-auto group-hover:opacity-100">
+        <p className="font-semibold text-gray-900">Target is reduced from gap analysis</p>
+        <p className="mt-1">
+          The Q2 gap analysis shows ~220 leads are mathematically required from new channels
+          to fully cover the $518K revenue gap. The 50-lead target (~23%) is a pragmatic
+          first-quarter goal for two brand-new channels.
+        </p>
+        <p className="mt-1">
+          The remaining gap depends on AE pipeline overperformance and marketing exceeding
+          its 20% growth assumption.
+        </p>
+        <p className="mt-1 text-gray-400">
+          See docs/command-center/05-humberto-pipeline-goals.md
+        </p>
       </div>
     </div>
   );
