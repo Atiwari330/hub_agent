@@ -15,7 +15,7 @@ const TIER_COLORS: Record<string, { active: string; inactive: string }> = {
     active: 'bg-amber-500 text-white ring-amber-500',
     inactive: 'bg-white text-amber-700 ring-amber-300 hover:bg-amber-50',
   },
-  upside: {
+  unlikely: {
     active: 'bg-orange-500 text-white ring-orange-500',
     inactive: 'bg-white text-orange-700 ring-orange-300 hover:bg-orange-50',
   },

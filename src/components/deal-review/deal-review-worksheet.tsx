@@ -161,7 +161,7 @@ export function DealReviewWorksheet({ initialDeals, aeName, logoutUrl }: DealRev
               </div>
               <div className="flex gap-2">
                 <span className="inline-block w-2 h-2 mt-1.5 rounded-full bg-orange-500 shrink-0" />
-                <div><span className="font-semibold">Upside</span> &mdash; A long shot for Q2. Something unexpected would need to happen &mdash; budget approval, a champion re-engaging, timeline accelerating.</div>
+                <div><span className="font-semibold">Unlikely</span> &mdash; A long shot for Q2. Something unexpected would need to happen &mdash; budget approval, a champion re-engaging, timeline accelerating.</div>
               </div>
               <div className="flex gap-2">
                 <span className="inline-block w-2 h-2 mt-1.5 rounded-full bg-gray-400 shrink-0" />

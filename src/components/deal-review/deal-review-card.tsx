@@ -39,7 +39,7 @@ const AI_TIER_LABELS: Record<string, string> = {
   highly_likely: 'Commit',
   likely: 'Strong',
   possible: 'Possible',
-  unlikely: 'Upside',
+  unlikely: 'Unlikely',
   insufficient_data: 'No Data',
 };
 

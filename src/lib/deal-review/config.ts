@@ -32,8 +32,8 @@ export const AE_LIKELIHOOD_OPTIONS: AELikelihoodOption[] = [
     internalTier: 'possible',
   },
   {
-    value: 'upside',
-    label: 'Upside',
+    value: 'unlikely',
+    label: 'Unlikely',
     description: 'Long shot but not dead',
     internalTier: 'unlikely',
   },
