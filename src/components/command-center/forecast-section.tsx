@@ -34,7 +34,7 @@ interface ForecastSectionProps {
 export function ForecastSection({ forecast, deals, onDealClick, onRefresh }: ForecastSectionProps) {
   const [expandedTier, setExpandedTier] = useState<LikelihoodTier | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [refreshResult, setRefreshResult] = useState<string | null>(null);
+  const [refreshResult, setRefreshResult] = useState<{ text: string; isError: boolean } | null>(null);
   const maxBarValue = Math.max(forecast.projectedTotal, forecast.target) * 1.1;
 
   async function handleRefresh() {
@@ -45,10 +45,20 @@ export function ForecastSection({ forecast, deals, onDealClick, onRefresh }: For
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Refresh failed');
       const secs = Math.round(json.durationMs / 1000);
-      setRefreshResult(`Analyzed ${json.phase2.analyzed} deals in ${secs}s`);
+      const p2 = json.phase2;
+      const parts = [`${p2.analyzed} analyzed`];
+      if (p2.skipped > 0) parts.push(`${p2.skipped} up-to-date`);
+      if (p2.errors > 0) parts.push(`${p2.errors} failed`);
+      setRefreshResult({
+        text: `${parts.join(', ')} (${secs}s)`,
+        isError: p2.errors > 0,
+      });
       onRefresh?.();
     } catch (e) {
-      setRefreshResult(e instanceof Error ? e.message : 'Refresh failed');
+      setRefreshResult({
+        text: e instanceof Error ? e.message : 'Refresh failed',
+        isError: true,
+      });
     } finally {
       setRefreshing(false);
     }
@@ -83,7 +93,9 @@ export function ForecastSection({ forecast, deals, onDealClick, onRefresh }: For
         <h2 className="text-lg font-semibold text-gray-900">Rolling Forecast</h2>
         <div className="flex items-center gap-3">
           {refreshResult && (
-            <span className="text-xs text-gray-500">{refreshResult}</span>
+            <span className={`text-xs ${refreshResult.isError ? 'text-red-600' : 'text-gray-500'}`}>
+              {refreshResult.text}
+            </span>
           )}
           <button
             onClick={handleRefresh}
