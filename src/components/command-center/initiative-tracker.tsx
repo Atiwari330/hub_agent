@@ -51,11 +51,17 @@ export function InitiativeTracker({ initiatives }: InitiativeTrackerProps) {
             style={{ width: `${Math.max(totalPct === 0 ? 2 : 0, Math.min(100, totalPct))}%` }}
           />
         </div>
-        <div className="mt-2 grid grid-cols-3 gap-4 text-xs">
+        <div className="mt-2 grid grid-cols-4 gap-4 text-xs">
           <div>
-            <span className="text-gray-500">ARR Generated</span>
+            <span className="text-gray-500">Pipeline ARR</span>
             <p className="font-mono font-semibold text-gray-900">
               {fmt(initiatives.reduce((s, i) => s + i.arrGenerated, 0))}
+            </p>
+          </div>
+          <div>
+            <span className="text-gray-500">Closed Won</span>
+            <p className="font-mono font-semibold text-emerald-700">
+              {fmt(initiatives.reduce((s, i) => s + i.closedWonARR, 0))}
             </p>
           </div>
           <div>
@@ -167,10 +173,14 @@ function InitiativeCard({ initiative: init }: { initiative: InitiativeStatus }) 
       </div>
 
       {/* ARR metrics */}
-      <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
+      <div className="mt-3 grid grid-cols-3 gap-3 text-xs">
         <div>
-          <span className="text-gray-500">ARR Generated</span>
+          <span className="text-gray-500">Pipeline ARR</span>
           <p className="font-mono font-medium text-gray-900">{fmt(init.arrGenerated)}</p>
+        </div>
+        <div>
+          <span className="text-gray-500">Closed Won</span>
+          <p className="font-mono font-medium text-emerald-700">{fmt(init.closedWonARR)}</p>
         </div>
         <div>
           <span className="text-gray-500">ARR Target</span>
