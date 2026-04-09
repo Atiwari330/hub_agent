@@ -23,7 +23,8 @@ export async function fetchQ2Deals(supabase: SupabaseClient): Promise<DealForeca
     supabase
       .from('deals')
       .select('hubspot_deal_id, deal_name, amount, deal_stage, close_date, lead_source, owner_id, closed_won_entered_at')
-      .eq('pipeline', SYNC_CONFIG.TARGET_PIPELINE_ID),
+      .eq('pipeline', SYNC_CONFIG.TARGET_PIPELINE_ID)
+      .limit(5000),
     supabase
       .from('deal_forecast_overrides')
       .select('*'),
