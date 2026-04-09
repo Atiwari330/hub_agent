@@ -15,27 +15,70 @@ interface InitiativeTrackerProps {
 export function InitiativeTracker({ initiatives }: InitiativeTrackerProps) {
   const totalTarget = initiatives.reduce((s, i) => s + i.q2LeadTarget, 0);
   const totalCreated = initiatives.reduce((s, i) => s + i.leadsCreated, 0);
+  const totalPct = totalTarget > 0 ? Math.round((totalCreated / totalTarget) * 100) : 0;
+  const totalBehind = totalCreated < totalTarget * 0.9;
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-2">
-        <h2 className="text-lg font-semibold text-gray-900">Initiative Tracking</h2>
-        <span className="text-xs text-gray-500">
-          Humberto — {totalCreated} / {totalTarget} leads
+      {/* Header with combined status */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <h2 className="text-lg font-semibold text-gray-900">Humberto — New Channel Pipeline</h2>
+          <GapTooltip />
+        </div>
+        <span className={`inline-block rounded-full border px-3 py-1 text-xs font-semibold ${
+          totalBehind
+            ? 'border-red-200 bg-red-50 text-red-700'
+            : 'border-emerald-200 bg-emerald-50 text-emerald-700'
+        }`}>
+          {totalCreated} / {totalTarget} leads ({totalPct}%)
         </span>
-        <GapTooltip />
       </div>
-      {initiatives.length === 0 || initiatives.every((i) => i.leadsCreated === 0) ? (
-        <div className="rounded-lg border border-gray-200 bg-white p-8 text-center text-sm text-gray-400 shadow-sm">
-          No initiative activity recorded yet. Verify lead source values match HubSpot.
+
+      {/* Combined summary bar */}
+      <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+        <div className="flex items-center justify-between text-sm">
+          <span className="font-medium text-gray-700">Combined Q2 Target</span>
+          <span className={`font-semibold ${totalBehind ? 'text-red-600' : 'text-emerald-600'}`}>
+            {totalCreated} / {totalTarget} leads
+          </span>
         </div>
-      ) : (
-        <div className="grid gap-4 md:grid-cols-2">
-          {initiatives.map((init) => (
-            <InitiativeCard key={init.id} initiative={init} />
-          ))}
+        <div className="mt-2 h-3 overflow-hidden rounded-full bg-gray-100">
+          <div
+            className={`h-3 rounded-full transition-all ${
+              totalPct === 0 ? 'bg-red-300' : totalBehind ? 'bg-red-400' : 'bg-emerald-500'
+            }`}
+            style={{ width: `${Math.max(totalPct === 0 ? 2 : 0, Math.min(100, totalPct))}%` }}
+          />
         </div>
-      )}
+        <div className="mt-2 grid grid-cols-3 gap-4 text-xs">
+          <div>
+            <span className="text-gray-500">ARR Generated</span>
+            <p className="font-mono font-semibold text-gray-900">
+              {fmt(initiatives.reduce((s, i) => s + i.arrGenerated, 0))}
+            </p>
+          </div>
+          <div>
+            <span className="text-gray-500">ARR Target</span>
+            <p className="font-mono font-semibold text-gray-900">
+              {fmt(initiatives.reduce((s, i) => s + i.q2ArrTarget, 0))}
+            </p>
+          </div>
+          <div>
+            <span className="text-gray-500">Weekly Pace Needed</span>
+            <p className="font-mono font-semibold text-gray-900">
+              {initiatives.reduce((s, i) => s + i.weeklyLeadPace, 0)}/wk
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Individual initiative cards */}
+      <div className="grid gap-4 md:grid-cols-2">
+        {initiatives.map((init) => (
+          <InitiativeCard key={init.id} initiative={init} />
+        ))}
+      </div>
     </div>
   );
 }
@@ -71,14 +114,24 @@ function InitiativeCard({ initiative: init }: { initiative: InitiativeStatus }) 
     : 0;
 
   const statusStyles = {
-    ahead: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-    on_pace: 'bg-gray-50 text-gray-600 border-gray-200',
-    behind: 'bg-red-50 text-red-700 border-red-200',
+    ahead: 'border-emerald-200 bg-emerald-50/50',
+    on_pace: 'border-gray-200 bg-white',
+    behind: 'border-red-200 bg-red-50/50',
+  };
+  const statusBadge = {
+    ahead: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+    on_pace: 'border-gray-200 bg-gray-50 text-gray-600',
+    behind: 'border-red-200 bg-red-50 text-red-700',
   };
   const statusLabels = { ahead: 'Ahead', on_pace: 'On Pace', behind: 'Behind' };
+  const barColor = {
+    ahead: 'bg-emerald-500',
+    on_pace: 'bg-indigo-500',
+    behind: leadPct === 0 ? 'bg-red-300' : 'bg-red-400',
+  };
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
+    <div className={`rounded-lg border p-5 shadow-sm ${statusStyles[init.paceStatus]}`}>
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
@@ -87,7 +140,7 @@ function InitiativeCard({ initiative: init }: { initiative: InitiativeStatus }) 
             <p className="text-xs text-gray-500">{init.ownerLabel}</p>
           )}
         </div>
-        <span className={`inline-block rounded-full border px-2 py-0.5 text-xs font-medium ${statusStyles[init.paceStatus]}`}>
+        <span className={`inline-block rounded-full border px-2 py-0.5 text-xs font-medium ${statusBadge[init.paceStatus]}`}>
           {statusLabels[init.paceStatus]}
         </span>
       </div>
@@ -95,17 +148,22 @@ function InitiativeCard({ initiative: init }: { initiative: InitiativeStatus }) 
       {/* Lead progress */}
       <div className="mt-4">
         <div className="flex items-baseline justify-between text-xs">
-          <span className="text-gray-500">Leads</span>
-          <span className="text-gray-700">
+          <span className="text-gray-500">Leads Created</span>
+          <span className={`font-semibold ${init.paceStatus === 'behind' ? 'text-red-600' : 'text-gray-700'}`}>
             {init.leadsCreated} / {init.q2LeadTarget}
           </span>
         </div>
-        <div className="mt-1 h-2 rounded-full bg-gray-100">
+        <div className="mt-1 h-2.5 overflow-hidden rounded-full bg-gray-100">
           <div
-            className="h-2 rounded-full bg-indigo-500 transition-all"
-            style={{ width: `${leadPct}%` }}
+            className={`h-2.5 rounded-full transition-all ${barColor[init.paceStatus]}`}
+            style={{ width: `${Math.max(leadPct === 0 ? 2 : 0, leadPct)}%` }}
           />
         </div>
+        {init.paceStatus === 'behind' && init.expectedByNow > 0 && (
+          <p className="mt-1 text-xs text-red-500">
+            Expected {init.expectedByNow} by now — {init.expectedByNow - init.leadsCreated} behind
+          </p>
+        )}
       </div>
 
       {/* ARR metrics */}
@@ -120,16 +178,22 @@ function InitiativeCard({ initiative: init }: { initiative: InitiativeStatus }) 
         </div>
       </div>
 
+      {/* Weekly pace */}
+      <div className="mt-3 flex items-center justify-between text-xs">
+        <span className="text-gray-500">Required Pace</span>
+        <span className="font-mono text-gray-700">{init.weeklyLeadPace} leads/wk</span>
+      </div>
+
       {/* Weekly sparkline */}
-      <div className="mt-3">
+      <div className="mt-2">
         <span className="text-xs text-gray-400">Weekly trend</span>
-        <Sparkline data={init.weeklyBreakdown} />
+        <Sparkline data={init.weeklyBreakdown} behind={init.paceStatus === 'behind'} />
       </div>
     </div>
   );
 }
 
-function Sparkline({ data }: { data: number[] }) {
+function Sparkline({ data, behind }: { data: number[]; behind: boolean }) {
   const max = Math.max(...data, 1);
 
   return (
@@ -137,7 +201,7 @@ function Sparkline({ data }: { data: number[] }) {
       {data.map((val, i) => (
         <div
           key={i}
-          className="flex-1 rounded-sm bg-indigo-400/40"
+          className={`flex-1 rounded-sm ${behind ? 'bg-red-300/50' : 'bg-indigo-400/40'}`}
           style={{ height: `${Math.max(2, (val / max) * 100)}%` }}
           title={`W${i + 1}: ${val}`}
         />

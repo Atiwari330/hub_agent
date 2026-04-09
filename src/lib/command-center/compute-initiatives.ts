@@ -2,7 +2,12 @@
  * Initiative tracking computation.
  *
  * Queries strategic_initiatives from Supabase, then counts deals
- * matching each initiative's lead_source values in Q2.
+ * matching each initiative's lead_source + lead_source_detail values in Q2.
+ *
+ * Matching logic:
+ * - If initiative has lead_source_detail_values: match source AND detail
+ * - If initiative has only lead_source_values: match source, EXCLUDE deals
+ *   that match any other initiative's detail values (prevents double-counting)
  */
 
 import { SupabaseClient } from '@supabase/supabase-js';
@@ -27,10 +32,10 @@ export async function computeInitiativeStatus(supabase: SupabaseClient): Promise
   if (initError) throw new Error(`Failed to fetch initiatives: ${initError.message}`);
   if (!initiatives || initiatives.length === 0) return [];
 
-  // Fetch all Q2 deals with lead sources
+  // Fetch all Q2 deals with lead sources and detail
   const { data: deals, error: dealError } = await supabase
     .from('deals')
-    .select('hubspot_deal_id, deal_name, amount, lead_source, hubspot_created_at, closed_won_entered_at, deal_stage')
+    .select('hubspot_deal_id, deal_name, amount, lead_source, lead_source_detail, hubspot_created_at, closed_won_entered_at, deal_stage')
     .eq('pipeline', SALES_PIPELINE_ID)
     .gte('hubspot_created_at', q2.startDate.toISOString())
     .lte('hubspot_created_at', q2.endDate.toISOString());
@@ -38,10 +43,33 @@ export async function computeInitiativeStatus(supabase: SupabaseClient): Promise
   if (dealError) throw new Error(`Failed to fetch deals: ${dealError.message}`);
   const allDeals = deals || [];
 
+  // Collect all detail values that have specific initiative matches
+  // (used to exclude from catch-all initiatives)
+  const claimedDetailValues = new Set<string>();
+  for (const init of initiatives) {
+    if (init.lead_source_detail_values && init.lead_source_detail_values.length > 0) {
+      for (const v of init.lead_source_detail_values) {
+        claimedDetailValues.add(v);
+      }
+    }
+  }
+
   return initiatives.map((init) => {
-    const matchingDeals = allDeals.filter((d) =>
-      d.lead_source && init.lead_source_values.includes(d.lead_source)
-    );
+    const hasDetailFilter = init.lead_source_detail_values && init.lead_source_detail_values.length > 0;
+
+    const matchingDeals = allDeals.filter((d) => {
+      if (!d.lead_source) return false;
+      // Must match one of the initiative's lead_source values
+      if (!init.lead_source_values.includes(d.lead_source)) return false;
+
+      if (hasDetailFilter) {
+        // Specific detail match required
+        return d.lead_source_detail && init.lead_source_detail_values.includes(d.lead_source_detail);
+      } else {
+        // Catch-all: match source but exclude deals claimed by detail-specific initiatives
+        return !d.lead_source_detail || !claimedDetailValues.has(d.lead_source_detail);
+      }
+    });
 
     const closedWonDeals = matchingDeals.filter((d) =>
       d.deal_stage === CLOSED_WON_STAGE_ID || d.closed_won_entered_at
@@ -58,8 +86,13 @@ export async function computeInitiativeStatus(supabase: SupabaseClient): Promise
 
     const expectedByNow = (init.weekly_lead_pace || 0) * currentWeek;
     let paceStatus: 'ahead' | 'on_pace' | 'behind' = 'on_pace';
-    if (matchingDeals.length > expectedByNow * 1.1) paceStatus = 'ahead';
-    else if (matchingDeals.length < expectedByNow * 0.9) paceStatus = 'behind';
+    if (expectedByNow === 0) {
+      paceStatus = matchingDeals.length > 0 ? 'ahead' : 'behind';
+    } else if (matchingDeals.length > expectedByNow * 1.1) {
+      paceStatus = 'ahead';
+    } else if (matchingDeals.length < expectedByNow * 0.9) {
+      paceStatus = 'behind';
+    }
 
     return {
       id: init.id,

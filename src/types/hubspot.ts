@@ -30,6 +30,7 @@ export const HubSpotDealSchema = z.object({
     description: z.string().nullable().optional(),
     // New properties for dashboard display
     lead_source: z.string().nullable().optional(),
+    lead_source_detail: z.string().nullable().optional(),
     notes_next_activity_date: z.string().nullable().optional(),
     hs_next_step: z.string().nullable().optional(),
     product_s: z.string().nullable().optional(),
