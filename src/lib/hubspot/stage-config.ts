@@ -87,6 +87,14 @@ export const DEFAULT_PRE_DEMO_STAGES: string[] = [
   S.DEMO_SCHEDULED.label,
 ];
 
+// Post-demo pipeline: Demo Completed through MSA Sent/Review (forecast-eligible)
+export const POST_DEMO_STAGE_IDS: string[] = [
+  S.DEMO_COMPLETED.id,
+  S.QUALIFIED_VALIDATED.id,
+  S.PROPOSAL_EVALUATING.id,
+  S.MSA_SENT_REVIEW.id,
+];
+
 // Set of all known stage IDs (for health check comparison)
 export const ALL_KNOWN_STAGE_IDS: Set<string> = new Set(
   Object.values(SALES_PIPELINE_STAGES).map((s) => s.id)

@@ -12,7 +12,7 @@ import { getCurrentQuarter, getQuarterFromDate } from '@/lib/utils/quarter';
 
 export interface DealCoachAnalysis {
   hubspot_deal_id: string;
-  status: 'needs_action' | 'on_track' | 'at_risk' | 'stalled' | 'no_action_needed' | 'nurture';
+  status: 'needs_action' | 'on_track' | 'at_risk' | 'stalled' | 'no_action_needed' | 'nurture' | 'uncertain';
   urgency: 'critical' | 'high' | 'medium' | 'low';
   buyer_sentiment: string | null;
   deal_momentum: string | null;
@@ -350,6 +350,7 @@ STATUS:
 - stalled: Deal has stopped moving — no recent activity, buyer gone silent. Distinct from nurture (buyer communicated timeline) and at_risk (controllable problems).
 - no_action_needed: Deal is healthy and progressing, no coaching needed right now
 - nurture: Buyer is engaged but timing is customer-driven. Use when ALL of these are true: (1) Buyer has communicated a future timeline (e.g., "end of summer", "after HubSpot integration", "Q3 budget cycle", "waiting on board approval"), (2) Close date is in a future quarter and was set there deliberately by the AE, (3) There is NO indication the buyer is disengaging — they're just not ready yet. Distinct from at_risk (controllable problems the AE can fix) and stalled (buyer went dark with no communicated timeline).
+- uncertain: Use when you genuinely cannot determine the deal's status. This applies when engagement data is too sparse or ambiguous to make a confident call — e.g., brand new deals with minimal activity, conflicting signals, or missing context. Do NOT guess; it is better to say uncertain than to assign a wrong status.
 
 URGENCY:
 - critical: Close date imminent or passed, deal at serious risk of loss, buyer disengaging
@@ -399,7 +400,7 @@ RECOMMENDED_ACTION FORMAT:
 - NURTURE DEALS: When status is nurture, recommended actions should be LOW-EFFORT, RELATIONSHIP-MAINTENANCE tactics — NOT aggressive outreach. Appropriate nurture tactics: monthly value-touch check-in (deliver something each time, not "just checking in"), share industry news or regulatory updates, product update or roadmap sharing relevant to buyer's stated needs, check on their dependency/integration progress (e.g., "How's the HubSpot integration going?"), personalized gift (book, company swag — relationship-building), webinar or event invitation. Do NOT recommend pre-demo aggressive tactics (Vidyard intro videos, blind calendar invites for demos, demo gift card incentives, breakup emails) for nurture deals.
 
 Respond in this exact format:
-STATUS: [needs_action|on_track|at_risk|stalled|no_action_needed|nurture]
+STATUS: [needs_action|on_track|at_risk|stalled|no_action_needed|nurture|uncertain]
 URGENCY: [critical|high|medium|low]
 BUYER_SENTIMENT: [positive|engaged|neutral|unresponsive|negative]
 DEAL_MOMENTUM: [accelerating|steady|slowing|stalled]
@@ -446,7 +447,7 @@ ${engagementText}`;
 
     // 11. Parse response
     const text = result.text;
-    const statusMatch = text.match(/STATUS:\s*(needs_action|on_track|at_risk|stalled|no_action_needed|nurture)/i);
+    const statusMatch = text.match(/STATUS:\s*(needs_action|on_track|at_risk|stalled|no_action_needed|nurture|uncertain)/i);
     const urgencyMatch = text.match(/URGENCY:\s*(critical|high|medium|low)/i);
     const sentimentMatch = text.match(/BUYER_SENTIMENT:\s*(positive|engaged|neutral|unresponsive|negative)/i);
     const momentumMatch = text.match(/DEAL_MOMENTUM:\s*(accelerating|steady|slowing|stalled)/i);

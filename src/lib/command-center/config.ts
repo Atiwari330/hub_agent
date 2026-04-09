@@ -15,25 +15,21 @@ export const LIKELIHOOD_WEIGHTS: Record<string, number> = {
   insufficient_data: 0.30,
 };
 
-// Map deal intelligence scores + LLM assessment to a likelihood tier
-// This is the bridge between the existing deal-rules.ts scoring and the forecast
+// Map LLM assessment to a likelihood tier (LLM-only, no rules fallback)
 export function computeLikelihoodTier(
   overallScore: number,
   llmStatus: string | null,
   buyerSentiment: string | null,
 ): string {
-  // LLM status takes priority when available
   if (llmStatus === 'on_track' && overallScore >= 70) return 'highly_likely';
-  if (llmStatus === 'on_track') return 'likely';
+  if (llmStatus === 'on_track' || llmStatus === 'no_action_needed') return 'likely';
   if (llmStatus === 'needs_action' && overallScore >= 55) return 'possible';
+  if (llmStatus === 'needs_action') return 'unlikely';
   if (llmStatus === 'at_risk') return 'unlikely';
   if (llmStatus === 'stalled') return 'unlikely';
   if (llmStatus === 'nurture') return 'unlikely';
 
-  // Fall back to score-only when no LLM assessment
-  if (overallScore >= 80) return 'likely';
-  if (overallScore >= 60) return 'possible';
-  if (overallScore >= 40) return 'unlikely';
+  // LLM said uncertain or no LLM data at all
   return 'insufficient_data';
 }
 

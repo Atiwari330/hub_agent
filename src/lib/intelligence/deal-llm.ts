@@ -50,6 +50,7 @@ function mapStatusToRiskScore(status: string | null, urgency: string | null): nu
     case 'needs_action': baseScore = 50; break;
     case 'at_risk': baseScore = 25; break;
     case 'stalled': baseScore = 10; break;
+    case 'uncertain': baseScore = 50; break;
     default: baseScore = 50;
   }
 

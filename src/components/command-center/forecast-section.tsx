@@ -1,6 +1,7 @@
 'use client';
 
-import type { ForecastSummary, LikelihoodTier } from '@/lib/command-center/types';
+import { useState } from 'react';
+import type { ForecastSummary, LikelihoodTier, DealForecastItem } from '@/lib/command-center/types';
 import { LIKELIHOOD_WEIGHTS } from '@/lib/command-center/config';
 
 function fmt(n: number): string {
@@ -14,7 +15,7 @@ const TIER_CONFIG: { key: LikelihoodTier; label: string; color: string; barColor
   { key: 'likely', label: 'Likely', color: 'text-blue-700', barColor: 'bg-blue-500' },
   { key: 'possible', label: 'Possible', color: 'text-amber-700', barColor: 'bg-amber-500' },
   { key: 'unlikely', label: 'Unlikely', color: 'text-red-700', barColor: 'bg-red-400' },
-  { key: 'insufficient_data', label: 'No Data', color: 'text-gray-500', barColor: 'bg-gray-300' },
+  { key: 'insufficient_data', label: 'Uncertain', color: 'text-gray-500', barColor: 'bg-gray-300' },
 ];
 
 const CONFIDENCE_CONFIG = {
@@ -25,9 +26,12 @@ const CONFIDENCE_CONFIG = {
 
 interface ForecastSectionProps {
   forecast: ForecastSummary;
+  deals?: DealForecastItem[];
+  onDealClick?: (dealId: string) => void;
 }
 
-export function ForecastSection({ forecast }: ForecastSectionProps) {
+export function ForecastSection({ forecast, deals, onDealClick }: ForecastSectionProps) {
+  const [expandedTier, setExpandedTier] = useState<LikelihoodTier | null>(null);
   const maxBarValue = Math.max(forecast.projectedTotal, forecast.target) * 1.1;
 
   // Stacked bar segments
@@ -41,6 +45,17 @@ export function ForecastSection({ forecast }: ForecastSectionProps) {
   ];
 
   const conf = CONFIDENCE_CONFIG[forecast.confidenceLevel];
+
+  // Group deals by their effective tier for the expandable rows
+  const dealsByTier = deals
+    ? TIER_CONFIG.reduce<Record<string, DealForecastItem[]>>((acc, t) => {
+        acc[t.key] = deals.filter((d) => {
+          const effectiveTier = d.override?.likelihood || d.likelihoodTier;
+          return effectiveTier === t.key;
+        });
+        return acc;
+      }, {})
+    : {};
 
   return (
     <div className="space-y-6">
@@ -121,14 +136,76 @@ export function ForecastSection({ forecast }: ForecastSectionProps) {
           <tbody>
             {TIER_CONFIG.map((t) => {
               const tier = forecast.tiers[t.key];
+              const isExpanded = expandedTier === t.key;
+              const tierDeals = dealsByTier[t.key] || [];
+              const hasDeals = tierDeals.length > 0;
+
               return (
-                <tr key={t.key} className="border-b border-gray-100">
-                  <td className={`py-2.5 pr-4 font-medium ${t.color}`}>{t.label}</td>
-                  <td className="py-2.5 pr-4 text-right font-mono text-gray-900">{tier.count}</td>
-                  <td className="py-2.5 pr-4 text-right font-mono text-gray-500">{fmt(tier.rawARR)}</td>
-                  <td className="py-2.5 pr-4 text-right font-mono text-gray-400">{Math.round(LIKELIHOOD_WEIGHTS[t.key] * 100)}%</td>
-                  <td className="py-2.5 text-right font-mono text-gray-900">{fmt(Math.round(tier.weightedARR))}</td>
-                </tr>
+                <>
+                  <tr
+                    key={t.key}
+                    className={`border-b border-gray-100 ${hasDeals ? 'cursor-pointer hover:bg-gray-50' : ''}`}
+                    onClick={() => hasDeals && setExpandedTier(isExpanded ? null : t.key)}
+                  >
+                    <td className={`py-2.5 pr-4 font-medium ${t.color}`}>
+                      <span className="inline-flex items-center gap-1.5">
+                        {hasDeals && (
+                          <svg
+                            className={`h-3 w-3 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                            strokeWidth={2}
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                          </svg>
+                        )}
+                        {t.label}
+                      </span>
+                    </td>
+                    <td className="py-2.5 pr-4 text-right font-mono text-gray-900">{tier.count}</td>
+                    <td className="py-2.5 pr-4 text-right font-mono text-gray-500">{fmt(tier.rawARR)}</td>
+                    <td className="py-2.5 pr-4 text-right font-mono text-gray-400">{Math.round(LIKELIHOOD_WEIGHTS[t.key] * 100)}%</td>
+                    <td className="py-2.5 text-right font-mono text-gray-900">{fmt(Math.round(tier.weightedARR))}</td>
+                  </tr>
+                  {isExpanded && tierDeals.length > 0 && (
+                    <tr key={`${t.key}-deals`}>
+                      <td colSpan={5} className="p-0">
+                        <div className="bg-gray-50 px-4 py-2">
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr className="text-left text-gray-400 uppercase tracking-wider">
+                                <th className="pb-1.5 pr-3">Deal</th>
+                                <th className="pb-1.5 pr-3">Owner</th>
+                                <th className="pb-1.5 pr-3 text-right">Amount</th>
+                                <th className="pb-1.5 pr-3">Stage</th>
+                                <th className="pb-1.5">LLM Status</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {tierDeals.map((deal) => (
+                                <tr
+                                  key={deal.hubspotDealId}
+                                  className="border-t border-gray-200 hover:bg-gray-100 cursor-pointer"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onDealClick?.(deal.hubspotDealId);
+                                  }}
+                                >
+                                  <td className="py-1.5 pr-3 text-blue-600 hover:underline">{deal.dealName}</td>
+                                  <td className="py-1.5 pr-3 text-gray-600">{deal.ownerName}</td>
+                                  <td className="py-1.5 pr-3 text-right font-mono text-gray-700">{fmt(deal.amount)}</td>
+                                  <td className="py-1.5 pr-3 text-gray-600">{deal.stage}</td>
+                                  <td className="py-1.5 text-gray-500">{deal.llmStatus || '—'}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </>
               );
             })}
           </tbody>

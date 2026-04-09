@@ -4,7 +4,7 @@
  */
 
 import { SupabaseClient } from '@supabase/supabase-js';
-import { ALL_OPEN_STAGE_IDS, SALES_PIPELINE_STAGES } from '@/lib/hubspot/stage-config';
+import { ALL_OPEN_STAGE_IDS, POST_DEMO_STAGE_IDS, SALES_PIPELINE_STAGES } from '@/lib/hubspot/stage-config';
 import { SYNC_CONFIG } from '@/lib/hubspot/sync-config';
 import { computeLikelihoodTier } from './config';
 import type { DealForecastItem, LikelihoodTier } from './types';
@@ -35,12 +35,16 @@ export async function fetchQ2Deals(supabase: SupabaseClient): Promise<DealForeca
   const dealMap = new Map((dealResult.data || []).map((d) => [d.hubspot_deal_id, d]));
   const overrideMap = new Map((overrideResult.data || []).map((o) => [o.hubspot_deal_id, o]));
   const openStageSet = new Set(ALL_OPEN_STAGE_IDS);
+  const forecastEligibleSet = new Set([...POST_DEMO_STAGE_IDS, CLOSED_WON_ID]);
 
   const deals: DealForecastItem[] = [];
 
   for (const intel of allIntel) {
     const deal = dealMap.get(intel.hubspot_deal_id);
     if (!deal) continue;
+
+    // Only include bottom-of-funnel deals (Demo Completed+) in forecast
+    if (!forecastEligibleSet.has(deal.deal_stage)) continue;
 
     const closeDate = deal.close_date;
     const closedWonAt = deal.closed_won_entered_at;
