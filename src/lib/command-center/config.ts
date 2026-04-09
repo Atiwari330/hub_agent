@@ -13,6 +13,7 @@ export const LIKELIHOOD_WEIGHTS: Record<string, number> = {
   possible: 0.40,
   unlikely: 0.15,
   insufficient_data: 0.30,
+  not_this_quarter: 0,
 };
 
 // Map LLM assessment to a likelihood tier (LLM-only, no rules fallback)
