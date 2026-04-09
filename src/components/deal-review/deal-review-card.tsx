@@ -137,20 +137,6 @@ export function DealReviewCard({ deal, onOverrideChange }: DealReviewCardProps) 
             </div>
           )}
 
-          {/* Key risk */}
-          {deal.keyRisk && (
-            <p className="text-sm text-gray-700">
-              <span className="font-medium text-red-600">Risk:</span> {deal.keyRisk}
-            </p>
-          )}
-
-          {/* Recommended action */}
-          {deal.recommendedAction && (
-            <p className="text-sm text-gray-700">
-              <span className="font-medium text-indigo-600">Next:</span> {deal.recommendedAction}
-            </p>
-          )}
-
           {/* Reasoning (collapsible) */}
           {deal.reasoning && (
             <details className="text-sm">
@@ -162,7 +148,7 @@ export function DealReviewCard({ deal, onOverrideChange }: DealReviewCardProps) 
           )}
 
           {/* Fallback when no AI data */}
-          {!deal.keyRisk && !deal.recommendedAction && !deal.reasoning && (
+          {!sentiment && !momentum && !deal.reasoning && (
             <p className="text-sm text-gray-400 italic">No AI analysis available yet</p>
           )}
         </div>
