@@ -85,9 +85,10 @@ interface DealDetailData {
 interface DealDetailPanelProps {
   dealId: string;
   onClose: () => void;
+  onOverrideChange?: () => void;
 }
 
-export function DealDetailPanel({ dealId, onClose }: DealDetailPanelProps) {
+export function DealDetailPanel({ dealId, onClose, onOverrideChange }: DealDetailPanelProps) {
   const [data, setData] = useState<DealDetailData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -159,7 +160,19 @@ export function DealDetailPanel({ dealId, onClose }: DealDetailPanelProps) {
             {data.intelligence.issues.length > 0 && <IssuesList issues={data.intelligence.issues} />}
 
             {/* Override */}
-            <OverrideSection override={data.override} />
+            <OverrideSection
+              dealId={dealId}
+              override={data.override}
+              dealAmount={data.deal.amount}
+              onOverrideChange={() => {
+                // Re-fetch deal detail
+                setLoading(true);
+                fetch(`/api/command-center/deals/${dealId}`)
+                  .then((res) => res.ok ? res.json() : null)
+                  .then((json) => { if (json) setData(json); })
+                  .finally(() => { setLoading(false); onOverrideChange?.(); });
+              }}
+            />
           </div>
         )}
       </div>
@@ -360,13 +373,73 @@ function IssuesList({ issues }: { issues: { type: string; severity: string; mess
   );
 }
 
-function OverrideSection({ override }: { override: DealDetailData['override'] }) {
+function OverrideSection({ dealId, override, dealAmount, onOverrideChange }: {
+  dealId: string;
+  override: DealDetailData['override'];
+  dealAmount: number;
+  onOverrideChange: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [likelihood, setLikelihood] = useState(override?.likelihood || 'likely');
+  const [amount, setAmount] = useState<string>(String(override?.amount ?? dealAmount));
+  const [reason, setReason] = useState(override?.reason || '');
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSave = async () => {
+    if (!reason.trim()) { setError('Reason is required'); return; }
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/command-center/deals/${dealId}/override`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          override_likelihood: likelihood,
+          override_amount: amount ? Number(amount) : null,
+          override_reason: reason,
+        }),
+      });
+      if (!res.ok) throw new Error('Failed to save');
+      setEditing(false);
+      onOverrideChange();
+    } catch {
+      setError('Failed to save override');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/command-center/deals/${dealId}/override`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Failed to delete');
+      setEditing(false);
+      setReason('');
+      onOverrideChange();
+    } catch {
+      setError('Failed to remove override');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const tierOptions = [
+    { value: 'highly_likely', label: 'Highly Likely' },
+    { value: 'likely', label: 'Likely' },
+    { value: 'possible', label: 'Possible' },
+    { value: 'unlikely', label: 'Unlikely' },
+    { value: 'insufficient_data', label: 'Insufficient Data' },
+  ];
+
   return (
     <div>
       <h3 className="text-sm font-semibold text-gray-900 mb-2">Forecast Override</h3>
-      {override ? (
+
+      {override && !editing && (
         <div className="rounded border border-indigo-200 bg-indigo-50 p-3 text-sm space-y-1">
-          <div><span className="text-gray-500">Likelihood:</span> <span className="text-gray-900">{override.likelihood}</span></div>
+          <div><span className="text-gray-500">Likelihood:</span> <span className="text-gray-900 capitalize">{override.likelihood.replace(/_/g, ' ')}</span></div>
           {override.amount !== null && (
             <div><span className="text-gray-500">Amount:</span> <span className="font-mono text-gray-900">{fmt(override.amount)}</span></div>
           )}
@@ -374,9 +447,74 @@ function OverrideSection({ override }: { override: DealDetailData['override'] })
           <div className="text-xs text-gray-400">
             by {override.overriddenBy} on {new Date(override.overriddenAt).toLocaleDateString()}
           </div>
+          <div className="flex gap-2 mt-2">
+            <button onClick={() => setEditing(true)} className="text-xs text-indigo-600 hover:text-indigo-800 font-medium">Edit</button>
+            <button onClick={handleDelete} disabled={saving} className="text-xs text-red-600 hover:text-red-800 font-medium">
+              {saving ? 'Removing...' : 'Remove Override'}
+            </button>
+          </div>
         </div>
-      ) : (
-        <p className="text-xs text-gray-400 italic">No override. Phase 3 will add editing.</p>
+      )}
+
+      {!override && !editing && (
+        <button
+          onClick={() => setEditing(true)}
+          className="rounded bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-200 transition-colors"
+        >
+          Override AI Judgment
+        </button>
+      )}
+
+      {editing && (
+        <div className="rounded border border-gray-200 bg-gray-50 p-3 space-y-3">
+          <div>
+            <label className="block text-xs text-gray-600 mb-1">Likelihood</label>
+            <select
+              value={likelihood}
+              onChange={(e) => setLikelihood(e.target.value)}
+              className="w-full rounded border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900"
+            >
+              {tierOptions.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-gray-600 mb-1">Adjusted Amount (optional)</label>
+            <input
+              type="number"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              className="w-full rounded border border-gray-300 bg-white px-2 py-1.5 text-sm font-mono text-gray-900"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-600 mb-1">Reason (required)</label>
+            <textarea
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              rows={2}
+              className="w-full rounded border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900"
+              placeholder="Why are you overriding the AI judgment?"
+            />
+          </div>
+          {error && <p className="text-xs text-red-600">{error}</p>}
+          <div className="flex gap-2">
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="rounded bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+            >
+              {saving ? 'Saving...' : 'Save Override'}
+            </button>
+            <button
+              onClick={() => setEditing(false)}
+              className="rounded bg-gray-200 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-300"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

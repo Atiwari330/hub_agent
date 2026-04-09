@@ -1,11 +1,13 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import type { CommandCenterResponse, DealForecastItem, AEExecutionSummary } from '@/lib/command-center/types';
+import type { CommandCenterResponse, DealForecastItem, AEExecutionSummary, ForecastSummary } from '@/lib/command-center/types';
 import { HeroSummary } from './hero-summary';
+import { ExecutiveSummary } from './executive-summary';
 import { PacingSection } from './pacing-section';
 import { InitiativeTracker } from './initiative-tracker';
 import { WeeklyOperatingTable } from './weekly-operating-table';
+import { ForecastSection } from './forecast-section';
 import { DealIntelligenceTable } from './deal-intelligence-table';
 import { DealDetailPanel } from './deal-detail-panel';
 import { AEExecutionSection } from './ae-execution-section';
@@ -24,10 +26,24 @@ interface AEResponse {
   aeExecutions: AEExecutionSummary[];
 }
 
+interface Insight {
+  category: 'forecast' | 'pacing' | 'initiatives' | 'deals' | 'execution';
+  status: 'on_track' | 'watch' | 'action_needed';
+  title: string;
+  detail: string;
+}
+
+interface ExecSummaryResponse {
+  insights: Insight[];
+  narrative: string | null;
+}
+
 export function CommandCenterView() {
   const [data, setData] = useState<CommandCenterResponse | null>(null);
   const [deals, setDeals] = useState<DealForecastItem[]>([]);
   const [aeExecutions, setAeExecutions] = useState<AEExecutionSummary[]>([]);
+  const [forecast, setForecast] = useState<ForecastSummary | null>(null);
+  const [insights, setInsights] = useState<Insight[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedDeal, setSelectedDeal] = useState<string | null>(null);
@@ -36,10 +52,12 @@ export function CommandCenterView() {
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const [mainRes, dealsRes, aeRes] = await Promise.all([
+      const [mainRes, dealsRes, aeRes, forecastRes, execRes] = await Promise.all([
         fetch('/api/command-center'),
         fetch('/api/command-center/deals'),
         fetch('/api/command-center/ae-execution'),
+        fetch('/api/command-center/forecast'),
+        fetch('/api/command-center/executive-summary'),
       ]);
 
       if (!mainRes.ok) throw new Error(`Main API error: ${mainRes.status}`);
@@ -55,10 +73,32 @@ export function CommandCenterView() {
         const aeJson: AEResponse = await aeRes.json();
         setAeExecutions(aeJson.aeExecutions);
       }
+
+      if (forecastRes.ok) {
+        const forecastJson: ForecastSummary = await forecastRes.json();
+        setForecast(forecastJson);
+      }
+
+      if (execRes.ok) {
+        const execJson: ExecSummaryResponse = await execRes.json();
+        setInsights(execJson.insights);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load data');
     } finally {
       setLoading(false);
+    }
+  }, []);
+
+  const refetchForecast = useCallback(async () => {
+    const [forecastRes, dealsRes] = await Promise.all([
+      fetch('/api/command-center/forecast'),
+      fetch('/api/command-center/deals'),
+    ]);
+    if (forecastRes.ok) setForecast(await forecastRes.json());
+    if (dealsRes.ok) {
+      const json: DealsResponse = await dealsRes.json();
+      setDeals(json.deals);
     }
   }, []);
 
@@ -104,10 +144,12 @@ export function CommandCenterView() {
 
   return (
     <div className="space-y-8 p-6">
-      <HeroSummary goalTracker={data.goalTracker} />
+      <HeroSummary goalTracker={data.goalTracker} forecast={forecast} />
+      <ExecutiveSummary insights={insights} />
       <PacingSection pacing={data.pacing} currentWeek={currentWeek} />
       <InitiativeTracker initiatives={data.initiatives} />
       <WeeklyOperatingTable weeklyRows={data.pacing.weeklyRows} currentWeek={currentWeek} />
+      {forecast && <ForecastSection forecast={forecast} />}
       <AEExecutionSection
         aeExecutions={aeExecutions}
         onSelectAE={setAeFilter}
@@ -123,9 +165,9 @@ export function CommandCenterView() {
         <DealDetailPanel
           dealId={selectedDeal}
           onClose={() => setSelectedDeal(null)}
+          onOverrideChange={refetchForecast}
         />
       )}
-      {/* Phase 3 will add: ForecastSection, ExecutiveSummary */}
     </div>
   );
 }
