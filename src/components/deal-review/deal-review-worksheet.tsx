@@ -134,6 +134,44 @@ export function DealReviewWorksheet({ initialDeals, aeName, logoutUrl }: DealRev
         </div>
       </header>
 
+      {/* Guidance */}
+      <div className="max-w-5xl mx-auto px-4 pt-4">
+        <div className="bg-indigo-50 border border-indigo-100 rounded-xl px-5 py-4">
+          <p className="text-sm text-gray-800">
+            <span className="font-semibold">What to do:</span> Go through each deal below and select how likely you think it is to close <span className="font-semibold">this quarter (Q2)</span>.
+            Pick the option that best matches your gut feel based on your conversations with the buyer.
+            The AI has pre-selected a default for each deal &mdash; override it if you disagree.
+          </p>
+          <details className="mt-3 text-sm">
+            <summary className="text-indigo-700 font-medium cursor-pointer hover:text-indigo-900">
+              What does each option mean?
+            </summary>
+            <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2 text-gray-700">
+              <div className="flex gap-2">
+                <span className="inline-block w-2 h-2 mt-1.5 rounded-full bg-emerald-500 shrink-0" />
+                <div><span className="font-semibold">Commit</span> &mdash; You&apos;d bet your commission on it. The buyer has verbally committed, budget is approved, and you&apos;re working on paperwork.</div>
+              </div>
+              <div className="flex gap-2">
+                <span className="inline-block w-2 h-2 mt-1.5 rounded-full bg-blue-500 shrink-0" />
+                <div><span className="font-semibold">Strong</span> &mdash; Very likely to close. The buyer is engaged and moving forward, but there&apos;s a step or two left (final approval, contract review, etc.).</div>
+              </div>
+              <div className="flex gap-2">
+                <span className="inline-block w-2 h-2 mt-1.5 rounded-full bg-amber-500 shrink-0" />
+                <div><span className="font-semibold">Possible</span> &mdash; Could go either way. The buyer is interested but hasn&apos;t fully committed. There are open questions or competing priorities on their end.</div>
+              </div>
+              <div className="flex gap-2">
+                <span className="inline-block w-2 h-2 mt-1.5 rounded-full bg-orange-500 shrink-0" />
+                <div><span className="font-semibold">Upside</span> &mdash; A long shot for Q2. Something unexpected would need to happen &mdash; budget approval, a champion re-engaging, timeline accelerating.</div>
+              </div>
+              <div className="flex gap-2">
+                <span className="inline-block w-2 h-2 mt-1.5 rounded-full bg-gray-400 shrink-0" />
+                <div><span className="font-semibold">Not This Quarter</span> &mdash; This deal isn&apos;t closing in Q2. The buyer pushed to Q3+, went dark, or the deal is effectively dead for now.</div>
+              </div>
+            </div>
+          </details>
+        </div>
+      </div>
+
       {/* Filters + Sort */}
       <div className="max-w-5xl mx-auto px-4 py-3">
         <div className="flex flex-wrap items-center gap-3">
