@@ -6,6 +6,7 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import { ALL_OPEN_STAGE_IDS, POST_DEMO_STAGE_IDS, SALES_PIPELINE_STAGES } from '@/lib/hubspot/stage-config';
 import { SYNC_CONFIG } from '@/lib/hubspot/sync-config';
+import { paginatedFetch } from '@/lib/supabase/paginate';
 import { computeLikelihoodTier } from './config';
 import type { DealForecastItem, LikelihoodTier } from './types';
 
@@ -14,27 +15,27 @@ const Q2_END = '2026-06-30';
 const CLOSED_WON_ID = SALES_PIPELINE_STAGES.CLOSED_WON.id;
 
 export async function fetchQ2Deals(supabase: SupabaseClient): Promise<DealForecastItem[]> {
-  const [intResult, dealResult, overrideResult] = await Promise.all([
-    supabase
-      .from('deal_intelligence')
-      .select('*')
-      .eq('pipeline', SYNC_CONFIG.TARGET_PIPELINE_ID)
-      .order('overall_score', { ascending: false })
-      .limit(5000),
-    supabase
-      .from('deals')
-      .select('hubspot_deal_id, deal_name, amount, deal_stage, close_date, lead_source, owner_id, closed_won_entered_at')
-      .eq('pipeline', SYNC_CONFIG.TARGET_PIPELINE_ID)
-      .limit(5000),
+  // Paginate deals query — Supabase server caps at 1,000 rows regardless of .limit()
+  const [allIntel, allDeals, overrideResult] = await Promise.all([
+    paginatedFetch(() =>
+      supabase
+        .from('deal_intelligence')
+        .select('*')
+        .eq('pipeline', SYNC_CONFIG.TARGET_PIPELINE_ID)
+        .order('overall_score', { ascending: false }),
+    ),
+    paginatedFetch(() =>
+      supabase
+        .from('deals')
+        .select('hubspot_deal_id, deal_name, amount, deal_stage, close_date, lead_source, owner_id, closed_won_entered_at')
+        .eq('pipeline', SYNC_CONFIG.TARGET_PIPELINE_ID),
+    ),
     supabase
       .from('deal_forecast_overrides')
       .select('*'),
   ]);
 
-  if (intResult.error) throw new Error(`Intelligence fetch failed: ${intResult.error.message}`);
-
-  const allIntel = intResult.data || [];
-  const dealMap = new Map((dealResult.data || []).map((d) => [d.hubspot_deal_id, d]));
+  const dealMap = new Map(allDeals.map((d) => [d.hubspot_deal_id, d]));
   const overrideMap = new Map((overrideResult.data || []).map((o) => [o.hubspot_deal_id, o]));
   const openStageSet = new Set(ALL_OPEN_STAGE_IDS);
   const forecastEligibleSet = new Set([...POST_DEMO_STAGE_IDS, CLOSED_WON_ID]);

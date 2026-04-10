@@ -16,6 +16,7 @@ import { SALES_PIPELINE_STAGES } from '@/lib/hubspot/stage-config';
 import { batchFetchDealEngagements } from '@/lib/hubspot/batch-engagements';
 import { analyzePreDemoEffort } from './pre-demo-llm';
 import { getDeepSeekModel } from '@/lib/ai/provider';
+import { paginatedFetch } from '@/lib/supabase/paginate';
 
 // --- Score Mapping from LLM outputs ---
 
@@ -171,18 +172,14 @@ export async function getDealsNeedingLLMAnalysis(): Promise<string[]> {
   // 1. Have never been analyzed (llm_analyzed_at is null)
   // 2. Were analyzed >3 days ago
   // 3. Have grade D or F
-  const { data: deals, error } = await supabase
-    .from('deal_intelligence')
-    .select('hubspot_deal_id, overall_grade, llm_analyzed_at')
-    .or(`llm_analyzed_at.is.null,llm_analyzed_at.lt.${threeDaysAgo.toISOString()},overall_grade.in.(D,F)`)
-    .limit(5000);
+  const deals = await paginatedFetch(() =>
+    supabase
+      .from('deal_intelligence')
+      .select('hubspot_deal_id, overall_grade, llm_analyzed_at')
+      .or(`llm_analyzed_at.is.null,llm_analyzed_at.lt.${threeDaysAgo.toISOString()},overall_grade.in.(D,F)`),
+  );
 
-  if (error) {
-    console.error('Error fetching deals needing LLM analysis:', error);
-    return [];
-  }
-
-  return (deals || []).map(d => d.hubspot_deal_id);
+  return deals.map((d: { hubspot_deal_id: string }) => d.hubspot_deal_id);
 }
 
 // --- Pre-Demo LLM Analysis Helper ---

@@ -26,6 +26,7 @@ import { SYNC_CONFIG } from '@/lib/hubspot/sync-config';
 import { TRACKED_STAGES } from '@/lib/hubspot/stage-mappings';
 import { batchFetchDealEngagements } from '@/lib/hubspot/batch-engagements';
 import { computePreDemoEffortScores, type PreDemoDealInput } from './pre-demo-rules';
+import { paginatedFetch } from '@/lib/supabase/paginate';
 
 // --- Types ---
 
@@ -457,19 +458,14 @@ export async function computeAllDealIntelligence(): Promise<{ processed: number;
   const supabase = createServiceClient();
 
   // Fetch all open deals from both pipelines using stage-based filtering
-  const { data: salesDeals, error: salesError } = await supabase
-    .from('deals')
-    .select('*')
-    .eq('pipeline', SYNC_CONFIG.TARGET_PIPELINE_ID)
-    .in('deal_stage', ALL_OPEN_STAGE_IDS)
-    .limit(5000);
-
-  if (salesError) {
-    console.error('Error fetching deals for intelligence:', salesError);
-    throw new Error(`Failed to fetch deals: ${salesError.message}`);
-  }
-
-  const deals = salesDeals || [];
+  // Paginate — Supabase server caps at 1,000 rows regardless of .limit()
+  const deals = await paginatedFetch(() =>
+    supabase
+      .from('deals')
+      .select('*')
+      .eq('pipeline', SYNC_CONFIG.TARGET_PIPELINE_ID)
+      .in('deal_stage', ALL_OPEN_STAGE_IDS),
+  );
 
   if (deals.length === 0) {
     return { processed: 0, errors: 0 };

@@ -16,6 +16,7 @@ import { countTouchesInRange, countUniqueTouchDays, countCompliantCallDays } fro
 import { chunk } from '@/lib/utils/chunk';
 import { getHubSpotClient } from '@/lib/hubspot/client';
 import { SYNC_CONFIG } from '@/lib/hubspot/sync-config';
+import { paginatedFetch } from '@/lib/supabase/paginate';
 
 // 15-minute threshold in milliseconds
 const FIFTEEN_MINUTES_MS = 15 * 60 * 1000;
@@ -255,14 +256,15 @@ export async function computeHotTrackerForQuarter(
 
   // Get HubSpot deal IDs for all SQL-stage deals in the quarter
   // SQL stage = deals that have discovery_entered_at set (they've reached SQL/Discovery or beyond)
-  const { data: sqlStageDealRows } = await supabase
-    .from('deals')
-    .select('hubspot_deal_id')
-    .not('discovery_entered_at', 'is', null)
-    .eq('pipeline', SYNC_CONFIG.TARGET_PIPELINE_ID)
-    .limit(5000);
+  const sqlStageDealRows = await paginatedFetch(() =>
+    supabase
+      .from('deals')
+      .select('hubspot_deal_id')
+      .not('discovery_entered_at', 'is', null)
+      .eq('pipeline', SYNC_CONFIG.TARGET_PIPELINE_ID),
+  );
 
-  const sqlDealIdSet = new Set((sqlStageDealRows || []).map((d) => d.hubspot_deal_id));
+  const sqlDealIdSet = new Set(sqlStageDealRows.map((d: { hubspot_deal_id: string }) => d.hubspot_deal_id));
 
   for (const owner of ownerList) {
     // Fetch all calls for this AE in the quarter

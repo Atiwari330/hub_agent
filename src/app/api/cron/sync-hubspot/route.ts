@@ -8,6 +8,7 @@ import { TRACKED_STAGES } from '@/lib/hubspot/stage-mappings';
 import { ACTIVE_STAGE_IDS } from '@/lib/hubspot/stage-config';
 import { validatePipelineStages } from '@/lib/hubspot/validate-stages';
 import { SYNC_CONFIG } from '@/lib/hubspot/sync-config';
+import { paginatedFetch } from '@/lib/supabase/paginate';
 import { toTimestamp } from '@/lib/utils/timestamps';
 
 // Verify cron secret for security
@@ -299,14 +300,15 @@ export async function GET(request: Request) {
     ]);
 
     // Find deals in active stages that weren't in any sync batch
-    const { data: staleActiveDeals } = await supabase
-      .from('deals')
-      .select('id, hubspot_deal_id, deal_name, deal_stage')
-      .eq('pipeline', SYNC_CONFIG.TARGET_PIPELINE_ID)
-      .in('deal_stage', [...ACTIVE_STAGE_IDS, '2030251']) // ACTIVE_STAGE_IDS + MQL
-      .limit(5000);
+    const staleActiveDeals = await paginatedFetch(() =>
+      supabase
+        .from('deals')
+        .select('id, hubspot_deal_id, deal_name, deal_stage')
+        .eq('pipeline', SYNC_CONFIG.TARGET_PIPELINE_ID)
+        .in('deal_stage', [...ACTIVE_STAGE_IDS, '2030251']),
+    );
 
-    const orphansToRefresh = (staleActiveDeals || []).filter(
+    const orphansToRefresh = staleActiveDeals.filter(
       (d) => !allSyncedDealIds.has(d.hubspot_deal_id)
     );
 

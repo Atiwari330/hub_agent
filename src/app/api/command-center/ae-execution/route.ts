@@ -4,6 +4,7 @@ import { checkApiAuth } from '@/lib/auth/api';
 import { RESOURCES } from '@/lib/auth';
 import { ALL_OPEN_STAGE_IDS, SALES_PIPELINE_STAGES } from '@/lib/hubspot/stage-config';
 import { SYNC_CONFIG } from '@/lib/hubspot/sync-config';
+import { paginatedFetch } from '@/lib/supabase/paginate';
 import type { AEExecutionSummary } from '@/lib/command-center/types';
 
 const AE_TARGETS: Record<string, number> = {
@@ -34,36 +35,36 @@ export async function GET() {
 
   try {
     // Fetch intelligence, owners, deals (for close dates), and Q2 closed-won deals
-    const [intResult, ownersResult, dealsResult, closedWonResult] = await Promise.all([
-      supabase
-        .from('deal_intelligence')
-        .select('hubspot_deal_id, owner_id, owner_name, overall_score, overall_grade, amount, stage_id')
-        .eq('pipeline', SYNC_CONFIG.TARGET_PIPELINE_ID)
-        .limit(5000),
+    // Paginate deals queries — Supabase server caps at 1,000 rows
+    const [allIntel, ownersResult, allDeals, closedWonDeals] = await Promise.all([
+      paginatedFetch(() =>
+        supabase
+          .from('deal_intelligence')
+          .select('hubspot_deal_id, owner_id, owner_name, overall_score, overall_grade, amount, stage_id')
+          .eq('pipeline', SYNC_CONFIG.TARGET_PIPELINE_ID),
+      ),
       supabase
         .from('owners')
         .select('id, first_name, last_name, email')
         .in('email', Object.keys(AE_TARGETS)),
-      supabase
-        .from('deals')
-        .select('hubspot_deal_id, close_date, deal_stage')
-        .eq('pipeline', SYNC_CONFIG.TARGET_PIPELINE_ID)
-        .limit(5000),
-      supabase
-        .from('deals')
-        .select('hubspot_deal_id, owner_id, amount')
-        .eq('pipeline', SYNC_CONFIG.TARGET_PIPELINE_ID)
-        .eq('deal_stage', CLOSED_WON_ID)
-        .gte('closed_won_entered_at', Q2_START)
-        .lte('closed_won_entered_at', Q2_END),
+      paginatedFetch(() =>
+        supabase
+          .from('deals')
+          .select('hubspot_deal_id, close_date, deal_stage')
+          .eq('pipeline', SYNC_CONFIG.TARGET_PIPELINE_ID),
+      ),
+      paginatedFetch(() =>
+        supabase
+          .from('deals')
+          .select('hubspot_deal_id, owner_id, amount')
+          .eq('pipeline', SYNC_CONFIG.TARGET_PIPELINE_ID)
+          .eq('deal_stage', CLOSED_WON_ID)
+          .gte('closed_won_entered_at', Q2_START)
+          .lte('closed_won_entered_at', Q2_END),
+      ),
     ]);
 
-    if (intResult.error) throw new Error(`Intelligence fetch failed: ${intResult.error.message}`);
-
-    const allIntel = intResult.data || [];
     const owners = ownersResult.data || [];
-    const allDeals = dealsResult.data || [];
-    const closedWonDeals = closedWonResult.data || [];
     const openStageSet = new Set(ALL_OPEN_STAGE_IDS);
 
     // Build close date lookup to filter to Q2-closing deals only

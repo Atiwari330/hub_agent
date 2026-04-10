@@ -4,6 +4,7 @@ import { computeAllDealIntelligence } from '@/lib/intelligence/deal-rules';
 import { analyzeDealIntelligence } from '@/lib/intelligence/deal-llm';
 import { POST_DEMO_STAGE_IDS } from '@/lib/hubspot/stage-config';
 import { SYNC_CONFIG } from '@/lib/hubspot/sync-config';
+import { paginatedFetch } from '@/lib/supabase/paginate';
 
 /**
  * POST /api/command-center/refresh-intelligence
@@ -36,15 +37,14 @@ export async function POST() {
     // Phase 2: Find post-demo deals that need LLM refresh
     const postDemoSet = new Set(POST_DEMO_STAGE_IDS);
 
-    const { data: candidates, error } = await supabase
-      .from('deal_intelligence')
-      .select('hubspot_deal_id, stage_id, overall_grade, llm_analyzed_at, updated_at, deal_name')
-      .eq('pipeline', SYNC_CONFIG.TARGET_PIPELINE_ID)
-      .limit(5000);
+    const candidates = await paginatedFetch(() =>
+      supabase
+        .from('deal_intelligence')
+        .select('hubspot_deal_id, stage_id, overall_grade, llm_analyzed_at, updated_at, deal_name')
+        .eq('pipeline', SYNC_CONFIG.TARGET_PIPELINE_ID),
+    );
 
-    if (error) throw new Error(`Fetch error: ${error.message}`);
-
-    const needsAnalysis = (candidates || []).filter((d) => {
+    const needsAnalysis = candidates.filter((d) => {
       if (!postDemoSet.has(d.stage_id)) return false;
       if (!d.llm_analyzed_at) return true;
       if (d.updated_at && d.updated_at > d.llm_analyzed_at) return true;
@@ -55,7 +55,7 @@ export async function POST() {
     let llmSuccess = 0;
     let llmErrors = 0;
     const llmErrorDetails: string[] = [];
-    const skippedCount = (candidates || []).filter((d) => postDemoSet.has(d.stage_id)).length - needsAnalysis.length;
+    const skippedCount = candidates.filter((d) => postDemoSet.has(d.stage_id)).length - needsAnalysis.length;
 
     for (const deal of needsAnalysis) {
       const result = await analyzeDealIntelligence(deal.hubspot_deal_id);

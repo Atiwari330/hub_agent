@@ -4,6 +4,7 @@ import { checkApiAuth } from '@/lib/auth/api';
 import { RESOURCES } from '@/lib/auth';
 import { ALL_OPEN_STAGE_IDS } from '@/lib/hubspot/stage-config';
 import { SYNC_CONFIG } from '@/lib/hubspot/sync-config';
+import { paginatedFetch } from '@/lib/supabase/paginate';
 
 // --- Types ---
 
@@ -97,36 +98,39 @@ export async function GET() {
 
   try {
     // Fetch all deal intelligence rows, joining with deals to filter open only
-    const { data: intelligence, error } = await supabase
-      .from('deal_intelligence')
-      .select('*')
-      .order('overall_score', { ascending: true })
-      .limit(5000);
-
-    if (error) {
-      console.error('Error fetching deal intelligence:', error);
+    let intelligence;
+    try {
+      intelligence = await paginatedFetch(() =>
+        supabase
+          .from('deal_intelligence')
+          .select('*')
+          .order('overall_score', { ascending: true }),
+      );
+    } catch (e: unknown) {
+      console.error('Error fetching deal intelligence:', e);
       return NextResponse.json(
-        { error: 'Failed to fetch deal intelligence', details: error.message },
+        { error: 'Failed to fetch deal intelligence', details: (e as Error).message },
         { status: 500 }
       );
     }
 
     // Filter to only open deals by cross-referencing with deals table
-    const dealIds = (intelligence || []).map(d => d.hubspot_deal_id);
+    const dealIds = intelligence.map(d => d.hubspot_deal_id);
     let openDealIds = new Set<string>();
 
     if (dealIds.length > 0) {
-      // Sales pipeline open deals only
-      const { data: salesOpen } = await supabase
-        .from('deals')
-        .select('hubspot_deal_id')
-        .in('hubspot_deal_id', dealIds)
-        .eq('pipeline', SYNC_CONFIG.TARGET_PIPELINE_ID)
-        .in('deal_stage', ALL_OPEN_STAGE_IDS)
-        .limit(5000);
+      // Sales pipeline open deals only — paginate to avoid 1,000-row cap
+      const salesOpen = await paginatedFetch(() =>
+        supabase
+          .from('deals')
+          .select('hubspot_deal_id')
+          .in('hubspot_deal_id', dealIds)
+          .eq('pipeline', SYNC_CONFIG.TARGET_PIPELINE_ID)
+          .in('deal_stage', ALL_OPEN_STAGE_IDS),
+      );
 
       openDealIds = new Set(
-        (salesOpen || []).map(d => d.hubspot_deal_id)
+        salesOpen.map(d => d.hubspot_deal_id)
       );
     }
 
