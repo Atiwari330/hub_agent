@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { CommandCenterResponse, DealForecastItem, AEExecutionSummary, ForecastSummary } from '@/lib/command-center/types';
 import { HeroSummary } from './hero-summary';
+import { ConversionComparison } from './conversion-comparison';
 import { PacingSection } from './pacing-section';
 import { InitiativeTracker } from './initiative-tracker';
 import { WeeklyOperatingTable } from './weekly-operating-table';
@@ -126,6 +127,10 @@ export function CommandCenterView() {
   return (
     <div className="space-y-8 p-6">
       <HeroSummary goalTracker={data.goalTracker} forecast={forecast} />
+      <ConversionComparison
+        q1={data.goalTracker.historicalRates}
+        q2={data.goalTracker.currentQuarterRates}
+      />
       <PacingSection pacing={data.pacing} currentWeek={currentWeek} />
       <InitiativeTracker initiatives={data.initiatives} />
       <WeeklyOperatingTable weeklyRows={data.pacing.weeklyRows} currentWeek={currentWeek} />

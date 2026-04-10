@@ -98,6 +98,8 @@ export interface Q2GoalTrackerApiResponse {
   };
   rateSets: RateSet[];     // multiple cohort options, first is default
   historicalRates: HistoricalRates; // kept for backward compat (= first rateSet)
+  currentQuarterRates: HistoricalRates; // Q2-to-date rates computed with the same formulas as Q1.
+  // When sample sizes are zero, rate/time fields are 0 — use the *Count fields to detect no-data.
   leadSourceRates: LeadSourceRate[];
   aeData: AEData[];
   weeklyActuals: WeeklyActual[];
