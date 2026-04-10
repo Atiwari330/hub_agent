@@ -9,7 +9,7 @@ import { SupabaseClient } from '@supabase/supabase-js';
 import { getQuarterInfo, getQuarterProgress } from '@/lib/utils/quarter';
 import type { PacingData, WeeklyPacingRow, WeeklyDealRef, SourcePacing } from './types';
 import type { Q2GoalTrackerApiResponse } from '@/lib/q2-goal-tracker/types';
-import { computeLeadsNeeded, computeDemosNeeded, computeDealsNeeded } from '@/lib/q2-goal-tracker/math';
+import { computeLeadsNeeded, computeDemosNeeded, computeDealsNeeded, computeGap } from '@/lib/q2-goal-tracker/math';
 
 const SALES_PIPELINE_ID = '1c27e5a3-5e5e-4403-ab0f-d356bf268cf3';
 
@@ -52,8 +52,14 @@ export async function computePacingData(
   const rates = goalTrackerData.historicalRates;
   const teamTarget = goalTrackerData.teamTarget;
 
-  // How many deals/demos/leads needed total for Q2
-  const dealsNeeded = computeDealsNeeded(teamTarget, rates.avgDealSize);
+  // Pace against the GAP, not the full team target. Mirrors the Q2 Goal Tracker's
+  // "new Q2 activity needed (the work)" formula — subtract weighted team-confirmed
+  // pipeline from the target, then reverse-engineer leads from the remaining ARR.
+  const teamForecastRaw = goalTrackerData.pipelineCredit.teamForecastARR || 0;
+  const teamForecastWeighted = Math.round(teamForecastRaw * rates.demoToWonRate);
+  const gap = computeGap(teamTarget, teamForecastWeighted);
+
+  const dealsNeeded = computeDealsNeeded(gap, rates.avgDealSize);
   const demosNeeded = computeDemosNeeded(dealsNeeded, rates.demoToWonRate);
   const leadsNeeded = computeLeadsNeeded(demosNeeded, rates.createToDemoRate);
 
@@ -150,5 +156,8 @@ export async function computePacingData(
     totalLeadsRequired: leadsNeeded,
     totalDealsCreated: totalCreated,
     totalDealsRequired: dealsNeeded,
+    teamTarget,
+    teamForecastWeighted,
+    gap,
   };
 }

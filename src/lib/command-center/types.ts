@@ -61,9 +61,13 @@ export interface PacingData {
   weeklyRows: WeeklyPacingRow[];
   sourceBreakdown: SourcePacing[];
   totalLeadsCreated: number;
-  totalLeadsRequired: number;
+  totalLeadsRequired: number; // Reverse-engineered from the GAP (target minus weighted team-confirmed pipeline)
   totalDealsCreated: number;
   totalDealsRequired: number;
+  // Gap formula context (for the helper text under the Deal Creation Pacing chart)
+  teamTarget: number;           // Full Q2 ARR target
+  teamForecastWeighted: number; // Team-confirmed pipeline weighted by close rate
+  gap: number;                  // max(0, teamTarget - teamForecastWeighted)
 }
 
 // -- Initiatives --

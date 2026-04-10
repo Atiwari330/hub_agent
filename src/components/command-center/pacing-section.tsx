@@ -11,6 +11,12 @@ function formatWeekLabel(dateStr: string): string {
   return `${d.getMonth() + 1}/${d.getDate()}`;
 }
 
+function fmtCurrency(n: number): string {
+  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `$${Math.round(n / 1_000)}K`;
+  return `$${n.toLocaleString()}`;
+}
+
 interface PacingSectionProps {
   pacing: PacingData;
   currentWeek: number;
@@ -38,9 +44,21 @@ export function PacingSection({ pacing, currentWeek }: PacingSectionProps) {
 
       {/* Cumulative chart */}
       <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
-        <h3 className="mb-4 text-sm font-medium text-gray-700">
+        <h3 className="text-sm font-medium text-gray-700">
           Cumulative Deals Created vs Required Pace
         </h3>
+        <p className="mt-1 mb-4 text-xs leading-relaxed text-gray-500">
+          Pacing against the <span className="font-medium text-gray-700">gap</span>, not the full Q2 target.
+          {' '}
+          <span className="font-mono">
+            {fmtCurrency(pacing.teamTarget)} target
+            {' − '}
+            {fmtCurrency(pacing.teamForecastWeighted)} team-confirmed pipeline (weighted)
+            {' = '}
+            {fmtCurrency(pacing.gap)} gap
+          </span>
+          {' '}→ <span className="font-mono">{pacing.totalLeadsRequired.toLocaleString()} new leads</span> needed at Q1 conversion rates.
+        </p>
         <ResponsiveContainer width="100%" height={280}>
           <AreaChart data={chartData}>
             <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
