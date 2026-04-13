@@ -201,6 +201,8 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
   const isOnQ2GoalTracker = pathname === '/dashboard/q2-goal-tracker';
   // Q2 Command Center
   const isOnCommandCenter = pathname === '/dashboard/q2-command-center';
+  // Deals Analysis
+  const isOnDealsAnalysis = pathname === '/dashboard/deals-analysis';
   // PPL Dashboard
   const isOnPplDashboard = pathname === '/dashboard/ppl';
   // Pricing Compliance
@@ -381,6 +383,26 @@ export function Sidebar({ owners, lastSync, quarterLabel, quarterProgress, onCol
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
               </svg>
               {!isCollapsed && <span>Q2 Command Center</span>}
+            </Link>
+          </div>
+        )}
+
+        {/* Deals Analysis */}
+        {hasPermission(user, RESOURCES.DEALS_ANALYSIS) && (
+          <div className="mb-2">
+            <Link
+              href="/dashboard/deals-analysis"
+              className={`flex items-center gap-3 py-2.5 text-sm font-medium transition-colors ${isCollapsed ? 'px-0 justify-center' : 'px-4'} ${
+                isOnDealsAnalysis
+                  ? 'bg-indigo-600 text-white'
+                  : 'text-slate-300 hover:bg-slate-800'
+              }`}
+              title={isCollapsed ? 'Deals Analysis' : undefined}
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              {!isCollapsed && <span>Deals Analysis</span>}
             </Link>
           </div>
         )}

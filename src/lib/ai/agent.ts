@@ -8,6 +8,7 @@ import {
   analyzeDealSentimentTool,
   summarizeDealsTool,
   getPipelinesTool,
+  dealsAnalysisTool,
 } from './tools';
 
 // System prompt for the RevOps agent
@@ -20,6 +21,7 @@ Your capabilities:
 4. Analyze deal sentiment based on notes and activity
 5. Summarize deal pipelines and metrics
 6. Look up pipeline and stage definitions to translate stage IDs to readable names
+7. Run comprehensive deals analysis showing conversion rates, lead source quality, AE performance, funnel metrics, and data quality
 
 When answering questions:
 - Be precise with numbers and data
@@ -50,6 +52,7 @@ export const revOpsTools = {
   analyzeDealSentiment: analyzeDealSentimentTool,
   summarizeDeals: summarizeDealsTool,
   getPipelines: getPipelinesTool,
+  dealsAnalysis: dealsAnalysisTool,
 };
 
 // Generate a response using the agent (non-streaming)

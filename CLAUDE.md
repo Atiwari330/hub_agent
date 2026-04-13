@@ -21,9 +21,34 @@ npm run test:deals       # Test deals API
 npm run test:agent       # Interactive agent REPL
 npm run ask              # Alias for test:agent
 
+# Analysis CLIs
+npm run deals-analysis                 # Comprehensive deals/lead source/funnel analysis (current year)
+npm run deals-analysis -- --year=2025  # Specific year
+
 # Utility tests
 npx tsx src/scripts/test-utils.ts  # Test quarter/currency utilities
 ```
+
+## Deals Analysis
+
+Reusable analysis engine at `src/lib/analysis/deals-analysis.ts` that powers three surfaces:
+
+1. **CLI** — `npm run deals-analysis` outputs a markdown report (revenue, lead sources, AE performance, funnel, data quality)
+2. **Agent tool** — The `dealsAnalysis` tool is registered in the AI agent. Ask natural language questions about lead quality, win rates, source effectiveness, or pipeline health.
+3. **Dashboard** — `/dashboard/deals-analysis` shows KPI cards, lead source table, funnel chart, AE comparison, and data quality alerts
+
+The analysis auto-deduplicates deals (same name + amount + close date = dupe) and scopes by year. It uses two cohorts: deals *created* in the year (for conversion metrics) and deals *closed won* in the year regardless of create date (for revenue).
+
+Core function: `runDealsAnalysis({ year? })` returns a typed `DealsAnalysisResult`.
+
+## Dev Server (Preview)
+
+Dev server config is stored in `.claude/launch.json`. Use `preview_start` to launch servers by name.
+
+Current configurations:
+- **next-dev** — Next.js dev server (`npm run dev`, port 3000, autoPort enabled)
+
+To start the dev server in a conversation, use the Claude Preview `preview_start` tool with `name: "next-dev"`. This is useful at the start of a session when Adi wants to preview dashboard changes.
 
 ## Architecture
 

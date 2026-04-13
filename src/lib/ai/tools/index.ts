@@ -4,3 +4,4 @@ export { getDealDetailsTool } from './get-deal-details';
 export { analyzeDealSentimentTool } from './analyze-sentiment';
 export { summarizeDealsTool } from './summarize-deals';
 export { getPipelinesTool } from './get-pipelines';
+export { dealsAnalysisTool } from './deals-analysis';
