@@ -52,6 +52,7 @@ export function Q2GoalTrackerView() {
   const [defaults, setDefaults] = useState<SliderValues | null>(null);
   const [selectedRateSetIndex, setSelectedRateSetIndex] = useState(0);
   const [showClosedDeals, setShowClosedDeals] = useState(false);
+  const [useFloorTarget, setUseFloorTarget] = useState(false);
 
   function ratesToSliders(rates: Q2GoalTrackerApiResponse['historicalRates']): SliderValues {
     return {
@@ -98,13 +99,16 @@ export function Q2GoalTrackerView() {
   const computed = useMemo(() => {
     if (!data || !sliders) return null;
 
-    const dealsNeeded = computeDealsNeeded(data.teamTarget, sliders.avgDealSize);
+    const FLOOR_TARGET = Math.round(data.teamTarget * 0.7);
+    const activeTarget = useFloorTarget ? FLOOR_TARGET : data.teamTarget;
+
+    const dealsNeeded = computeDealsNeeded(activeTarget, sliders.avgDealSize);
     const demosNeeded = computeDemosNeeded(dealsNeeded, sliders.demoToWonRate);
     const leadsNeeded = computeLeadsNeeded(demosNeeded, sliders.createToDemoRate);
     const weightedPipeline = computeWeightedPipeline(data.pipelineCredit, sliders.demoToWonRate, sliders.createToDemoRate);
     const teamForecastRaw = data.pipelineCredit.teamForecastARR || 0;
     const teamForecastWeighted = Math.round(teamForecastRaw * sliders.demoToWonRate); // Apply close rate
-    const gap = computeGap(data.teamTarget, teamForecastWeighted);
+    const gap = computeGap(activeTarget, teamForecastWeighted);
     const gapCloses = computeDealsNeeded(gap, sliders.avgDealSize);
     const selectedRates = data.rateSets?.[selectedRateSetIndex]?.rates || data.historicalRates;
     const timeline = computeWeeklyTimeline(
@@ -113,10 +117,10 @@ export function Q2GoalTrackerView() {
     );
     const aeBreakdown = computeAEBreakdown(data.aeData, sliders.avgDealSize, sliders.demoToWonRate, sliders.createToDemoRate);
     const sourceReqs = computeSourceRequirements(demosNeeded, data.leadSourceRates);
-    const weeklyTargets = computeWeeklyTargets(data.teamTarget);
+    const weeklyTargets = computeWeeklyTargets(activeTarget);
 
     // Delta from defaults
-    const defaultDeals = defaults ? computeDealsNeeded(data.teamTarget, defaults.avgDealSize) : dealsNeeded;
+    const defaultDeals = defaults ? computeDealsNeeded(activeTarget, defaults.avgDealSize) : dealsNeeded;
     const defaultDemos = defaults ? computeDemosNeeded(defaultDeals, defaults.demoToWonRate) : demosNeeded;
     const defaultLeads = defaults ? computeLeadsNeeded(defaultDemos, defaults.createToDemoRate) : leadsNeeded;
 
@@ -134,6 +138,7 @@ export function Q2GoalTrackerView() {
     const gapLeads = computeLeadsNeeded(gapDemos, sliders.createToDemoRate);
 
     return {
+      activeTarget, FLOOR_TARGET,
       dealsNeeded, demosNeeded, leadsNeeded,
       weightedPipeline, teamForecastRaw, teamForecastWeighted, gap, gapCloses,
       gapDemos, gapLeads,
@@ -144,7 +149,7 @@ export function Q2GoalTrackerView() {
       deltaDemos: demosNeeded - defaultDemos,
       deltaLeads: leadsNeeded - defaultLeads,
     };
-  }, [data, sliders, defaults, selectedRateSetIndex]);
+  }, [data, sliders, defaults, selectedRateSetIndex, useFloorTarget]);
 
   // ── Loading / Error states ──
 
@@ -204,6 +209,30 @@ export function Q2GoalTrackerView() {
           </p>
         </div>
         <div className="flex items-center gap-4">
+          {/* Target toggle */}
+          <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
+            <button
+              onClick={() => setUseFloorTarget(false)}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                !useFloorTarget
+                  ? 'bg-white text-indigo-700 shadow-sm border border-gray-200'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              Full Target
+            </button>
+            <button
+              onClick={() => setUseFloorTarget(true)}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                useFloorTarget
+                  ? 'bg-white text-amber-700 shadow-sm border border-amber-200'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+              title="70% of team target — minimum to unlock any bonus payout"
+            >
+              Bonus Floor (70%)
+            </button>
+          </div>
           {/* Cohort toggle */}
           {data.rateSets && data.rateSets.length > 1 && (
             <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
@@ -299,7 +328,7 @@ export function Q2GoalTrackerView() {
       {/* ── Section 1: Headline Cards ── */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <HeadlineCard
-          label="Team Target" value={fmt(data.teamTarget)}
+          label={useFloorTarget ? 'Bonus Floor (70%)' : 'Team Target'} value={fmt(computed.activeTarget)}
           sub={`Expected from Pipeline: ${fmt(computed.teamForecastWeighted)}`}
           sub2={`Gap: ${fmt(computed.gap)}`}
           color="indigo"
@@ -311,7 +340,7 @@ export function Q2GoalTrackerView() {
           sub2={`~${Math.ceil(computed.dealsNeeded / 3)}/month`}
           delta={computed.deltaDeals} deltaLabel="deals"
           color="blue"
-          tooltip={`${fmt(data.teamTarget)} target ÷ ${fmtFull(sliders.avgDealSize)} avg deal size = ${computed.dealsNeeded} deals. Avg deal size based on ${selectedRates.closedWonCount} closed-won deals totaling ${fmt(selectedRates.totalWonARR)}.`}
+          tooltip={`${fmt(computed.activeTarget)} target ÷ ${fmtFull(sliders.avgDealSize)} avg deal size = ${computed.dealsNeeded} deals. Avg deal size based on ${selectedRates.closedWonCount} closed-won deals totaling ${fmt(selectedRates.totalWonARR)}.`}
         />
         <HeadlineCard
           label="Demos Needed" value={String(computed.demosNeeded)}
@@ -391,7 +420,7 @@ export function Q2GoalTrackerView() {
         {/* Row 1: Total requirements */}
         <div className="text-[10px] font-medium text-gray-400 uppercase tracking-wide mb-2 ml-1">Total Requirement</div>
         <div className="flex items-center gap-3 overflow-x-auto pb-3 justify-center">
-          <ChainBoxLg label="Target" value={fmt(data.teamTarget)} />
+          <ChainBoxLg label="Target" value={fmt(computed.activeTarget)} />
           <ChainOpLg op="÷" />
           <ChainBoxLg label="Avg Deal" value={fmtFull(sliders.avgDealSize)} muted />
           <ChainOpLg op="=" />
@@ -408,7 +437,7 @@ export function Q2GoalTrackerView() {
         {/* Row 2: Pipeline credit → gap */}
         <div className="text-[10px] font-medium text-gray-400 uppercase tracking-wide mb-2 ml-1 mt-4 pt-4 border-t border-gray-100">Pipeline Credit</div>
         <div className="flex items-center gap-3 overflow-x-auto pb-3 justify-center">
-          <ChainBoxLg label="Target" value={fmt(data.teamTarget)} />
+          <ChainBoxLg label="Target" value={fmt(computed.activeTarget)} />
           <ChainOpLg op="−" />
           <ChainBoxLg label="Expected Pipeline" value={fmt(computed.teamForecastWeighted)} muted />
           <ChainOpLg op="=" />
@@ -515,7 +544,7 @@ export function Q2GoalTrackerView() {
                 labelFormatter={(label: unknown) => `Week of ${String(label)}`}
               />
               <Legend />
-              <ReferenceLine y={data.teamTarget} stroke="#6366f1" strokeDasharray="8 4" label={{ value: fmt(data.teamTarget), position: 'right', fill: '#6366f1', fontSize: 11 }} />
+              <ReferenceLine y={computed.activeTarget} stroke="#6366f1" strokeDasharray="8 4" label={{ value: fmt(computed.activeTarget), position: 'right', fill: '#6366f1', fontSize: 11 }} />
               <ReferenceLine y={computed.weightedPipeline} stroke="#9ca3af" strokeDasharray="4 4" label={{ value: `Pipeline: ${fmt(computed.weightedPipeline)}`, position: 'right', fill: '#9ca3af', fontSize: 10 }} />
               <Area type="monotone" dataKey="target" stroke="#9ca3af" fill="none" strokeDasharray="6 3" name="Target Pace" />
               <Area type="monotone" dataKey="actual" stroke="#22c55e" fill="#22c55e" fillOpacity={0.15} name="Actual Closed" />
@@ -688,7 +717,7 @@ export function Q2GoalTrackerView() {
             {computed.teamForecastWeighted > 0 && (
               <div
                 className="bg-emerald-500 flex items-center justify-center text-[10px] font-bold text-white"
-                style={{ width: `${Math.min((computed.teamForecastWeighted / data.teamTarget) * 100, 100)}%` }}
+                style={{ width: `${Math.min((computed.teamForecastWeighted / computed.activeTarget) * 100, 100)}%` }}
                 title={`Expected from Pipeline: ${fmtFull(computed.teamForecastWeighted)}`}
               >
                 Expected: {fmt(computed.teamForecastWeighted)}
@@ -697,7 +726,7 @@ export function Q2GoalTrackerView() {
             {computed.gap > 0 && (
               <div
                 className="bg-red-100 flex items-center justify-center text-[10px] font-bold text-red-600 border-l border-red-200"
-                style={{ width: `${Math.min((computed.gap / data.teamTarget) * 100, 100)}%` }}
+                style={{ width: `${Math.min((computed.gap / computed.activeTarget) * 100, 100)}%` }}
               >
                 Gap: {fmt(computed.gap)}
               </div>
@@ -705,7 +734,7 @@ export function Q2GoalTrackerView() {
           </div>
           <div className="flex justify-between text-[10px] text-gray-400 mt-1">
             <span>$0</span>
-            <span>{fmt(data.teamTarget)} target</span>
+            <span>{fmt(computed.activeTarget)} target</span>
           </div>
         </div>
 
