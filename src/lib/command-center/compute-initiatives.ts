@@ -12,6 +12,7 @@
 
 import { SupabaseClient } from '@supabase/supabase-js';
 import { getQuarterInfo, getQuarterProgress } from '@/lib/utils/quarter';
+import { getQuarterWeeksSunSat } from '@/lib/utils/weeks';
 import type { InitiativeStatus } from './types';
 
 const SALES_PIPELINE_ID = '1c27e5a3-5e5e-4403-ab0f-d356bf268cf3';
@@ -20,8 +21,10 @@ const CLOSED_WON_STAGE_ID = '97b2bcc6-fb34-4b56-8e6e-c349c88ef3d5';
 export async function computeInitiativeStatus(supabase: SupabaseClient): Promise<InitiativeStatus[]> {
   const q2 = getQuarterInfo(2026, 2);
   const progress = getQuarterProgress(q2);
-  const currentWeek = Math.min(13, Math.ceil(progress.daysElapsed / 7));
-  const q2Start = q2.startDate;
+  const weeks = getQuarterWeeksSunSat(q2);
+  // Fractional weeks elapsed — decouples expected-by-now math from
+  // whether we're mid-week, and handles partial first/last weeks cleanly.
+  const weeksElapsed = (progress.daysElapsed / progress.totalDays) * weeks.length;
 
   // Fetch initiatives
   const { data: initiatives, error: initError } = await supabase
@@ -75,16 +78,16 @@ export async function computeInitiativeStatus(supabase: SupabaseClient): Promise
       d.deal_stage === CLOSED_WON_STAGE_ID || d.closed_won_entered_at
     );
 
-    // Weekly breakdown
-    const weekly = new Array(13).fill(0);
+    // Weekly breakdown aligned to the Sun–Sat week array.
+    const weekly = new Array(weeks.length).fill(0);
     for (const d of matchingDeals) {
-      if (d.hubspot_created_at) {
-        const weekIdx = Math.floor((new Date(d.hubspot_created_at).getTime() - q2Start.getTime()) / (7 * 86400000));
-        if (weekIdx >= 0 && weekIdx < 13) weekly[weekIdx]++;
-      }
+      if (!d.hubspot_created_at) continue;
+      const t = new Date(d.hubspot_created_at).getTime();
+      const weekIdx = weeks.findIndex((w) => t >= w.weekStart.getTime() && t <= w.weekEnd.getTime());
+      if (weekIdx >= 0) weekly[weekIdx]++;
     }
 
-    const expectedByNow = (init.weekly_lead_pace || 0) * currentWeek;
+    const expectedByNow = Math.round((init.weekly_lead_pace || 0) * weeksElapsed);
     let paceStatus: 'ahead' | 'on_pace' | 'behind' = 'on_pace';
     if (expectedByNow === 0) {
       paceStatus = matchingDeals.length > 0 ? 'ahead' : 'behind';

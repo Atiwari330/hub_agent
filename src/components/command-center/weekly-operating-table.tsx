@@ -60,11 +60,13 @@ function DrillDownPopover({ state, onClose }: { state: DrillDownState; onClose: 
 
 interface WeeklyOperatingTableProps {
   weeklyRows: WeeklyPacingRow[];
-  currentWeek: number;
 }
 
-export function WeeklyOperatingTable({ weeklyRows, currentWeek }: WeeklyOperatingTableProps) {
+export function WeeklyOperatingTable({ weeklyRows }: WeeklyOperatingTableProps) {
   const [drillDown, setDrillDown] = useState<DrillDownState | null>(null);
+  // Anything after the current week is future; before is past. If there's no
+  // current week (e.g. viewing a completed quarter), treat everything as past.
+  const currentIdx = weeklyRows.findIndex((r) => r.isCurrent);
 
   function handleClick(weekNumber: number, column: string, deals: WeeklyDealRef[], count: number) {
     if (count === 0) return;
@@ -107,10 +109,10 @@ export function WeeklyOperatingTable({ weeklyRows, currentWeek }: WeeklyOperatin
             </tr>
           </thead>
           <tbody>
-            {weeklyRows.map((row) => {
-              const isCurrent = row.weekNumber === currentWeek;
-              const isFuture = row.weekNumber > currentWeek;
-              const isPast = row.weekNumber < currentWeek;
+            {weeklyRows.map((row, idx) => {
+              const isCurrent = row.isCurrent;
+              const isFuture = currentIdx >= 0 && idx > currentIdx;
+              const isPast = currentIdx >= 0 && idx < currentIdx;
               const isEmpty = isPast && row.leadsCreated === 0 && row.demosScheduled === 0 && row.dealsToDemo === 0 && row.closedWonCount === 0;
 
               let rowClass = 'border-b border-gray-100';
@@ -128,6 +130,11 @@ export function WeeklyOperatingTable({ weeklyRows, currentWeek }: WeeklyOperatin
                       {isCurrent && (
                         <span className="ml-2 inline-block rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-indigo-700">
                           Current
+                        </span>
+                      )}
+                      {row.isPartial && (
+                        <span className="ml-2 inline-block rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium uppercase text-gray-500">
+                          Partial
                         </span>
                       )}
                     </td>

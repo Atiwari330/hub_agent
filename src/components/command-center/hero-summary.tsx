@@ -32,7 +32,7 @@ export function HeroSummary({ goalTracker }: HeroSummaryProps) {
   return (
     <div className="space-y-4">
       <div className="text-sm text-gray-500">
-        Week {progress.currentWeek} of {progress.totalWeeks} &middot; {Math.round(progress.percentComplete)}% through Q2
+        Day {progress.daysElapsed} of {progress.totalDays} &middot; {Math.round(progress.percentComplete)}% through Q2
       </div>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         {metrics.map((m) => (

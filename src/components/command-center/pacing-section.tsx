@@ -19,24 +19,44 @@ function fmtCurrency(n: number): string {
 
 interface PacingSectionProps {
   pacing: PacingData;
-  currentWeek: number;
 }
 
-export function PacingSection({ pacing, currentWeek }: PacingSectionProps) {
+export function PacingSection({ pacing }: PacingSectionProps) {
+  // Required pace is day-linear over the whole quarter (Apr 1 → Jun 30 = 91
+  // days). Each week's cumulative required target is proportional to the
+  // fraction of the quarter covered by all days up to and including the end
+  // of that week. This keeps the line smooth across partial stub weeks.
+  const msStart = pacing.weeklyRows.length > 0
+    ? new Date(pacing.weeklyRows[0].weekStart + 'T00:00:00').getTime()
+    : 0;
+  const msEnd = pacing.weeklyRows.length > 0
+    ? new Date(pacing.weeklyRows[pacing.weeklyRows.length - 1].weekEnd + 'T23:59:59').getTime()
+    : 1;
+  const totalQuarterMs = msEnd - msStart;
+
+  const currentWeekIdx = pacing.weeklyRows.findIndex((r) => r.isCurrent);
+
   const chartData = pacing.weeklyRows.map((row, i) => {
     const cumulativeActual = pacing.weeklyRows
       .slice(0, i + 1)
       .reduce((sum, r) => sum + r.leadsCreated, 0);
-    const cumulativeRequired = Math.round(
-      (pacing.totalLeadsRequired / 13) * (i + 1),
-    );
+
+    const rowEndMs = new Date(row.weekEnd + 'T23:59:59').getTime();
+    const fractionAtWeekEnd = totalQuarterMs > 0
+      ? Math.min(1, (rowEndMs - msStart) / totalQuarterMs)
+      : 0;
+    const cumulativeRequired = Math.round(pacing.totalLeadsRequired * fractionAtWeekEnd);
+
+    const showActual = currentWeekIdx === -1 || i <= currentWeekIdx;
     return {
       week: `W${row.weekNumber}`,
       weekLabel: formatWeekLabel(row.weekStart),
-      actual: row.weekNumber <= currentWeek ? cumulativeActual : null,
+      actual: showActual ? cumulativeActual : null,
       required: cumulativeRequired,
     };
   });
+
+  const nowWeekLabel = currentWeekIdx >= 0 ? chartData[currentWeekIdx]?.weekLabel : undefined;
 
   return (
     <div className="space-y-6">
@@ -72,12 +92,14 @@ export function PacingSection({ pacing, currentWeek }: PacingSectionProps) {
                 color: '#111827',
               }}
             />
-            <ReferenceLine
-              x={chartData[currentWeek - 1]?.weekLabel}
-              stroke="#6366f1"
-              strokeDasharray="3 3"
-              label={{ value: 'Now', fill: '#6366f1', fontSize: 11 }}
-            />
+            {nowWeekLabel && (
+              <ReferenceLine
+                x={nowWeekLabel}
+                stroke="#6366f1"
+                strokeDasharray="3 3"
+                label={{ value: 'Now', fill: '#6366f1', fontSize: 11 }}
+              />
+            )}
             <Area
               type="monotone"
               dataKey="required"

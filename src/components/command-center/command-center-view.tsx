@@ -111,8 +111,6 @@ export function CommandCenterView() {
 
   if (!data) return null;
 
-  const currentWeek = data.goalTracker.progress.currentWeek;
-
   return (
     <div className="space-y-8 p-6">
       <HeroSummary goalTracker={data.goalTracker} />
@@ -121,9 +119,9 @@ export function CommandCenterView() {
         q2={data.goalTracker.currentQuarterRates}
       />
       <SourceDemoBreakdown rows={data.sourceDemoBreakdown} />
-      <PacingSection pacing={data.pacing} currentWeek={currentWeek} />
+      <PacingSection pacing={data.pacing} />
       <InitiativeTracker initiatives={data.initiatives} />
-      <WeeklyOperatingTable weeklyRows={data.pacing.weeklyRows} currentWeek={currentWeek} />
+      <WeeklyOperatingTable weeklyRows={data.pacing.weeklyRows} />
       <AEExecutionSection
         aeExecutions={aeExecutions}
         onSelectAE={setAeFilter}

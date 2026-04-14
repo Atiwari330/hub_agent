@@ -3,10 +3,14 @@
  *
  * Computes how deal creation by source and by week is tracking
  * relative to what's required to hit the Q2 ARR goal.
+ *
+ * Weeks are Sunday–Saturday (Eastern). The first and last weeks of the
+ * quarter may be partial stubs — see src/lib/utils/weeks.ts.
  */
 
 import { SupabaseClient } from '@supabase/supabase-js';
 import { getQuarterInfo, getQuarterProgress } from '@/lib/utils/quarter';
+import { getQuarterWeeksSunSat, fractionalWeeksElapsed } from '@/lib/utils/weeks';
 import type { PacingData, WeeklyPacingRow, WeeklyDealRef, SourcePacing } from './types';
 import type { Q2GoalTrackerApiResponse } from '@/lib/q2-goal-tracker/types';
 import { computeLeadsNeeded, computeDemosNeeded, computeDealsNeeded, computeGap } from '@/lib/q2-goal-tracker/math';
@@ -18,9 +22,9 @@ export async function computePacingData(
   goalTrackerData: Q2GoalTrackerApiResponse,
 ): Promise<PacingData> {
   const q2 = getQuarterInfo(2026, 2);
+  const weeks = getQuarterWeeksSunSat(q2);
   const progress = getQuarterProgress(q2);
-  const currentWeek = Math.min(13, Math.ceil(progress.daysElapsed / 7));
-  const q2Start = q2.startDate;
+  const weeksElapsedFractional = fractionalWeeksElapsed(q2, weeks);
 
   // Fetch all Q2 deals from Supabase (created in Q2 + in sales pipeline)
   const { data: q2Deals, error } = await supabase
@@ -63,79 +67,98 @@ export async function computePacingData(
   const demosNeeded = computeDemosNeeded(dealsNeeded, rates.demoToWonRate);
   const leadsNeeded = computeLeadsNeeded(demosNeeded, rates.createToDemoRate);
 
+  // Closed-won totals keyed by week-index so legacy weeklyActuals[] (which is
+  // indexed by 7-day-from-quarter-start) lines up with Sun–Sat weeks.
+  const closedWonByWeek = new Map<number, { arr: number; count: number }>();
+  for (const d of deals) {
+    if (!d.closed_won_entered_at) continue;
+    const t = new Date(d.closed_won_entered_at).getTime();
+    const weekIdx = weeks.findIndex((w) => t >= w.weekStart.getTime() && t <= w.weekEnd.getTime());
+    if (weekIdx < 0) continue;
+    const entry = closedWonByWeek.get(weekIdx) || { arr: 0, count: 0 };
+    entry.arr += Number(d.amount) || 0;
+    entry.count += 1;
+    closedWonByWeek.set(weekIdx, entry);
+  }
+
   // -- Weekly rows --
-  const weeklyRows: WeeklyPacingRow[] = [];
-  for (let i = 0; i < 13; i++) {
-    const weekStart = new Date(q2Start.getTime() + i * 7 * 86400000);
-    const weekEnd = new Date(Math.min(weekStart.getTime() + 7 * 86400000 - 1, q2.endDate.getTime()));
+  const weeklyRows: WeeklyPacingRow[] = weeks.map((w, i) => {
+    const wStart = w.weekStart.getTime();
+    const wEnd = w.weekEnd.getTime();
 
     const weekDeals = deals.filter((d) => {
       if (!d.hubspot_created_at) return false;
       const t = new Date(d.hubspot_created_at).getTime();
-      return t >= weekStart.getTime() && t <= weekEnd.getTime();
+      return t >= wStart && t <= wEnd;
     });
 
     const weekDemosScheduled = deals.filter((d) => {
       if (!d.demo_scheduled_entered_at) return false;
       const t = new Date(d.demo_scheduled_entered_at).getTime();
-      return t >= weekStart.getTime() && t <= weekEnd.getTime();
+      return t >= wStart && t <= wEnd;
     });
 
     const weekDemos = deals.filter((d) => {
       if (!d.demo_completed_entered_at) return false;
       const t = new Date(d.demo_completed_entered_at).getTime();
-      return t >= weekStart.getTime() && t <= weekEnd.getTime();
+      return t >= wStart && t <= wEnd;
     });
 
-    // Closed-won deals for this week (from all Q2 deals, not just created-in-Q2)
     const weekClosedWon = deals.filter((d) => {
       if (!d.closed_won_entered_at) return false;
       const t = new Date(d.closed_won_entered_at).getTime();
-      return t >= weekStart.getTime() && t <= weekEnd.getTime();
+      return t >= wStart && t <= wEnd;
     });
 
-    weeklyRows.push({
-      weekNumber: i + 1,
-      weekStart: weekStart.toISOString().split('T')[0],
-      weekEnd: weekEnd.toISOString().split('T')[0],
+    const closedTotals = closedWonByWeek.get(i) || { arr: 0, count: 0 };
+
+    return {
+      weekNumber: w.weekNumber,
+      weekStart: w.weekStartDate,
+      weekEnd: w.weekEndDate,
+      isPartial: w.isPartial,
+      isCurrent: w.isCurrent,
       leadsCreated: weekDeals.length,
       demosScheduled: weekDemosScheduled.length,
       dealsToDemo: weekDemos.length,
-      closedWonARR: goalTrackerData.weeklyActuals[i]?.closedWonARR || 0,
-      closedWonCount: goalTrackerData.weeklyActuals[i]?.closedWonCount || 0,
+      closedWonARR: closedTotals.arr,
+      closedWonCount: closedTotals.count,
       leadsCreatedDeals: weekDeals.map(toRef),
       demosScheduledDeals: weekDemosScheduled.map(toRef),
       demoCompletedDeals: weekDemos.map(toRef),
       closedWonDeals: weekClosedWon.map(toRef),
-    });
-  }
+    };
+  });
 
   // -- Source breakdown --
   const sourceMap = new Map<string, { total: number; weekly: number[] }>();
   for (const d of deals) {
     const src = d.lead_source || '(no lead source)';
-    if (!sourceMap.has(src)) sourceMap.set(src, { total: 0, weekly: new Array(13).fill(0) });
+    if (!sourceMap.has(src)) sourceMap.set(src, { total: 0, weekly: new Array(weeks.length).fill(0) });
     const entry = sourceMap.get(src)!;
     entry.total++;
 
     if (d.hubspot_created_at) {
-      const weekIdx = Math.floor((new Date(d.hubspot_created_at).getTime() - q2Start.getTime()) / (7 * 86400000));
-      if (weekIdx >= 0 && weekIdx < 13) entry.weekly[weekIdx]++;
+      const t = new Date(d.hubspot_created_at).getTime();
+      const weekIdx = weeks.findIndex((w) => t >= w.weekStart.getTime() && t <= w.weekEnd.getTime());
+      if (weekIdx >= 0) entry.weekly[weekIdx]++;
     }
   }
 
-  // Calculate required per source using historical source rates
+  // Calculate required per source using historical source rates. Pacing uses
+  // fractional days elapsed so partial first/last weeks don't create cliffs.
+  const fractionElapsed = progress.daysElapsed / progress.totalDays;
   const totalCreated = deals.length;
   const sourceBreakdown: SourcePacing[] = [...sourceMap.entries()]
     .sort((a, b) => b[1].total - a[1].total)
     .map(([source, data]) => {
-      // Proportional requirement based on historical source mix
       const historicalSource = goalTrackerData.leadSourceRates.find((s) => s.source === source);
-      const requiredTotal = historicalSource
-        ? Math.ceil(leadsNeeded * (historicalSource.dealsCreated / goalTrackerData.leadSourceRates.reduce((s, r) => s + r.dealsCreated, 0)))
+      const historicalTotal = goalTrackerData.leadSourceRates.reduce((s, r) => s + r.dealsCreated, 0);
+      const requiredTotal = historicalSource && historicalTotal > 0
+        ? Math.ceil(leadsNeeded * (historicalSource.dealsCreated / historicalTotal))
         : 0;
 
-      const expectedByNow = Math.ceil(requiredTotal * (currentWeek / 13));
+      const expectedByNow = Math.ceil(requiredTotal * fractionElapsed);
       let paceStatus: 'ahead' | 'on_pace' | 'behind' = 'on_pace';
       if (data.total > expectedByNow * 1.1) paceStatus = 'ahead';
       else if (data.total < expectedByNow * 0.9) paceStatus = 'behind';
@@ -148,6 +171,9 @@ export async function computePacingData(
         paceStatus,
       };
     });
+
+  // Suppress unused var warning — kept for future per-week expected math.
+  void weeksElapsedFractional;
 
   return {
     weeklyRows,

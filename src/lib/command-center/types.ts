@@ -36,9 +36,11 @@ export interface WeeklyDealRef {
 }
 
 export interface WeeklyPacingRow {
-  weekNumber: number;        // 1-13
-  weekStart: string;         // YYYY-MM-DD
-  weekEnd: string;
+  weekNumber: number;        // 1..N, where N depends on how the quarter aligns with Sun–Sat
+  weekStart: string;         // YYYY-MM-DD (Eastern)
+  weekEnd: string;           // YYYY-MM-DD (Eastern)
+  isPartial: boolean;        // true when the week is clipped by the quarter boundary
+  isCurrent: boolean;        // now is within this week
   leadsCreated: number;      // deals created this week
   demosScheduled: number;    // deals that entered demo scheduled this week
   dealsToDemo: number;       // deals that completed demo this week
@@ -54,7 +56,7 @@ export interface WeeklyPacingRow {
 export interface SourcePacing {
   source: string;
   totalCreated: number;      // deals created from this source in Q2
-  weeklyBreakdown: number[]; // 13 weeks of deal creation counts
+  weeklyBreakdown: number[]; // per-week deal creation counts (length matches weeklyRows)
   requiredTotal: number;     // what's needed from this source to hit goal
   paceStatus: 'ahead' | 'on_pace' | 'behind';
 }
@@ -88,9 +90,9 @@ export interface InitiativeStatus {
   arrGenerated: number;       // total amount from those deals
   closedWonARR: number;       // closed-won amount
   // Pacing
-  expectedByNow: number;      // based on weekly pace x weeks elapsed
+  expectedByNow: number;      // based on weekly pace x fractional weeks elapsed
   paceStatus: 'ahead' | 'on_pace' | 'behind';
-  weeklyBreakdown: number[];  // 13 weeks of creation counts
+  weeklyBreakdown: number[];  // per-week creation counts (length matches weeklyRows)
 }
 
 // -- Deal Forecast (Phase 2-3) --
