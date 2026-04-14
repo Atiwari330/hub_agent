@@ -1,5 +1,5 @@
 import { generateText } from 'ai';
-import { getSonnetModel } from '@/lib/ai/provider';
+import { getDeepSeekModel } from '@/lib/ai/provider';
 import type { CompanyGroup } from './data';
 
 export async function synthesizeCompanySummaries(
@@ -31,7 +31,7 @@ SUMMARY: <your 1-2 sentence summary>`;
 
   try {
     const result = await generateText({
-      model: getSonnetModel(),
+      model: getDeepSeekModel(),
       prompt,
     });
 

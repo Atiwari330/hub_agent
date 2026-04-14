@@ -183,6 +183,5 @@ export interface StrategicDirectivesOptions {
   domains?: 'all' | string[];
   timeRange?: TimeRange;
   focus?: StrategicFocus;
-  thinkingBudget?: number;
   verbose?: boolean;
 }

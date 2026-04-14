@@ -1,6 +1,6 @@
 import { createServerSupabaseClient } from '@/lib/supabase/client';
 import { generateText } from 'ai';
-import { getOpusModel } from '@/lib/ai/provider';
+import { getDeepSeekModel } from '@/lib/ai/provider';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 // --- Types ---
@@ -472,7 +472,7 @@ export async function runSopSynthesis(
   const userPrompt = buildUserPrompt(rows as SopAnalysisRow[]);
 
   const { text } = await generateText({
-    model: getOpusModel(),
+    model: getDeepSeekModel(),
     system: systemPrompt,
     prompt: userPrompt,
   });

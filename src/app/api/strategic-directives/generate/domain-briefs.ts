@@ -6,7 +6,7 @@
  */
 
 import { generateText } from 'ai';
-import { getOpusModel } from '@/lib/ai/provider';
+import { getDeepSeekModel } from '@/lib/ai/provider';
 import type { ExtractedData, DomainBrief, DomainBriefs } from './types';
 
 // --- Brief Generation ---
@@ -54,7 +54,7 @@ async function generateBrief(
   userPrompt: string
 ): Promise<DomainBrief> {
   const { text } = await generateText({
-    model: getOpusModel(),
+    model: getDeepSeekModel(),
     system: BRIEF_SYSTEM_PROMPT,
     prompt: userPrompt,
   });

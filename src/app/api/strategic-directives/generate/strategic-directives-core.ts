@@ -63,7 +63,7 @@ export async function runStrategicDirectives(
   }
 
   // --- Phase 3: Cross-Domain Strategic Synthesis ---
-  if (verbose) console.log('=== Phase 3: Cross-Domain Synthesis (Opus + Extended Thinking) ===\n');
+  if (verbose) console.log('=== Phase 3: Cross-Domain Synthesis ===\n');
 
   const report = await runCrossDomainSynthesis(
     briefs,
@@ -72,7 +72,6 @@ export async function runStrategicDirectives(
     { phase1Ms, phase2Ms },
     {
       focus: options?.focus,
-      thinkingBudget: options?.thinkingBudget,
     }
   );
 

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { generateText } from 'ai';
 import { checkApiAuth } from '@/lib/auth/api';
 import { RESOURCES } from '@/lib/auth';
-import { getOpusModel } from '@/lib/ai/provider';
+import { getDeepSeekModel } from '@/lib/ai/provider';
 import { fetchSupportPulseData } from '../shared';
 import type { SupportPulseResponse, SupportPulseAccount } from '../shared';
 
@@ -272,9 +272,8 @@ export async function POST() {
     const systemPrompt = buildSystemPrompt();
     const userPrompt = buildUserPrompt(data);
 
-    // Call Opus 4.6
     const { text } = await generateText({
-      model: getOpusModel(),
+      model: getDeepSeekModel(),
       system: systemPrompt,
       prompt: userPrompt,
     });

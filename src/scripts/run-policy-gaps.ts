@@ -20,7 +20,7 @@ config({ path: '.env.local' });
 
 import { createServiceClient } from '../lib/supabase/client';
 import { generateText } from 'ai';
-import { getSonnetModel } from '../lib/ai/provider';
+import { getDeepSeekModel } from '../lib/ai/provider';
 import * as fs from 'fs';
 
 // --- Arg Parsing ---
@@ -499,7 +499,7 @@ async function main() {
   });
 
   const { text, usage } = await generateText({
-    model: getSonnetModel(),
+    model: getDeepSeekModel(),
     system: systemPrompt,
     prompt: userPrompt,
   });

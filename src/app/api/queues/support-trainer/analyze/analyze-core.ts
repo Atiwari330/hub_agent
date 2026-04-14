@@ -4,7 +4,7 @@ import { getOwnerById } from '@/lib/hubspot/owners';
 import { getTicketEngagementTimeline } from '@/lib/hubspot/ticket-engagements';
 import { fetchLinearIssueContext, type LinearIssueContext } from '@/lib/linear/client';
 import { generateText, stepCountIs } from 'ai';
-import { getSonnetModel } from '@/lib/ai/provider';
+import { getDeepSeekModel } from '@/lib/ai/provider';
 import { lookupSupportKnowledgeTool } from '@/lib/ai/tools/support-knowledge';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import fs from 'fs';
@@ -301,7 +301,7 @@ ${linearContext.relatedIssues
 
     // 10. Call LLM with knowledge retrieval tools
     const result = await generateText({
-      model: getSonnetModel(),
+      model: getDeepSeekModel(),
       system: buildSystemPrompt(),
       prompt: userPrompt,
       tools: {

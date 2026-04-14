@@ -116,6 +116,22 @@ Tables in Supabase (see `supabase/migrations/`):
 - `/api/cron/sync-hubspot` - Daily 2am: Sync owners and deals from HubSpot
 - `/api/cron/sentiment-analysis` - Daily 3am: Run sentiment analysis on deals
 
+## Model Selection (DeepSeek default — no Anthropic)
+
+Every LLM call in this codebase routes through Vercel AI Gateway and uses **DeepSeek v3.2** by default. The policy is zero Anthropic token spend unless a specific feature opts in explicitly.
+
+- `getModel()` in `src/lib/ai/provider.ts` defaults to `deepseek/deepseek-v3.2` (env vars `AI_PROVIDER` / `AI_MODEL` can still override for debugging).
+- `getModelForPass()` in `src/lib/ai/passes/models.ts` defaults every pass type to DeepSeek. `PASS_MODEL_<NAME>=sonnet` env overrides still work via the `case 'sonnet'` branch — use these to A/B test a specific pass if DeepSeek regresses on quality, with no code change required.
+- `getSonnetModel()` and `getOpusModel()` remain exported from `provider.ts`, but **nothing in the codebase currently calls them**. They are dormant factories available for per-feature opt-in.
+
+**To reintroduce Claude for one specific feature:**
+```ts
+import { getSonnetModel } from '@/lib/ai/provider';
+// …
+const result = await generateText({ model: getSonnetModel(), prompt });
+```
+This is explicit, visible in diffs, and grep-able. A future token-spend audit should be able to run `grep -rn "getSonnetModel\|getOpusModel" src/` and see every Claude call site at a glance. Do not reintroduce Claude by flipping defaults, adding new env-var branches, or rerouting the factories.
+
 ## Environment Variables
 
 Required in `.env.local`:

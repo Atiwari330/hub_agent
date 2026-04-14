@@ -7,7 +7,7 @@
 
 import { generateObject } from 'ai';
 import { z } from 'zod';
-import { getOpusModel } from '../ai/provider';
+import { getDeepSeekModel } from '../ai/provider';
 
 // Schema for the structured extraction result
 export const companyAnalysisSchema = z.object({
@@ -95,7 +95,7 @@ export async function analyzeCompany(
   domain: string
 ): Promise<CompanyAnalysis> {
   const { object } = await generateObject({
-    model: getOpusModel(),
+    model: getDeepSeekModel(),
     schema: companyAnalysisSchema,
     system: SYSTEM_PROMPT,
     prompt: `Analyze the following website content from ${domain} and extract structured business intelligence.\n\n${markdown}`,

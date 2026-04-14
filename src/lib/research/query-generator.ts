@@ -7,7 +7,7 @@
 
 import { generateObject } from 'ai';
 import { z } from 'zod';
-import { getOpusModel } from '../ai/provider';
+import { getDeepSeekModel } from '../ai/provider';
 
 export interface ResearchContext {
   state: string;
@@ -49,7 +49,7 @@ export async function generateComplianceQueries(
   context: ResearchContext
 ): Promise<string[]> {
   const { object } = await generateObject({
-    model: getOpusModel(),
+    model: getDeepSeekModel(),
     schema: querySchema,
     system: SYSTEM_PROMPT,
     prompt: `Generate compliance research search queries for this behavioral health provider:

@@ -7,7 +7,7 @@
 
 import { generateObject } from 'ai';
 import { z } from 'zod';
-import { getOpusModel } from '../ai/provider';
+import { getDeepSeekModel } from '../ai/provider';
 import type { ResearchContext } from './query-generator';
 import type { ComplianceSearchOutput } from './tavily-client';
 
@@ -129,7 +129,7 @@ export async function analyzeComplianceResearch(
     .join('\n\n');
 
   const { object } = await generateObject({
-    model: getOpusModel(),
+    model: getDeepSeekModel(),
     schema: complianceAnalysisSchema,
     system: SYSTEM_PROMPT,
     prompt: `Analyze the following search results and extract structured compliance requirements

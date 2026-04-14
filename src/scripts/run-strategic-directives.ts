@@ -39,7 +39,6 @@ interface Args {
   phase1Only: boolean;
   phase2Only: boolean;
   output?: string;
-  thinkingBudget: number;
   verbose: boolean;
 }
 
@@ -48,7 +47,6 @@ function parseArgs(argv: string[]): Args {
     timeRange: '30d',
     phase1Only: false,
     phase2Only: false,
-    thinkingBudget: 32000,
     verbose: false,
   };
 
@@ -65,8 +63,6 @@ function parseArgs(argv: string[]): Args {
       args.phase2Only = true;
     } else if (arg.startsWith('--output=')) {
       args.output = arg.split('=')[1];
-    } else if (arg.startsWith('--thinking-budget=')) {
-      args.thinkingBudget = parseInt(arg.split('=')[1], 10);
     } else if (arg === '--verbose') {
       args.verbose = true;
     }
@@ -182,7 +178,6 @@ async function main() {
   if (args.focus) console.log(`Strategic focus: ${args.focus}`);
   if (args.phase1Only) console.log('Phase 1 only (data extraction)');
   if (args.phase2Only) console.log('Phase 1+2 only (extraction + domain briefs)');
-  console.log(`Thinking budget: ${args.thinkingBudget} tokens`);
   console.log('');
 
   // --- Phase 1 ---
@@ -247,8 +242,8 @@ async function main() {
   }
 
   // --- Phase 3 ---
-  console.log('=== Phase 3: Cross-Domain Synthesis (Opus + Extended Thinking) ===\n');
-  console.log('Running strategic synthesis with extended thinking...\n');
+  console.log('=== Phase 3: Cross-Domain Synthesis ===\n');
+  console.log('Running strategic synthesis...\n');
 
   const report = await runCrossDomainSynthesis(
     briefs,
@@ -257,7 +252,6 @@ async function main() {
     { phase1Ms, phase2Ms },
     {
       focus: args.focus,
-      thinkingBudget: args.thinkingBudget,
     }
   );
 

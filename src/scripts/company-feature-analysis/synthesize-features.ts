@@ -7,7 +7,7 @@
  */
 
 import { generateText } from 'ai';
-import { getOpusModel } from '../../lib/ai/provider';
+import { getDeepSeekModel } from '../../lib/ai/provider';
 import type { TicketFeatureAnalysis } from './analyze-features';
 
 // --- Types ---
@@ -346,7 +346,7 @@ export async function synthesizeFeatureReport(
   const userPrompt = buildUserPrompt(analyses, companyName);
 
   const { text } = await generateText({
-    model: getOpusModel(),
+    model: getDeepSeekModel(),
     system: systemPrompt,
     prompt: userPrompt,
   });

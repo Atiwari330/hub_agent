@@ -3,7 +3,7 @@ config({ path: '.env.local' });
 
 import { createServiceClient } from '../lib/supabase/client';
 import { generateText } from 'ai';
-import { getOpusModel } from '../lib/ai/provider';
+import { getDeepSeekModel } from '../lib/ai/provider';
 import { gatherAllData, serializeDataForLLM } from '../lib/strategic-advisor/gather-data';
 import {
   PASS_1_SITUATION_ASSESSMENT,
@@ -69,7 +69,7 @@ Usage:
 async function main() {
   const args = parseArgs();
   const today = new Date().toISOString().split('T')[0];
-  const model = getOpusModel();
+  const model = getDeepSeekModel();
 
   console.log('\n╔══════════════════════════════════╗');
   console.log('║      STRATEGIC ADVISOR           ║');
@@ -77,7 +77,7 @@ async function main() {
   console.log(`  Date: ${today}`);
   console.log(`  Focus: ${args.focus || 'full analysis'}`);
   console.log(`  Mode: ${args.brief ? 'brief (2 passes)' : 'deep (4 passes)'}`);
-  console.log(`  Model: Claude Opus 4.6\n`);
+  console.log(`  Model: DeepSeek v3.2\n`);
 
   // ── Step 1: Gather all data ──
   console.log('⏳ Gathering data from Supabase...');
