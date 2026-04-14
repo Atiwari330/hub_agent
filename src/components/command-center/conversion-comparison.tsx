@@ -13,10 +13,6 @@ function formatPct(rate: number): string {
   return `${(rate * 100).toFixed(1)}%`;
 }
 
-function formatDays(days: number): string {
-  return `${days}d`;
-}
-
 function pctDelta(current: number, baseline: number): string {
   if (baseline === 0) return '';
   const delta = ((current - baseline) / baseline) * 100;
@@ -83,9 +79,8 @@ export function ConversionComparison({ q1, q2 }: ConversionComparisonProps) {
   const hasDemoToWon = q2.demoCompletedCount > 0;
   const demoToWonDir = dirFor(q2.demoToWonRate, q1.demoToWonRate, hasDemoToWon, true);
 
-  // Avg Deal Lifecycle (create → closed-won): lower is better
-  const hasCycleTime = q2.closedWonCount > 0 && q2.avgCycleTime > 0;
-  const cycleDir = dirFor(q2.avgCycleTime, q1.avgCycleTime, hasCycleTime, false);
+  // Leads Created: higher is better, count is always valid (0 is a real value, not missing)
+  const leadsDir = dirFor(q2.dealsCreatedCount, q1.dealsCreatedCount, true, true);
 
   return (
     <div>
@@ -116,16 +111,12 @@ export function ConversionComparison({ q1, q2 }: ConversionComparisonProps) {
           }
         />
         <ComparisonCard
-          label="Avg Deal Lifecycle"
-          q2Value={hasCycleTime ? formatDays(q2.avgCycleTime) : '—'}
-          q1Value={formatDays(q1.avgCycleTime)}
-          direction={cycleDir}
-          deltaLabel={hasCycleTime ? pctDelta(q2.avgCycleTime, q1.avgCycleTime) : ''}
-          sampleHint={
-            hasCycleTime
-              ? `n=${q2.closedWonCount} closed-won, create → won`
-              : 'No Q2 closed-won deals yet'
-          }
+          label="Leads Created"
+          q2Value={q2.dealsCreatedCount.toLocaleString()}
+          q1Value={q1.dealsCreatedCount.toLocaleString()}
+          direction={leadsDir}
+          deltaLabel={pctDelta(q2.dealsCreatedCount, q1.dealsCreatedCount)}
+          sampleHint="Q2 to-date vs Q1 full quarter"
         />
       </div>
     </div>

@@ -5,6 +5,7 @@ import { RESOURCES } from '@/lib/auth';
 import { computeQ2GoalTrackerData } from '@/lib/q2-goal-tracker/compute';
 import { computePacingData } from '@/lib/command-center/compute-pacing';
 import { computeInitiativeStatus } from '@/lib/command-center/compute-initiatives';
+import { computeSourceDemoBreakdown } from '@/lib/command-center/compute-source-demos';
 import type { CommandCenterResponse } from '@/lib/command-center/types';
 
 export async function GET() {
@@ -14,9 +15,10 @@ export async function GET() {
   try {
     const supabase = await createServerSupabaseClient();
 
-    const [goalTracker, initiatives] = await Promise.all([
+    const [goalTracker, initiatives, sourceDemoBreakdown] = await Promise.all([
       computeQ2GoalTrackerData(supabase),
       computeInitiativeStatus(supabase),
+      computeSourceDemoBreakdown(supabase),
     ]);
 
     const pacing = await computePacingData(supabase, goalTracker);
@@ -25,6 +27,7 @@ export async function GET() {
       goalTracker,
       pacing,
       initiatives,
+      sourceDemoBreakdown,
     };
 
     return NextResponse.json(response);

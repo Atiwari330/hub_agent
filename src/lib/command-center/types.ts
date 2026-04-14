@@ -12,6 +12,7 @@ import type {
   PipelineCredit,
   Q2GoalTrackerApiResponse,
 } from '@/lib/q2-goal-tracker/types';
+import type { SourceDemoRow } from './compute-source-demos';
 
 // Re-export for convenience
 export type {
@@ -22,6 +23,7 @@ export type {
   WeeklyActual,
   PipelineCredit,
   Q2GoalTrackerApiResponse,
+  SourceDemoRow,
 };
 
 // -- Pacing --
@@ -174,4 +176,6 @@ export interface CommandCenterResponse {
   pacing: PacingData;
   // Initiative tracking
   initiatives: InitiativeStatus[];
+  // Per-lead-source demo activity in Q2
+  sourceDemoBreakdown: SourceDemoRow[];
 }

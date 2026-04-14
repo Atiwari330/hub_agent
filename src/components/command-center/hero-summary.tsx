@@ -1,8 +1,6 @@
 'use client';
 
 import type { Q2GoalTrackerApiResponse } from '@/lib/q2-goal-tracker/types';
-import type { ForecastSummary } from '@/lib/command-center/types';
-import { computeWeightedPipeline } from '@/lib/q2-goal-tracker/math';
 
 function fmt(n: number): string {
   if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
@@ -14,87 +12,29 @@ function fmtFull(n: number): string {
   return `$${Math.round(n).toLocaleString()}`;
 }
 
-const CONFIDENCE_STYLES = {
-  high: 'bg-emerald-100 text-emerald-700',
-  medium: 'bg-amber-100 text-amber-700',
-  low: 'bg-red-100 text-red-700',
-};
-
 interface HeroSummaryProps {
   goalTracker: Q2GoalTrackerApiResponse;
-  forecast: ForecastSummary | null;
 }
 
-export function HeroSummary({ goalTracker, forecast }: HeroSummaryProps) {
-  const { teamTarget, weeklyActuals, pipelineCredit, historicalRates, progress } = goalTracker;
+export function HeroSummary({ goalTracker }: HeroSummaryProps) {
+  const { teamTarget, weeklyActuals, progress } = goalTracker;
 
   const closedWonARR = weeklyActuals.reduce((sum, w) => sum + w.closedWonARR, 0);
-  const weightedPipeline = computeWeightedPipeline(
-    pipelineCredit,
-    historicalRates.demoToWonRate,
-    historicalRates.createToDemoRate,
-  );
-
-  // Use forecast projection if available, otherwise fall back to weighted pipeline
-  const projectedTotal = forecast ? forecast.projectedTotal : closedWonARR + weightedPipeline;
-  const gap = Math.max(0, teamTarget - projectedTotal);
-
-  const requiredPace = teamTarget * (progress.currentWeek / 13);
-  const paceRatio = requiredPace > 0 ? projectedTotal / requiredPace : 0;
-
-  let statusLabel: string;
-  let statusColor: string;
-  let statusBg: string;
-  if (paceRatio >= 0.9) {
-    statusLabel = 'On Track';
-    statusColor = 'text-emerald-700';
-    statusBg = 'bg-emerald-50 border-emerald-200';
-  } else if (paceRatio >= 0.7) {
-    statusLabel = 'Behind';
-    statusColor = 'text-amber-700';
-    statusBg = 'bg-amber-50 border-amber-200';
-  } else {
-    statusLabel = 'At Risk';
-    statusColor = 'text-red-700';
-    statusBg = 'bg-red-50 border-red-200';
-  }
+  const closedWonCount = weeklyActuals.reduce((s, w) => s + w.closedWonCount, 0);
+  const gap = Math.max(0, teamTarget - closedWonARR);
 
   const metrics = [
     { label: 'Q2 ARR Target', value: fmt(teamTarget), sub: fmtFull(teamTarget) },
-    { label: 'Closed Won', value: fmt(closedWonARR), sub: `${weeklyActuals.reduce((s, w) => s + w.closedWonCount, 0)} deals` },
-    {
-      label: forecast ? 'Forecast (Weighted)' : 'Weighted Pipeline',
-      value: fmt(forecast ? forecast.totalWeighted : weightedPipeline),
-      sub: forecast
-        ? `${Object.values(forecast.tiers).reduce((s, t) => s + t.count, 0)} deals scored`
-        : `${pipelineCredit.postDemoCount + pipelineCredit.preDemoCount} deals`,
-    },
+    { label: 'Closed Won', value: fmt(closedWonARR), sub: `${closedWonCount} deals` },
     { label: 'Gap to Target', value: fmt(gap), sub: gap === 0 ? 'Target covered' : `${fmtFull(gap)} remaining` },
   ];
 
   return (
     <div className="space-y-4">
-      {/* Status banner */}
-      <div className={`flex items-center justify-between rounded-lg border px-6 py-4 ${statusBg}`}>
-        <div className="flex items-center gap-4">
-          <span className={`text-2xl font-bold ${statusColor}`}>{statusLabel}</span>
-          {forecast && (
-            <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${CONFIDENCE_STYLES[forecast.confidenceLevel]}`}>
-              {forecast.confidenceLevel} confidence
-            </span>
-          )}
-          <span className="text-sm text-gray-500">
-            Week {progress.currentWeek} of {progress.totalWeeks} &middot; {Math.round(progress.percentComplete)}% through Q2
-          </span>
-        </div>
-        <div className="text-right text-sm text-gray-500">
-          <div>Projected: {fmt(projectedTotal)}</div>
-          <div>vs Required pace: {fmt(requiredPace)}</div>
-        </div>
+      <div className="text-sm text-gray-500">
+        Week {progress.currentWeek} of {progress.totalWeeks} &middot; {Math.round(progress.percentComplete)}% through Q2
       </div>
-
-      {/* Metric cards */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         {metrics.map((m) => (
           <div key={m.label} className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
             <p className="text-xs font-medium uppercase tracking-wider text-gray-500">{m.label}</p>

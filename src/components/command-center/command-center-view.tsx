@@ -1,13 +1,13 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import type { CommandCenterResponse, DealForecastItem, AEExecutionSummary, ForecastSummary } from '@/lib/command-center/types';
+import type { CommandCenterResponse, DealForecastItem, AEExecutionSummary } from '@/lib/command-center/types';
 import { HeroSummary } from './hero-summary';
 import { ConversionComparison } from './conversion-comparison';
+import { SourceDemoBreakdown } from './source-demo-breakdown';
 import { PacingSection } from './pacing-section';
 import { InitiativeTracker } from './initiative-tracker';
 import { WeeklyOperatingTable } from './weekly-operating-table';
-import { ForecastSection } from './forecast-section';
 import { DealIntelligenceTable } from './deal-intelligence-table';
 import { DealDetailPanel } from './deal-detail-panel';
 import { AEExecutionSection } from './ae-execution-section';
@@ -30,7 +30,6 @@ export function CommandCenterView() {
   const [data, setData] = useState<CommandCenterResponse | null>(null);
   const [deals, setDeals] = useState<DealForecastItem[]>([]);
   const [aeExecutions, setAeExecutions] = useState<AEExecutionSummary[]>([]);
-  const [forecast, setForecast] = useState<ForecastSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedDeal, setSelectedDeal] = useState<string | null>(null);
@@ -39,11 +38,10 @@ export function CommandCenterView() {
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const [mainRes, dealsRes, aeRes, forecastRes] = await Promise.all([
+      const [mainRes, dealsRes, aeRes] = await Promise.all([
         fetch('/api/command-center'),
         fetch('/api/command-center/deals'),
         fetch('/api/command-center/ae-execution'),
-        fetch('/api/command-center/forecast'),
       ]);
 
       if (!mainRes.ok) throw new Error(`Main API error: ${mainRes.status}`);
@@ -60,11 +58,6 @@ export function CommandCenterView() {
         setAeExecutions(aeJson.aeExecutions);
       }
 
-      if (forecastRes.ok) {
-        const forecastJson: ForecastSummary = await forecastRes.json();
-        setForecast(forecastJson);
-      }
-
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load data');
     } finally {
@@ -72,12 +65,8 @@ export function CommandCenterView() {
     }
   }, []);
 
-  const refetchForecast = useCallback(async () => {
-    const [forecastRes, dealsRes] = await Promise.all([
-      fetch('/api/command-center/forecast'),
-      fetch('/api/command-center/deals'),
-    ]);
-    if (forecastRes.ok) setForecast(await forecastRes.json());
+  const refetchDeals = useCallback(async () => {
+    const dealsRes = await fetch('/api/command-center/deals');
     if (dealsRes.ok) {
       const json: DealsResponse = await dealsRes.json();
       setDeals(json.deals);
@@ -91,8 +80,8 @@ export function CommandCenterView() {
       <div className="space-y-8 p-6">
         <div className="animate-pulse space-y-6">
           <div className="h-16 rounded-lg bg-gray-200" />
-          <div className="grid grid-cols-4 gap-4">
-            {[1, 2, 3, 4].map((i) => (
+          <div className="grid grid-cols-3 gap-4">
+            {[1, 2, 3].map((i) => (
               <div key={i} className="h-24 rounded-lg bg-gray-200" />
             ))}
           </div>
@@ -126,15 +115,15 @@ export function CommandCenterView() {
 
   return (
     <div className="space-y-8 p-6">
-      <HeroSummary goalTracker={data.goalTracker} forecast={forecast} />
+      <HeroSummary goalTracker={data.goalTracker} />
       <ConversionComparison
         q1={data.goalTracker.historicalRates}
         q2={data.goalTracker.currentQuarterRates}
       />
+      <SourceDemoBreakdown rows={data.sourceDemoBreakdown} />
       <PacingSection pacing={data.pacing} currentWeek={currentWeek} />
       <InitiativeTracker initiatives={data.initiatives} />
       <WeeklyOperatingTable weeklyRows={data.pacing.weeklyRows} currentWeek={currentWeek} />
-      {forecast && <ForecastSection forecast={forecast} deals={deals} onDealClick={setSelectedDeal} onRefresh={refetchForecast} />}
       <AEExecutionSection
         aeExecutions={aeExecutions}
         onSelectAE={setAeFilter}
@@ -150,7 +139,7 @@ export function CommandCenterView() {
         <DealDetailPanel
           dealId={selectedDeal}
           onClose={() => setSelectedDeal(null)}
-          onOverrideChange={refetchForecast}
+          onOverrideChange={refetchDeals}
         />
       )}
     </div>
