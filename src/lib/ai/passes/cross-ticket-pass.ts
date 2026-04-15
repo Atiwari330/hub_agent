@@ -1,5 +1,6 @@
 import { generateText } from 'ai';
 import { getModelForPass } from './models';
+import { normalizeFieldHeaders } from '@/lib/ai/parsing/normalize-field-headers';
 import type { TicketContext, CrossTicketPassResult, RelatedTicketInfo } from './types';
 
 export async function runCrossTicketPass(context: TicketContext): Promise<CrossTicketPassResult> {
@@ -36,7 +37,7 @@ ${relatedList}`;
     prompt: userPrompt,
   });
 
-  const text = result.text || '';
+  const text = normalizeFieldHeaders(result.text || '');
   const notesMatch = text.match(/RELATED_TICKET_NOTES:\s*(.+?)(?=\n[A-Z_]+:|\n\n|$)/is);
   const notes = notesMatch?.[1]?.trim() || 'NONE';
 

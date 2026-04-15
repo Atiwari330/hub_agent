@@ -1,5 +1,6 @@
 import { generateText } from 'ai';
 import { getModelForPass } from './models';
+import { normalizeFieldHeaders } from '@/lib/ai/parsing/normalize-field-headers';
 import type { TicketContext, TemperaturePassResult } from './types';
 import type { TicketChanges } from '@/lib/ai/memory/change-detector';
 
@@ -66,7 +67,7 @@ ${context.conversationText}`;
     prompt: userPrompt,
   });
 
-  const text = result.text || '';
+  const text = normalizeFieldHeaders(result.text || '');
 
   const tempMatch = text.match(/CUSTOMER_TEMPERATURE:\s*(\w+)/i);
   const reasonMatch = text.match(/TEMPERATURE_REASON:\s*(.+?)(?=\n[A-Z_]+:|\n\n|$)/is);

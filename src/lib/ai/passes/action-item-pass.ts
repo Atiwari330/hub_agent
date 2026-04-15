@@ -3,6 +3,7 @@ import { getModelForPass } from './models';
 import { buildTicketMetadataSection, buildLinearSection } from './gather-context';
 import { lookupSupportKnowledgeTool } from '@/lib/ai/tools/support-knowledge';
 import { getActiveActionItems, insertActionItems, supersedeActionItems } from './action-items-db';
+import { normalizeFieldHeaders } from '@/lib/ai/parsing/normalize-field-headers';
 import type { TicketContext, ActionItemPassResult, ActionItem } from './types';
 import type { TicketChanges } from '@/lib/ai/memory/change-detector';
 
@@ -112,7 +113,7 @@ ${context.engagementTimelineText}`;
     stopWhen: stepCountIs(5),
   });
 
-  const text = result.text || result.steps[result.steps.length - 1]?.text || '';
+  const text = normalizeFieldHeaders(result.text || result.steps[result.steps.length - 1]?.text || '');
 
   // Parse KEEP_ITEMS
   let keepItemIds: string[] = [];

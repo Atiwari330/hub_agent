@@ -1,6 +1,7 @@
 import { createServiceClient } from '@/lib/supabase/client';
 import { lookupSupportKnowledgeTool } from '@/lib/ai/tools/support-knowledge';
 import { runSinglePassAnalysis } from '@/lib/ai/passes/single-pass-runner';
+import { normalizeFieldHeaders } from '@/lib/ai/parsing/normalize-field-headers';
 import type { TicketContext } from '@/lib/ai/passes/types';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
@@ -156,7 +157,9 @@ ${ctx.linearContext.relatedIssues
 
 // --- Response parser ---
 
-function parseResponse(text: string, ctx: TicketContext): TicketTrainerAnalysis {
+function parseResponse(rawText: string, ctx: TicketContext): TicketTrainerAnalysis {
+  const text = normalizeFieldHeaders(rawText);
+
   const field = (name: string, fallback: string): string => {
     const m = text.match(new RegExp(`${name}:\\s*(.+?)(?=\\n[A-Z_]+:|\\n\\n|$)`, 'is'));
     return m ? m[1].trim() : fallback;

@@ -1,6 +1,7 @@
 import { generateText } from 'ai';
 import { getModelForPass } from './models';
 import { buildTicketMetadataSection, buildLinearSection } from './gather-context';
+import { normalizeFieldHeaders } from '@/lib/ai/parsing/normalize-field-headers';
 import type { TicketContext, SituationPassResult } from './types';
 import type { TicketChanges } from '@/lib/ai/memory/change-detector';
 
@@ -63,7 +64,7 @@ ${context.engagementTimelineText}${context.linearContext ? `\n\n${buildLinearSec
     prompt: userPrompt,
   });
 
-  const text = result.text || '';
+  const text = normalizeFieldHeaders(result.text || '');
 
   const situationMatch = text.match(/SITUATION_SUMMARY:\s*(.+?)(?=\nCONTEXT_SNAPSHOT:|\n\n|$)/is);
   const contextMatch = text.match(/CONTEXT_SNAPSHOT:\s*(.+?)(?=\n[A-Z_]+:|\n\n|$)/is);

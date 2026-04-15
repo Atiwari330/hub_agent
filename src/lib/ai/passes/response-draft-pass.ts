@@ -1,6 +1,7 @@
 import { generateText } from 'ai';
 import { getModelForPass } from './models';
 import { buildTicketMetadataSection } from './gather-context';
+import { normalizeFieldHeaders } from '@/lib/ai/parsing/normalize-field-headers';
 import type { TicketContext, ResponseDraftPassResult, ActionItem } from './types';
 
 interface ResponseDraftDeps {
@@ -53,7 +54,7 @@ ${context.conversationText}`;
     prompt: userPrompt,
   });
 
-  const text = result.text || '';
+  const text = normalizeFieldHeaders(result.text || '');
 
   const guidanceMatch = text.match(/RESPONSE_GUIDANCE:\s*(.+?)(?=\nRESPONSE_DRAFT:|\n\n|$)/is);
   const draftMatch = text.match(/RESPONSE_DRAFT:\s*([\s\S]+?)(?=\n[A-Z_]+:|\n\n$|$)/is);

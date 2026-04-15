@@ -1,5 +1,6 @@
 import { generateText } from 'ai';
 import { getModelForPass } from './models';
+import { normalizeFieldHeaders } from '@/lib/ai/parsing/normalize-field-headers';
 import type { TicketContext, VerificationPassResult } from './types';
 
 export async function runVerificationPass(context: TicketContext): Promise<VerificationPassResult> {
@@ -38,7 +39,7 @@ ${context.engagementTimelineText}`;
     prompt: userPrompt,
   });
 
-  const text = result.text || '';
+  const text = normalizeFieldHeaders(result.text || '');
 
   let verifications: VerificationPassResult['verifications'] = [];
   try {
