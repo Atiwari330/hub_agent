@@ -1,27 +1,10 @@
 import { createServiceClient } from '@/lib/supabase/client';
-import { getHubSpotClient } from '@/lib/hubspot/client';
-import { getOwnerById } from '@/lib/hubspot/owners';
-import { getTicketEngagementTimeline } from '@/lib/hubspot/ticket-engagements';
-import { fetchLinearIssueContext, type LinearIssueContext } from '@/lib/linear/client';
-import { generateText, stepCountIs } from 'ai';
-import { getDeepSeekModel } from '@/lib/ai/provider';
 import { lookupSupportKnowledgeTool } from '@/lib/ai/tools/support-knowledge';
+import { runSinglePassAnalysis } from '@/lib/ai/passes/single-pass-runner';
+import type { TicketContext } from '@/lib/ai/passes/types';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import fs from 'fs';
-import path from 'path';
-
-const CUSTOMER_KNOWLEDGE_DIR = path.join(process.cwd(), 'src', 'lib', 'ai', 'knowledge', 'customers');
 
 // --- Types ---
-
-interface ThreadMessage {
-  id: string;
-  type: string;
-  createdAt: string;
-  text?: string;
-  subject?: string;
-  senders?: Array<{ name?: string; actorId?: string }>;
-}
 
 export interface TicketTrainerAnalysis {
   hubspot_ticket_id: string;
@@ -107,162 +90,33 @@ Guidelines:
 - Be honest about difficulty — don't sugarcoat advanced tickets, but also don't intimidate about beginner ones.`;
 }
 
-// --- Core Analysis Function ---
+// --- User Prompt ---
+// Kept inline (rather than delegated to buildTicketMetadataSection from
+// gather-context.ts) so the byte-for-byte wire format matches the pre-refactor
+// queue exactly. Drift here would directly alter LLM output quality.
 
-export async function analyzeSupportTrainerTicket(
-  ticketId: string,
-  readerClient?: SupabaseClient
-): Promise<AnalyzeSupportTrainerResult> {
-  const supabase = readerClient || createServiceClient();
-  const serviceClient = createServiceClient();
-  const hsClient = getHubSpotClient();
+function buildUserPrompt(ctx: TicketContext): string {
+  const t = ctx.ticket;
+  const engagementTimeline = ctx.engagementTimeline;
 
-  try {
-    // 1. Fetch ticket metadata
-    const { data: ticket, error: ticketError } = await supabase
-      .from('support_tickets')
-      .select('*')
-      .eq('hubspot_ticket_id', ticketId)
-      .single();
-
-    if (ticketError || !ticket) {
-      return { success: false, error: 'Ticket not found', details: ticketError?.message, statusCode: 404 };
-    }
-
-    // 2. Resolve owner name (try DB first, fall back to HubSpot API for support-only agents)
-    let ownerName: string | null = null;
-    if (ticket.hubspot_owner_id) {
-      const { data: owner } = await supabase
-        .from('owners')
-        .select('first_name, last_name, email')
-        .eq('hubspot_owner_id', ticket.hubspot_owner_id)
-        .single();
-      if (owner) {
-        ownerName = [owner.first_name, owner.last_name].filter(Boolean).join(' ') || owner.email || null;
-      } else {
-        // Owner not in DB (e.g. support-only agents) — fetch from HubSpot directly
-        try {
-          const hsOwner = await getOwnerById(ticket.hubspot_owner_id);
-          if (hsOwner) {
-            ownerName = [hsOwner.firstName, hsOwner.lastName].filter(Boolean).join(' ') || hsOwner.email || null;
-          }
-        } catch {
-          console.warn(`Could not fetch owner ${ticket.hubspot_owner_id} from HubSpot`);
-        }
-      }
-    }
-
-    // 3. Fetch conversation thread from HubSpot
-    let conversationMessages: ThreadMessage[] = [];
-    try {
-      const hsTicket = await hsClient.crm.tickets.basicApi.getById(ticketId, [
-        'subject',
-        'hs_conversations_originating_thread_id',
-      ]);
-      const threadId = hsTicket.properties.hs_conversations_originating_thread_id;
-
-      if (threadId) {
-        const messagesResponse = await hsClient.apiRequest({
-          method: 'GET',
-          path: `/conversations/v3/conversations/threads/${threadId}/messages`,
-        });
-        const messagesData = (await messagesResponse.json()) as { results?: ThreadMessage[] };
-        conversationMessages = messagesData.results || [];
-      }
-    } catch (err) {
-      console.warn(`Could not fetch conversation thread for ticket ${ticketId}:`, err);
-    }
-
-    // 4. Fetch engagement timeline
-    let engagementTimeline;
-    try {
-      engagementTimeline = await getTicketEngagementTimeline(ticketId);
-    } catch (err) {
-      console.warn(`Could not fetch engagement timeline for ticket ${ticketId}:`, err);
-      engagementTimeline = { engagements: [], counts: { emails: 0, notes: 0, calls: 0, meetings: 0, total: 0 } };
-    }
-
-    // 5. Fetch Linear engineering context (if linked)
-    let linearContext: LinearIssueContext | null = null;
-    if (ticket.linear_task) {
-      try {
-        linearContext = await fetchLinearIssueContext(ticket.linear_task);
-      } catch (err) {
-        console.warn(`Could not fetch Linear context for ticket ${ticketId}:`, err);
-      }
-    }
-
-    // 6. Build conversation text
-    const conversationText =
-      conversationMessages.length > 0
-        ? conversationMessages
-            .slice(0, 20)
-            .map((msg) => {
-              const sender = msg.senders?.map((s) => s.name || s.actorId).join(', ') || 'Unknown';
-              const text = msg.text || '(no text)';
-              return `[${msg.createdAt}] ${sender}: ${text}`;
-            })
-            .join('\n\n')
-        : 'No conversation thread available.';
-
-    // 7. Build engagement timeline text
-    const engagementTimelineText =
-      engagementTimeline.engagements.length > 0
-        ? engagementTimeline.engagements
-            .slice(0, 30)
-            .map((e) => {
-              const ts = e.timestamp.toISOString().split('T')[0];
-              const parts = [`[${ts}] ${e.type.toUpperCase()}`];
-              if (e.author) parts.push(`by ${e.author}`);
-              if (e.direction) parts.push(`(${e.direction})`);
-              if (e.subject) parts.push(`— ${e.subject}`);
-              if (e.body) parts.push(`\n    ${e.body.slice(0, 300)}`);
-              if (e.duration) parts.push(`\n    Duration: ${Math.round(e.duration / 60)}min`);
-              return parts.join(' ');
-            })
-            .join('\n')
-        : 'No engagement timeline available.';
-
-    // 8. Ticket age
-    const createdAt = ticket.hubspot_created_at ? new Date(ticket.hubspot_created_at) : null;
-    const ageDays = createdAt
-      ? Math.round((Date.now() - createdAt.getTime()) / (1000 * 60 * 60 * 24))
-      : null;
-
-    // 8b. Load customer-specific context (if available)
-    let customerContext: string | null = null;
-    if (ticket.hs_primary_company_name) {
-      const normalizedName = ticket.hs_primary_company_name
-        .toLowerCase()
-        .replace(/[^a-z0-9\s-]/g, '')
-        .replace(/\s+/g, '-');
-      const customerFilePath = path.join(CUSTOMER_KNOWLEDGE_DIR, `${normalizedName}.md`);
-      try {
-        customerContext = fs.readFileSync(customerFilePath, 'utf-8');
-      } catch {
-        // No customer-specific context — normal for most customers
-      }
-    }
-
-    // 9. Build user prompt
-    const userPrompt = `Analyze this support ticket and create a training breakdown for new support hires:
+  return `Analyze this support ticket and create a training breakdown for new support hires:
 
 TICKET METADATA:
-- Subject: ${ticket.subject || 'N/A'}
-- Source: ${ticket.source_type || 'N/A'}
-- Priority: ${ticket.priority || 'N/A'}
-- Status: ${ticket.is_closed ? 'Closed' : 'Open'}
-- Age: ${ageDays !== null ? `${ageDays} days` : 'Unknown'}
-- Ball In Court: ${ticket.ball_in_court || 'N/A'}
-- Software: ${ticket.software || 'N/A'}
-- Assigned Rep: ${ownerName || 'Unassigned'}
-- Co-Destiny Account: ${ticket.is_co_destiny ? 'YES — VIP customer' : 'No'}
+- Subject: ${t.subject || 'N/A'}
+- Source: ${t.source_type || 'N/A'}
+- Priority: ${t.priority || 'N/A'}
+- Status: ${t.is_closed ? 'Closed' : 'Open'}
+- Age: ${ctx.ageDays !== null ? `${ctx.ageDays} days` : 'Unknown'}
+- Ball In Court: ${t.ball_in_court || 'N/A'}
+- Software: ${t.software || 'N/A'}
+- Assigned Rep: ${ctx.ownerName || 'Unassigned'}
+- Co-Destiny Account: ${t.is_co_destiny ? 'YES — VIP customer' : 'No'}
 
 COMPANY:
-- Name: ${ticket.hs_primary_company_name || 'Unknown'}${customerContext ? `
+- Name: ${t.hs_primary_company_name || 'Unknown'}${ctx.customerContext ? `
 
 CUSTOMER CONTEXT:
-${customerContext}` : ''}
+${ctx.customerContext}` : ''}
 
 ENGAGEMENT SUMMARY:
 - Emails: ${engagementTimeline.counts.emails}
@@ -270,110 +124,116 @@ ENGAGEMENT SUMMARY:
 - Calls: ${engagementTimeline.counts.calls}
 - Meetings: ${engagementTimeline.counts.meetings}
 
-CONVERSATION THREAD (${conversationMessages.length} messages):
-${conversationText}
+CONVERSATION THREAD (${ctx.conversationMessages.length} messages):
+${ctx.conversationText}
 
 ENGAGEMENT TIMELINE (${engagementTimeline.engagements.length} items):
-${engagementTimelineText}${linearContext ? `
+${ctx.engagementTimelineText}${ctx.linearContext ? `
 
 LINEAR ENGINEERING CONTEXT:
-- Linear Issue: ${linearContext.identifier} — ${linearContext.title}
-- State: ${linearContext.state}
-- Priority: ${linearContext.priority}
-- Assignee: ${linearContext.assignee || 'Unassigned'}
-- Created: ${linearContext.createdAt.split('T')[0]}
-- Updated: ${linearContext.updatedAt.split('T')[0]}
+- Linear Issue: ${ctx.linearContext.identifier} — ${ctx.linearContext.title}
+- State: ${ctx.linearContext.state}
+- Priority: ${ctx.linearContext.priority}
+- Assignee: ${ctx.linearContext.assignee || 'Unassigned'}
+- Created: ${ctx.linearContext.createdAt.split('T')[0]}
+- Updated: ${ctx.linearContext.updatedAt.split('T')[0]}
 
 Description:
-${linearContext.description || '(no description)'}
+${ctx.linearContext.description || '(no description)'}
 
-Engineering Comments (${linearContext.comments.length}):
-${linearContext.comments.length > 0
-  ? linearContext.comments
+Engineering Comments (${ctx.linearContext.comments.length}):
+${ctx.linearContext.comments.length > 0
+  ? ctx.linearContext.comments
       .map((c) => `[${c.createdAt.split('T')[0]}] ${c.author}: ${c.body}`)
       .join('\n\n')
-  : 'No comments yet.'}${linearContext.relatedIssues.length > 0 ? `
+  : 'No comments yet.'}${ctx.linearContext.relatedIssues.length > 0 ? `
 
-Related Linear Issues (${linearContext.relatedIssues.length}):
-${linearContext.relatedIssues
+Related Linear Issues (${ctx.linearContext.relatedIssues.length}):
+${ctx.linearContext.relatedIssues
   .map((ri) => `- ${ri.identifier}: ${ri.title} (${ri.relationType}) — State: ${ri.state}, Priority: ${ri.priority}, Assignee: ${ri.assignee || 'Unassigned'}`)
   .join('\n')}` : ''}` : ''}`;
+}
 
-    // 10. Call LLM with knowledge retrieval tools
-    const result = await generateText({
-      model: getDeepSeekModel(),
-      system: buildSystemPrompt(),
-      prompt: userPrompt,
-      tools: {
-        lookupSupportKnowledge: lookupSupportKnowledgeTool,
-      },
-      stopWhen: stepCountIs(5),
+// --- Response parser ---
+
+function parseResponse(text: string, ctx: TicketContext): TicketTrainerAnalysis {
+  const field = (name: string, fallback: string): string => {
+    const m = text.match(new RegExp(`${name}:\\s*(.+?)(?=\\n[A-Z_]+:|\\n\\n|$)`, 'is'));
+    return m ? m[1].trim() : fallback;
+  };
+
+  const numField = (name: string, fallback: number, max: number): number => {
+    const m = text.match(new RegExp(`${name}:\\s*([\\d.]+)`, 'i'));
+    return m ? Math.min(max, Math.max(0, parseFloat(m[1]))) : fallback;
+  };
+
+  const customerAsk = field('CUSTOMER_ASK', 'No summary available.');
+  const problemBreakdown = field('PROBLEM_BREAKDOWN', 'No breakdown available.');
+  const systemExplanation = field('SYSTEM_EXPLANATION', 'No system explanation available.');
+  const interactionTimeline = field('INTERACTION_TIMELINE', 'No timeline available.');
+  const resolutionApproach = field('RESOLUTION_APPROACH', 'No resolution approach available.');
+  const coachingTips = field('COACHING_TIPS', 'No coaching tips available.');
+  const knowledgeAreas = field('KNOWLEDGE_AREAS', null as unknown as string) || null;
+  const difficultyRaw = field('DIFFICULTY_LEVEL', 'intermediate').toLowerCase();
+  const difficultyLevel = ['beginner', 'intermediate', 'advanced'].includes(difficultyRaw) ? difficultyRaw : 'intermediate';
+  const confidence = numField('CONFIDENCE', 0.5, 1);
+
+  return {
+    hubspot_ticket_id: ctx.ticket.hubspot_ticket_id,
+    customer_ask: customerAsk,
+    problem_breakdown: problemBreakdown,
+    system_explanation: systemExplanation,
+    interaction_timeline: interactionTimeline,
+    resolution_approach: resolutionApproach,
+    coaching_tips: coachingTips,
+    knowledge_areas: knowledgeAreas,
+    difficulty_level: difficultyLevel,
+    ticket_subject: ctx.ticket.subject,
+    company_name: ctx.ticket.hs_primary_company_name,
+    assigned_rep: ctx.ownerName,
+    age_days: ctx.ageDays,
+    is_closed: ctx.ticket.is_closed || false,
+    has_linear: !!ctx.ticket.linear_task,
+    linear_state: ctx.linearContext?.state || null,
+    confidence,
+    analyzed_at: new Date().toISOString(),
+  };
+}
+
+// --- Core Analysis Function ---
+
+export async function analyzeSupportTrainerTicket(
+  ticketId: string,
+  readerClient?: SupabaseClient,
+): Promise<AnalyzeSupportTrainerResult> {
+  try {
+    const { analysis, usage } = await runSinglePassAnalysis<TicketTrainerAnalysis>(ticketId, {
+      buildSystemPrompt,
+      buildUserPrompt,
+      parseResponse,
+      tools: { lookupSupportKnowledge: lookupSupportKnowledgeTool },
+      readerClient,
     });
 
-    // 11. Parse structured response
-    const text = result.text || result.steps[result.steps.length - 1]?.text || '';
-
-    const field = (name: string, fallback: string): string => {
-      const m = text.match(new RegExp(`${name}:\\s*(.+?)(?=\\n[A-Z_]+:|\\n\\n|$)`, 'is'));
-      return m ? m[1].trim() : fallback;
-    };
-
-    const numField = (name: string, fallback: number, max: number): number => {
-      const m = text.match(new RegExp(`${name}:\\s*([\\d.]+)`, 'i'));
-      return m ? Math.min(max, Math.max(0, parseFloat(m[1]))) : fallback;
-    };
-
-    const customerAsk = field('CUSTOMER_ASK', 'No summary available.');
-    const problemBreakdown = field('PROBLEM_BREAKDOWN', 'No breakdown available.');
-    const systemExplanation = field('SYSTEM_EXPLANATION', 'No system explanation available.');
-    const interactionTimeline = field('INTERACTION_TIMELINE', 'No timeline available.');
-    const resolutionApproach = field('RESOLUTION_APPROACH', 'No resolution approach available.');
-    const coachingTips = field('COACHING_TIPS', 'No coaching tips available.');
-    const knowledgeAreas = field('KNOWLEDGE_AREAS', null as unknown as string) || null;
-    const difficultyRaw = field('DIFFICULTY_LEVEL', 'intermediate').toLowerCase();
-    const difficultyLevel = ['beginner', 'intermediate', 'advanced'].includes(difficultyRaw) ? difficultyRaw : 'intermediate';
-    const confidence = numField('CONFIDENCE', 0.5, 1);
-
-    // 12. Upsert into ticket_trainer_analyses
-    const analysisData: TicketTrainerAnalysis = {
-      hubspot_ticket_id: ticketId,
-      customer_ask: customerAsk,
-      problem_breakdown: problemBreakdown,
-      system_explanation: systemExplanation,
-      interaction_timeline: interactionTimeline,
-      resolution_approach: resolutionApproach,
-      coaching_tips: coachingTips,
-      knowledge_areas: knowledgeAreas,
-      difficulty_level: difficultyLevel,
-      ticket_subject: ticket.subject,
-      company_name: ticket.hs_primary_company_name,
-      assigned_rep: ownerName,
-      age_days: ageDays,
-      is_closed: ticket.is_closed || false,
-      has_linear: !!ticket.linear_task,
-      linear_state: linearContext?.state || null,
-      confidence,
-      analyzed_at: new Date().toISOString(),
-    };
-
+    const serviceClient = createServiceClient();
     const { error: upsertError } = await serviceClient
       .from('ticket_trainer_analyses')
-      .upsert(analysisData, { onConflict: 'hubspot_ticket_id' });
+      .upsert(analysis, { onConflict: 'hubspot_ticket_id' });
 
     if (upsertError) {
       console.error('Error upserting trainer analysis:', upsertError);
     }
 
-    return {
-      success: true,
-      analysis: analysisData,
-      usage: result.totalUsage ? {
-        inputTokens: result.totalUsage.inputTokens ?? 0,
-        outputTokens: result.totalUsage.outputTokens ?? 0,
-        totalTokens: result.totalUsage.totalTokens ?? 0,
-      } : undefined,
-    };
+    return { success: true, analysis, usage };
   } catch (error) {
+    if (error instanceof Error && error.message.startsWith('Ticket not found')) {
+      return {
+        success: false,
+        error: 'Ticket not found',
+        details: error.message,
+        statusCode: 404,
+      };
+    }
     console.error('Support trainer analysis error:', error);
     return {
       success: false,
