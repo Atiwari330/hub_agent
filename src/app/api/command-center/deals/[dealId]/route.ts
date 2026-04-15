@@ -93,9 +93,9 @@ export async function GET(
       likelihoodTier: tier,
       override: override
         ? {
-            likelihood: override.likelihood,
+            likelihood: override.override_likelihood,
             amount: override.override_amount ? Number(override.override_amount) : null,
-            reason: override.reason,
+            reason: override.override_reason,
             overriddenBy: override.overridden_by,
             overriddenAt: override.created_at,
           }
@@ -131,9 +131,9 @@ export async function GET(
       },
       override: override
         ? {
-            likelihood: override.likelihood,
+            likelihood: override.override_likelihood,
             amount: override.override_amount ? Number(override.override_amount) : null,
-            reason: override.reason,
+            reason: override.override_reason,
             overriddenBy: override.overridden_by,
             overriddenAt: override.created_at,
           }

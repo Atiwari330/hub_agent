@@ -68,4 +68,8 @@ reports/
 deal-scrub-*.md
 ppl-cadence-*.md
 triage-report-*.md
+support-health-*.md
 strategic-report.*
+
+# Supabase CLI temp dir
+supabase/.temp/

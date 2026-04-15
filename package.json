@@ -25,7 +25,8 @@
     "deal-scrub": "tsx src/scripts/deal-scrub.ts",
     "ppl-cadence": "tsx src/scripts/ppl-cadence.ts",
     "advise": "tsx src/scripts/strategic-advisor.ts",
-    "deals-analysis": "tsx src/scripts/deals-analysis.ts"
+    "deals-analysis": "tsx src/scripts/deals-analysis.ts",
+    "support-health": "tsx src/scripts/support-health.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.2",
