@@ -120,17 +120,11 @@ Tables in Supabase (see `supabase/migrations/`):
 
 Every LLM call in this codebase routes through Vercel AI Gateway and uses **DeepSeek v3.2** by default. The policy is zero Anthropic token spend unless a specific feature opts in explicitly.
 
-- `getModel()` in `src/lib/ai/provider.ts` defaults to `deepseek/deepseek-v3.2` (env vars `AI_PROVIDER` / `AI_MODEL` can still override for debugging).
-- `getModelForPass()` in `src/lib/ai/passes/models.ts` defaults every pass type to DeepSeek. `PASS_MODEL_<NAME>=sonnet` env overrides still work via the `case 'sonnet'` branch — use these to A/B test a specific pass if DeepSeek regresses on quality, with no code change required.
-- `getSonnetModel()` and `getOpusModel()` remain exported from `provider.ts`, but **nothing in the codebase currently calls them**. They are dormant factories available for per-feature opt-in.
+- `getDeepSeekModel()` in `src/lib/ai/provider.ts` is the only named model factory — every production call site lands on DeepSeek.
+- `getModel()` in the same file is a debug hatch: it reads `AI_PROVIDER` / `AI_MODEL` env vars and falls through to Anthropic if `AI_PROVIDER=anthropic` is set. No production code sets these env vars; they exist for ad-hoc debugging only.
+- `getModelForPass()` in `src/lib/ai/passes/models.ts` routes every pass through `getDeepSeekModel()` unless `PASS_MODEL_<NAME>` is set to any non-`deepseek` value, in which case it falls through to the `getModel()` debug hatch.
 
-**To reintroduce Claude for one specific feature:**
-```ts
-import { getSonnetModel } from '@/lib/ai/provider';
-// …
-const result = await generateText({ model: getSonnetModel(), prompt });
-```
-This is explicit, visible in diffs, and grep-able. A future token-spend audit should be able to run `grep -rn "getSonnetModel\|getOpusModel" src/` and see every Claude call site at a glance. Do not reintroduce Claude by flipping defaults, adding new env-var branches, or rerouting the factories.
+**To reintroduce Claude for one specific feature:** add a new named factory (e.g. `getSonnetModel()`) in `provider.ts` and import it directly at the call site. Do not reintroduce Claude by adding env-var branches to `getModelForPass()` or flipping defaults — the named factory pattern keeps every Claude call site grep-able (`grep -rn "getSonnetModel\|getOpusModel" src/`) for future token-spend audits.
 
 ## Environment Variables
 
@@ -369,3 +363,10 @@ Located in `src/scripts/`:
 - `verify-hubspot-close-dates.ts` - Verify 2026 close dates
 - `list-pipeline-stages.ts` - List all HubSpot pipeline stages with IDs
 - `test-stage-timestamps.ts` - Test fetching stage entry timestamps
+- `stage-counts.ts` - Regression-aware deal counts by stage (`--year` / `--quarter` flags)
+- `validate-ppl-kpi.ts` - Independent hand-verification of the Week 1 PPL compliance KPI
+- `validate-rates.ts` - Data integrity check for the Q2 Goal Tracker historical rates
+- `verify-command-center-forecast.ts` / `verify-command-center-foundation.ts` - Smoke tests for the command-center forecast engine
+- `run-strategic-directives.ts` - Strategic directives engine CLI (`--time-range`, `--focus`, `--phase1-only`)
+
+One-off debug/investigation scripts from past sessions live in `src/scripts/archive/`. They're not part of the app's active surface but remain in-tree for historical reference.

@@ -6,13 +6,11 @@
  * codebase-wide policy: no Anthropic token spend unless a specific feature
  * opts in explicitly.
  *
- * getSonnetModel() and getOpusModel() remain available as honest factories
- * for per-feature opt-in. To reintroduce Claude for a single call site,
- * import the relevant factory here and call it directly — no env var
- * juggling needed. A grep for getSonnetModel / getOpusModel will surface
- * every Claude call site in the codebase.
+ * The only way to reach Anthropic from this codebase is the AI_PROVIDER env
+ * var debug hatch below. There are no named factories for Claude models —
+ * reintroducing one should go through a deliberate review, not a utility add.
  *
- * Env-var overrides still work for one-off debugging:
+ * Env-var overrides for one-off debugging:
  *   AI_PROVIDER=anthropic   AI_MODEL=claude-sonnet-4-20250514
  *   AI_PROVIDER=deepseek    AI_MODEL=deepseek/deepseek-v3.2   (default)
  */
@@ -29,28 +27,6 @@ export function getDeepSeekModel() {
     baseURL: 'https://ai-gateway.vercel.sh/v1',
   });
   return deepseek('deepseek/deepseek-v3.2');
-}
-
-export function getOpusModel() {
-  const apiKey = process.env.AI_GATEWAY_API_KEY;
-  if (!apiKey) throw new Error('AI_GATEWAY_API_KEY is not configured');
-
-  const anthropic = createAnthropic({
-    apiKey,
-    baseURL: 'https://ai-gateway.vercel.sh/v1',
-  });
-  return anthropic('claude-opus-4-6');
-}
-
-export function getSonnetModel() {
-  const apiKey = process.env.AI_GATEWAY_API_KEY;
-  if (!apiKey) throw new Error('AI_GATEWAY_API_KEY is not configured');
-
-  const anthropic = createAnthropic({
-    apiKey,
-    baseURL: 'https://ai-gateway.vercel.sh/v1',
-  });
-  return anthropic('claude-sonnet-4-20250514');
 }
 
 export function getModel() {

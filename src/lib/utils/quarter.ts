@@ -59,7 +59,7 @@ function tzOffsetMsAt(instant: Date, tz: string): number {
 export function midnightInZone(year: number, month: number, day: number, tz: string = ZONE): Date {
   const naiveUtc = Date.UTC(year, month, day);
   let instant = new Date(naiveUtc);
-  let offset = tzOffsetMsAt(instant, tz);
+  const offset = tzOffsetMsAt(instant, tz);
   instant = new Date(naiveUtc - offset);
   // One more pass handles DST boundary edge cases.
   const offset2 = tzOffsetMsAt(instant, tz);
