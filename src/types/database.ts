@@ -27,6 +27,9 @@ export const DealRecordSchema = z.object({
   synced_at: z.string(),
   created_at: z.string(),
   updated_at: z.string(),
+  // Additional columns from 001_initial_schema.sql that weren't in the original type
+  description: z.string().nullable().optional(),
+  hubspot_owner_id: z.string().nullable().optional(),
   // Additional properties from 002_add_deal_properties.sql
   hubspot_created_at: z.string().nullable().optional(),
   lead_source: z.string().nullable().optional(),
@@ -40,14 +43,30 @@ export const DealRecordSchema = z.object({
   demo_scheduled_entered_at: z.string().nullable().optional(),
   demo_completed_entered_at: z.string().nullable().optional(),
   closed_won_entered_at: z.string().nullable().optional(),
+  // Next-step analysis columns from 004_next_step_analysis.sql
+  next_step_due_date: z.string().nullable().optional(),
+  next_step_action_type: z.string().nullable().optional(),
+  next_step_status: z.string().nullable().optional(),
+  next_step_confidence: z.number().nullable().optional(),
+  next_step_display_message: z.string().nullable().optional(),
+  next_step_analyzed_at: z.string().nullable().optional(),
+  next_step_analyzed_value: z.string().nullable().optional(),
+  next_step_last_updated_at: z.string().nullable().optional(),
   // Deal collaborator from 007_hygiene_commitments.sql
   deal_collaborator: z.string().nullable().optional(),
+  // Discovery stage timestamp from 017_discovery_stage_tracking.sql
+  discovery_entered_at: z.string().nullable().optional(),
+  // MQL stage timestamp from 018_add_mql_entered_at.sql
+  mql_entered_at: z.string().nullable().optional(),
   // Hot Tracker columns from 021_hot_tracker.sql
   proposal_entered_at: z.string().nullable().optional(),
   sent_gift_or_incentive: z.boolean().nullable().optional(),
+  // Lead source detail from 074_add_lead_source_detail.sql
+  lead_source_detail: z.string().nullable().optional(),
 });
 
 export type DealRecord = z.infer<typeof DealRecordSchema>;
+export type DealColumn = keyof DealRecord;
 
 export const SentimentAnalysisSchema = z.object({
   id: z.string().uuid(),

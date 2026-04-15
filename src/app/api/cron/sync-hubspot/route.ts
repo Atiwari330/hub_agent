@@ -11,6 +11,23 @@ import { SYNC_CONFIG } from '@/lib/hubspot/sync-config';
 import { paginatedFetch } from '@/lib/supabase/paginate';
 import { toTimestamp } from '@/lib/utils/timestamps';
 
+// Build a partial stage-timestamp payload that only includes columns whose
+// corresponding HubSpot property was actually present in the API response.
+// If HubSpot omits a property entirely (vs. returning it empty/null), we must
+// NOT include the column in the upsert — otherwise Supabase overwrites the
+// existing timestamp with null and the hot-tracker silently drifts.
+function buildStageTimestamps(
+  properties: Record<string, unknown>,
+): Record<string, string | null> {
+  const out: Record<string, string | null> = {};
+  for (const stage of Object.values(TRACKED_STAGES)) {
+    if (stage.property in properties) {
+      out[stage.dbColumn] = toTimestamp(properties[stage.property] as string | null | undefined);
+    }
+  }
+  return out;
+}
+
 // Verify cron secret for security
 function verifyCronSecret(request: Request): boolean {
   // Skip auth in development mode
@@ -117,13 +134,9 @@ export async function GET(request: Request) {
       products: deal.properties.product_s,
       deal_substage: deal.properties.proposal_stage,
       deal_collaborator: deal.properties.hs_all_collaborator_owner_ids,
-      mql_entered_at: toTimestamp(deal.properties[TRACKED_STAGES.MQL.property]),
-      sql_entered_at: toTimestamp(deal.properties[TRACKED_STAGES.SQL.property]),
-      discovery_entered_at: toTimestamp(deal.properties[TRACKED_STAGES.DISCOVERY.property]),
-      demo_scheduled_entered_at: toTimestamp(deal.properties[TRACKED_STAGES.DEMO_SCHEDULED.property]),
-      demo_completed_entered_at: toTimestamp(deal.properties[TRACKED_STAGES.DEMO_COMPLETED.property]),
-      closed_won_entered_at: toTimestamp(deal.properties[TRACKED_STAGES.CLOSED_WON.property]),
-      proposal_entered_at: toTimestamp(deal.properties[TRACKED_STAGES.PROPOSAL.property]),
+      // Stage-entry timestamps: spread so omitted HubSpot properties don't
+      // overwrite existing DB values with null. See buildStageTimestamps above.
+      ...buildStageTimestamps(deal.properties),
       sent_gift_or_incentive: deal.properties.sent_gift_or_incentive === 'true',
       synced_at: new Date().toISOString(),
     }));
@@ -213,13 +226,8 @@ export async function GET(request: Request) {
       products: deal.properties.product_s,
       deal_substage: deal.properties.proposal_stage,
       deal_collaborator: deal.properties.hs_all_collaborator_owner_ids,
-      mql_entered_at: toTimestamp(deal.properties[TRACKED_STAGES.MQL.property]),
-      sql_entered_at: toTimestamp(deal.properties[TRACKED_STAGES.SQL.property]),
-      discovery_entered_at: toTimestamp(deal.properties[TRACKED_STAGES.DISCOVERY.property]),
-      demo_scheduled_entered_at: toTimestamp(deal.properties[TRACKED_STAGES.DEMO_SCHEDULED.property]),
-      demo_completed_entered_at: toTimestamp(deal.properties[TRACKED_STAGES.DEMO_COMPLETED.property]),
-      closed_won_entered_at: toTimestamp(deal.properties[TRACKED_STAGES.CLOSED_WON.property]),
-      proposal_entered_at: toTimestamp(deal.properties[TRACKED_STAGES.PROPOSAL.property]),
+      // See buildStageTimestamps comment above.
+      ...buildStageTimestamps(deal.properties),
       sent_gift_or_incentive: deal.properties.sent_gift_or_incentive === 'true',
       synced_at: new Date().toISOString(),
     }));
@@ -349,13 +357,8 @@ export async function GET(request: Request) {
             products: fresh.properties.product_s,
             deal_substage: fresh.properties.proposal_stage,
             deal_collaborator: fresh.properties.hs_all_collaborator_owner_ids,
-            mql_entered_at: toTimestamp(props[TRACKED_STAGES.MQL.property]),
-            sql_entered_at: toTimestamp(props[TRACKED_STAGES.SQL.property]),
-            discovery_entered_at: toTimestamp(props[TRACKED_STAGES.DISCOVERY.property]),
-            demo_scheduled_entered_at: toTimestamp(props[TRACKED_STAGES.DEMO_SCHEDULED.property]),
-            demo_completed_entered_at: toTimestamp(props[TRACKED_STAGES.DEMO_COMPLETED.property]),
-            closed_won_entered_at: toTimestamp(props[TRACKED_STAGES.CLOSED_WON.property]),
-            proposal_entered_at: toTimestamp(props[TRACKED_STAGES.PROPOSAL.property]),
+            // See buildStageTimestamps comment at top of file.
+            ...buildStageTimestamps(props),
             synced_at: new Date().toISOString(),
           };
 
